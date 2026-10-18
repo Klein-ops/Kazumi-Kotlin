@@ -44,11 +44,22 @@ android {
     }
 }
 
-// Force use of ARM64 binaries for AAPT2 in Proot environment
-configurations.all {
-    resolutionStrategy.eachDependency {
-        if (requested.group == "com.android.tools.build" && requested.name == "aapt2") {
-            useTarget("com.android.tools.build:aapt2:${'$'}{requested.version}:linux-aarch64")
+// AAPT2 二进制按构建机平台选择：
+// - 默认交给 AGP 根据 os.name / os.arch 自动挑选（x86_64 Linux CI、Windows、macOS 都正常）
+// - 只有 Linux + arm64（Android/Proot 环境等）才显式指定 linux-aarch64 分类器
+// 注意：这里必须写成 "${requested.version}" 让 Kotlin 完成插值；
+// 旧实现写成了 ${'$'}{requested.version}，插值后是字面量字符串，等于没生效。
+val hostOsName = System.getProperty("os.name").orEmpty().lowercase()
+val hostArchName = System.getProperty("os.arch").orEmpty().lowercase()
+val isLinuxArm64 = hostOsName.contains("linux") &&
+    (hostArchName == "aarch64" || hostArchName == "arm64")
+
+if (isLinuxArm64) {
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "com.android.tools.build" && requested.name == "aapt2") {
+                useTarget("com.android.tools.build:aapt2:${requested.version}:linux-aarch64")
+            }
         }
     }
 }
