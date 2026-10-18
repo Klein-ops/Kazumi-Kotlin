@@ -88,6 +88,8 @@ object PluginCatalogApi {
         if (array.size() > 0 && items.isEmpty()) {
             throw IllegalArgumentException("规则仓库中没有有效条目")
         }
-        return items
+        // 按规则名（小写）去重：规则仓库条目列表被 PluginShopPage 用作 LazyColumn 的 key = name，
+        // 远端 index.json 里若出现重名条目会直接触发 "Key ... was already used" 崩溃
+        return items.distinctBy { it.name.lowercase() }
     }
 }

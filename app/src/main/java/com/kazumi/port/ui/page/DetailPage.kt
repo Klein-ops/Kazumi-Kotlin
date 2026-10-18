@@ -229,7 +229,9 @@ fun DetailPage(
                 val list = bangumiApi.getCharatersByBangumiID(item.id)
                 // 角色排序：主角/配角/客串（对应原版 relation 优先级）
                 val relationPriority = mapOf("主角" to 1, "配角" to 2, "客串" to 3)
-                characters = list.sortedBy { relationPriority[it.relation] ?: 4 }
+                // distinctBy：同一角色可能出现在多个 relation 分组里，
+                // 而下面的 LazyColumn 用 it.id 做 key，重复会导致 Key was already used 崩溃
+                characters = list.distinctBy { it.id }.sortedBy { relationPriority[it.relation] ?: 4 }
                 if (characters.isEmpty()) charactersEmpty = true
             } catch (_: Exception) {
                 charactersError = true
@@ -247,7 +249,8 @@ fun DetailPage(
         scope.launch {
             try {
                 val response = bangumiApi.getBangumiStaffByID(item.id)
-                staffs = response.data
+                // distinctBy：LazyColumn 用 it.staff.id 做 key，重复会让 Compose 抛重复 key
+                staffs = response.data.distinctBy { it.staff.id }
                 if (staffs.isEmpty()) staffEmpty = true
             } catch (_: Exception) {
                 staffError = true
@@ -267,7 +270,8 @@ fun DetailPage(
                 relations = resolveRelatedAnimeChain(
                     currentSubjectId = item.id,
                     fetchRelations = { id -> bangumiApi.getBangumiRelationsByID(id) }
-                )
+                    // distinctBy：关联番剧列表用 it.bangumiItem.id 做 key，同一 id 出现两次会崩
+                ).distinctBy { it.bangumiItem.id }
                 relationsLoaded = true
             } catch (_: Exception) {
                 relationsError = true

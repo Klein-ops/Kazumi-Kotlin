@@ -291,7 +291,9 @@ fun SearchPage(navController: NavHostController) {
                                         }) { Text(if (managingHistory) "完成" else "管理") }
                                     }
                                 }
-                                items(histories, key = { it.keyword }) { history ->
+                                // 用 timestamp（表主键，天然唯一）做 key：
+                                // 历史版本里同一关键词可能存了多行，用 keyword 当 key 会重复
+                                items(histories, key = { it.timestamp }) { history ->
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
