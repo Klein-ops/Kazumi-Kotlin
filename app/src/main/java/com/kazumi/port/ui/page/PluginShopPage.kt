@@ -49,6 +49,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -84,6 +85,7 @@ fun PluginShopPage(navController: NavHostController) {
     val repo = app.pluginRepository
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    val focusManager = LocalFocusManager.current
 
     var items by remember { mutableStateOf<List<PluginHTTPItem>>(emptyList()) }
     var query by remember { mutableStateOf("") }
@@ -240,7 +242,7 @@ fun PluginShopPage(navController: NavHostController) {
                             } else null,
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            keyboardActions = KeyboardActions.Default,
+                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(Modifier.size(12.dp))

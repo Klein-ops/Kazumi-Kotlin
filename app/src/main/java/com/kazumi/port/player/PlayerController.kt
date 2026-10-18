@@ -352,7 +352,8 @@ class PlayerController(
 
     fun play(enableSync: Boolean = true) {
         val player = exoPlayer ?: return
-        danmaku.setDanmakuEnabled(true)
+        // 注意：这里不能改弹幕开关。旧代码在 play()/pause() 里强制 setDanmakuEnabled(true/false)，
+        // 会把用户手动关掉的弹幕在恢复播放时又打开，也会在暂停时把弹幕整层清空。
         player.play()
         _uiState.update { it.copy(isPlaying = true) }
         if (syncplay.hasSession && enableSync) {
@@ -363,7 +364,7 @@ class PlayerController(
 
     fun pause(enableSync: Boolean = true) {
         val player = exoPlayer ?: return
-        danmaku.setDanmakuEnabled(false)
+        // 同上：暂停不改变弹幕开关，否则暂停一次弹幕就被永久关掉
         player.pause()
         _uiState.update { it.copy(isPlaying = false) }
         if (syncplay.hasSession && enableSync) {
@@ -478,10 +479,17 @@ class PlayerController(
             bangumiId = params.bangumiId,
             pluginName = params.pluginName,
             episode = params.episode,
-            isLocalPlayback = params.isLocalPlayback
+            isLocalPlayback = params.isLocalPlayback,
+            bangumiName = params.bangumiName
         )
-        val enableByDefault = settings.getBoolean(SettingsManager.Danmaku.ENABLED_BY_DEFAULT, false)
-        danmaku.applyDanmakuLoad(result, enableDanmaku = result.hasDanmakus && enableByDefault)
+        // 自动装载：只要拿到弹幕就直接打开。
+        // 旧逻辑用 "result.hasDanmakus && enableByDefault"，而 enableByDefault 默认 false，
+        // 导致拉取成功也一条都不显示，必须用户手动去点开关。
+        danmaku.applyDanmakuLoad(result, enableDanmaku = result.hasDanmakus)
+        FileLogger.i(
+            "Danmaku",
+            "装载完成 status=${result.status} count=${result.danmakus.size} bangumi=${params.bangumiId} ep=${params.episode}"
+        )
         return result
     }
 

@@ -4,10 +4,12 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -17,7 +19,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.kazumi.port.data.model.DanmakuEntry
 import com.kazumi.port.data.model.DanmakuUtils
+import kotlinx.coroutines.delay
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.abs
 
 /**
  * 弹幕渲染层（对应原版 canvas_danmaku 画布弹幕）
@@ -41,10 +45,14 @@ fun DanmakuOverlay(
     visible: Boolean,
     /** 弹幕开关 */
     danmakuOn: Boolean,
-    /** 当前秒内的弹幕（由外部按播放位置取用） */
+    /** 新增弹幕（增量语义：由外部按批次追加，不是"当前秒快照"） */
     currentDanmakus: List<DanmakuEntry>,
+    /** 弹幕批次号：自增表示有一批新弹幕到达，渲染层据此消费 */
+    batch: Int = 0,
+    /** 是否正在播放（平滑时钟只在播放中推进） */
+    playing: Boolean = true,
     /** 渲染代数：变化时清空所有活跃弹幕（seek/切集） */
-    generation: Int,
+    generation: Int = 0,
     /** 弹幕持续时间（秒），由 DanmakuController.danmakuDurationForSpeed 提供 */
     durationSeconds: Double = 8.0,
     /** 弹幕区域比例（0..1） */
@@ -82,49 +90,89 @@ fun DanmakuOverlay(
 
     val active = remember { mutableStateListOf<ActiveDanmaku>() }
     var lastGeneration by remember { mutableStateOf(-1) }
-    var lastSecond by remember { mutableStateOf(-1) }
-    var initialized by remember { mutableStateOf(false) }
+    var lastBatch by remember { mutableStateOf(-1) }
 
     // 轨道占用表：lane -> 当前占用该轨道的弹幕结束时间（ms）
     val laneBusyUntil = remember { ConcurrentHashMap<Int, Long>() }
 
-    // 每秒调度一次：把当前秒的新弹幕加入活跃列表
-    LaunchedEffect(danmakuOn, visible, playbackPositionMs / 1000L, generation) {
-        if (!visible || !danmakuOn) return@LaunchedEffect
-        if (lastGeneration != generation) {
-            active.clear()
-            laneBusyUntil.clear()
-            lastGeneration = generation
-        }
-        val second = (playbackPositionMs / 1000L).toInt()
-        if (second != lastSecond) {
-            lastSecond = second
-            val now = playbackPositionMs
-            for (entry in currentDanmakus) {
-                if (!shouldShowType(entry, showScroll, showTop, showBottom)) continue
-                // 轨道分配：滚动用多轨道，顶部/底部固定一条
-                val lane = when (entry.type) {
-                    4, 5 -> 0
-                    else -> assignScrollLane(laneBusyUntil, now, massive)
+    val lifeMsTotal = (durationSeconds * 1000).toLong()
+
+    // 平滑时钟（弹幕时间轴，ms）。
+    // 播放位置是 200ms 轮询刷新的，直接拿它算位移，滚动就是 5fps 的跳变；
+    // 这里用真实帧时钟推进，再用播放位置做周期性对齐。
+    var clockMs by remember { mutableLongStateOf(playbackPositionMs) }
+
+    // 帧循环推进时钟（仅在播放中、可见、弹幕开启时运行）
+    LaunchedEffect(playing, danmakuOn, visible) {
+        if (!playing || !danmakuOn || !visible) return@LaunchedEffect
+        var lastFrameNs = 0L
+        while (true) {
+            withFrameNanos { frameNs ->
+                if (lastFrameNs != 0L) {
+                    val deltaMs = (frameNs - lastFrameNs) / 1_000_000L
+                    // 过滤丢帧/切后台回来的巨大跳变，避免弹幕瞬移
+                    if (deltaMs in 0L..200L) clockMs += deltaMs
                 }
-                active.add(
-                    ActiveDanmaku(
-                        entry = entry,
-                        startMs = now + stagger(active.size),
-                        lane = lane
-                    )
-                )
+                lastFrameNs = frameNs
             }
-            // 清理过期
-            active.removeAll { it.startMs + (durationSeconds * 1000).toLong() < now }
         }
     }
 
-    // 弹幕开关关闭或不可见时清空
-    LaunchedEffect(danmakuOn, visible) {
-        if (!visible || !danmakuOn) {
+    // 与真实播放位置对齐（播放中每 200ms 会有一次位置更新）
+    LaunchedEffect(playbackPositionMs) {
+        if (abs(playbackPositionMs - clockMs) > 400L) clockMs = playbackPositionMs
+    }
+
+    // 代数变化（seek / 切集 / 换源）：丢弃所有已排期弹幕
+    LaunchedEffect(generation) {
+        if (lastGeneration != generation) {
             active.clear()
             laneBusyUntil.clear()
+            clockMs = playbackPositionMs
+            lastGeneration = generation
+        }
+    }
+
+    // 消费批次：currentDanmakus 现在是"新增弹幕"（增量），不再是"当前秒快照"。
+    // 渲染层自己维护活跃列表的生命周期：进来就排期，到期由下面的淘汰循环清理。
+    LaunchedEffect(batch) {
+        if (batch == lastBatch) return@LaunchedEffect
+        lastBatch = batch
+        if (!visible || !danmakuOn) return@LaunchedEffect
+        val now = clockMs
+        active.removeAll { it.startMs + lifeMsTotal < now }
+        currentDanmakus.forEachIndexed { index, entry ->
+            if (!shouldShowType(entry, showScroll, showTop, showBottom)) return@forEachIndexed
+            // 轨道分配：滚动用多轨道，顶部/底部固定一条
+            val lane = when (entry.type) {
+                4, 5 -> 0
+                else -> assignScrollLane(laneBusyUntil, now, massive)
+            }
+            active.add(
+                ActiveDanmaku(
+                    entry = entry,
+                    startMs = now + stagger(index),
+                    lane = lane
+                )
+            )
+        }
+        // 缓冲上限：异常情况（如长时间暂停后恢复）不至于无限堆积
+        if (active.size > 400) {
+            repeat(active.size - 400) { active.removeAt(0) }
+        }
+    }
+
+    // 每秒淘汰过期弹幕；关闭弹幕或不可见时清空
+    LaunchedEffect(danmakuOn, visible) {
+        while (true) {
+            delay(1000)
+            if (!visible || !danmakuOn) {
+                if (active.isNotEmpty()) active.clear()
+                laneBusyUntil.clear()
+            } else {
+                val now = clockMs
+                active.removeAll { it.startMs + lifeMsTotal < now }
+            }
         }
     }
 
@@ -137,7 +185,7 @@ fun DanmakuOverlay(
         // 计算滚动速度：视口宽度 / 持续时间
         val scrollSpeed = w / (durationSeconds * 1000).toFloat()
 
-        val now = playbackPositionMs
+        val now = clockMs
         active.forEach { item ->
             val entry = item.entry
             val elapsed = now - item.startMs

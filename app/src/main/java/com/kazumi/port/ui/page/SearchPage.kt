@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -166,6 +167,16 @@ fun SearchPage(navController: NavHostController) {
         isLoading = false
     }
 
+    // 返回键：搜索结果 / 历史管理态优先退回上一个状态，而不是直接退出搜索页
+    BackHandler(enabled = searched || managingHistory) {
+        if (managingHistory) {
+            managingHistory = false
+        } else if (searched) {
+            searched = false
+            bangumiResults = emptyList()
+        }
+    }
+
     MainScaffold(navController) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             // 搜索框 + 以图搜番
@@ -193,6 +204,8 @@ fun SearchPage(navController: NavHostController) {
                 },
                 singleLine = true,
                 keyboardActions = KeyboardActions(
+                    // ImeAction.Search 只触发 onSearch；旧代码只绑 onDone，导致回车搜不了
+                    onSearch = { doSearch() },
                     onDone = { doSearch() }
                 ),
                 keyboardOptions = KeyboardOptions(

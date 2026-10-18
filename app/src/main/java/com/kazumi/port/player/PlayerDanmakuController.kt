@@ -2,8 +2,10 @@ package com.kazumi.port.player
 
 import com.kazumi.port.data.model.DanmakuEntry
 import com.kazumi.port.data.model.DanmakuUtils
+import com.kazumi.port.data.repository.BangumiApi
 import com.kazumi.port.data.repository.DanmakuApi
 import com.kazumi.port.data.repository.SettingsManager
+import com.kazumi.port.util.FileLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -83,6 +85,28 @@ class PlayerDanmakuController(
         return danDanmakus[second] ?: emptyList()
     }
 
+    /**
+     * 取 (fromMs, toMs] 之间跨过的所有秒的弹幕。
+     *
+     * 旧的 danmakusForPlaybackPosition() 只返回"当前这一秒"的快照，而播放页是定时轮询的：
+     * 只要某次轮询跨过了整数秒（卡顿 / seek / 切后台回来），那一秒的弹幕就永久丢失。
+     * 这里按区间累积，保证不漏。
+     */
+    suspend fun takeDanmakusBetween(fromMs: Long, toMs: Long): List<DanmakuEntry> {
+        if (danDanmakus.isEmpty()) return emptyList()
+        val toSecond = resolveDanmakuSecond(toMs) ?: return emptyList()
+        // fromMs 为负表示"从头开始"，此时从第 0 秒取
+        val fromSecond = if (fromMs < 0) 0 else (resolveDanmakuSecond(fromMs) ?: 0) + 1
+        if (toSecond < fromSecond) return emptyList()
+        // 跨度异常（seek 跳很远）时只取当前秒，避免一次性灌入上万条
+        val start = if (toSecond - fromSecond > 30) toSecond else fromSecond
+        val out = ArrayList<DanmakuEntry>()
+        for (s in start..toSecond) {
+            danDanmakus[s]?.let { out.addAll(it) }
+        }
+        return out
+    }
+
     fun setDanmakuEnabled(value: Boolean) {
         _danmakuOn.value = value
     }
@@ -102,12 +126,13 @@ class PlayerDanmakuController(
         bangumiId: Int,
         pluginName: String,
         episode: Int,
-        isLocalPlayback: Boolean
+        isLocalPlayback: Boolean,
+        bangumiName: String = ""
     ): DanmakuLoadResult {
         return if (isLocalPlayback) {
-            _fetchCachedDanmaku(bangumiId, pluginName, episode)
+            _fetchCachedDanmaku(bangumiId, pluginName, episode, bangumiName)
         } else {
-            _fetchDanDanmakuByBgmBangumiID(bangumiId, episode)
+            _fetchDanDanmakuByBgmBangumiID(bangumiId, episode, bangumiName)
         }
     }
 
@@ -142,10 +167,11 @@ class PlayerDanmakuController(
     private suspend fun _fetchCachedDanmaku(
         bangumiId: Int,
         pluginName: String,
-        episode: Int
+        episode: Int,
+        bangumiName: String
     ): DanmakuLoadResult {
         var nextBangumiID = bangumiID
-        val repo = downloadRepository ?: return _fetchDanDanmakuByBgmBangumiID(bangumiId, episode)
+        val repo = downloadRepository ?: return _fetchDanDanmakuByBgmBangumiID(bangumiId, episode, bangumiName)
         return try {
             val entity = repo.getEpisodeEntity(bangumiId, pluginName, episode)
             val cached = entity?.danmakuData
@@ -157,12 +183,13 @@ class PlayerDanmakuController(
                     DanmakuLoadResult.success(parsed, nextBangumiID)
                 } else {
                     // 缓存空：尝试在线
-                    _fetchOnlineAndCache(bangumiId, pluginName, episode, nextBangumiID)
+                    _fetchOnlineAndCache(bangumiId, pluginName, episode, nextBangumiID, bangumiName)
                 }
             } else {
-                _fetchOnlineAndCache(bangumiId, pluginName, episode, nextBangumiID)
+                _fetchOnlineAndCache(bangumiId, pluginName, episode, nextBangumiID, bangumiName)
             }
         } catch (e: Exception) {
+            FileLogger.w("Danmaku", "本地弹幕缓存读取失败: ${e.javaClass.simpleName}: ${e.message}")
             DanmakuLoadResult.failed(nextBangumiID)
         }
     }
@@ -171,40 +198,88 @@ class PlayerDanmakuController(
         bangumiId: Int,
         pluginName: String,
         episode: Int,
-        nextBangumiID: Int
+        nextBangumiID: Int,
+        bangumiName: String
     ): DanmakuLoadResult {
-        return try {
-            val id = danmakuApi.getDanDanBangumiIDByBgmBangumiID(bangumiId)
-            if (id != 0) {
-                val res = danmakuApi.getDanDanmaku(id, episode)
-                if (res.isNotEmpty()) {
-                    saveDanmakuToCache(bangumiId, pluginName, episode, res, id)
-                }
-                DanmakuLoadResult.success(res, id)
-            } else {
-                DanmakuLoadResult.success(emptyList(), nextBangumiID)
+        val result = _autoMatchOnline(bangumiId, episode, bangumiName, nextBangumiID)
+        if (result.danmakus.isNotEmpty()) {
+            val cacheId = if (result.bangumiID != 0) result.bangumiID else nextBangumiID
+            if (cacheId != 0) {
+                saveDanmakuToCache(bangumiId, pluginName, episode, result.danmakus, cacheId)
             }
-        } catch (e: Exception) {
-            DanmakuLoadResult.failed(nextBangumiID)
         }
+        return result
     }
 
     /** 在线拉取（非本地播放），对应原版 _fetchDanDanmakuByBgmBangumiID */
     private suspend fun _fetchDanDanmakuByBgmBangumiID(
         bgmBangumiID: Int,
-        episode: Int
+        episode: Int,
+        bangumiName: String
+    ): DanmakuLoadResult = _autoMatchOnline(bgmBangumiID, episode, bangumiName, bangumiID)
+
+    /**
+     * 自动装载弹幕（对应"看哪个番就装哪个"的预期，无需用户手动选择源）
+     *
+     * 顺序：
+     * 1) Bangumi ID -> DanDanPlay 番剧 ID -> 按集号取弹幕（最准）
+     * 2) 映射不到 / 返回空 -> 用番剧名搜索，取最匹配番剧，再按集号匹配分集
+     * 3) 仍为空 -> 返回 EMPTY，由播放页提示
+     */
+    private suspend fun _autoMatchOnline(
+        bgmBangumiID: Int,
+        episode: Int,
+        bangumiName: String,
+        fallbackBangumiID: Int
     ): DanmakuLoadResult {
-        var nextBangumiID = bangumiID
-        return try {
-            nextBangumiID = danmakuApi.getDanDanBangumiIDByBgmBangumiID(bgmBangumiID)
-            if (nextBangumiID == 0) {
-                DanmakuLoadResult.success(emptyList(), nextBangumiID)
-            } else {
-                val res = danmakuApi.getDanDanmaku(nextBangumiID, episode)
-                DanmakuLoadResult.success(res, nextBangumiID)
+        var nextBangumiID = fallbackBangumiID
+        try {
+            if (bgmBangumiID > 0) {
+                val danDanId = danmakuApi.getDanDanBangumiIDByBgmBangumiID(bgmBangumiID)
+                FileLogger.i("Danmaku", "bgm=$bgmBangumiID -> danDan=$danDanId ep=$episode")
+                if (danDanId != 0) {
+                    nextBangumiID = danDanId
+                    val res = danmakuApi.getDanDanmaku(danDanId, episode)
+                    if (res.isNotEmpty()) {
+                        FileLogger.i("Danmaku", "按 bgm 映射装载成功: ${res.size} 条")
+                        return DanmakuLoadResult.success(res, nextBangumiID)
+                    }
+                    FileLogger.w("Danmaku", "bgm 映射命中但该集弹幕为空")
+                }
             }
+            val title = bangumiName.trim()
+            if (title.isEmpty()) {
+                FileLogger.w("Danmaku", "缺少番剧名，无法标题兜底")
+                return DanmakuLoadResult.success(emptyList(), nextBangumiID)
+            }
+            FileLogger.i("Danmaku", "改用标题自动匹配: \"$title\" ep=$episode")
+            val auto = autoMatchByTitle(title, episode)
+            FileLogger.i("Danmaku", "标题自动匹配结果: ${auto.size} 条")
+            return DanmakuLoadResult.success(auto, nextBangumiID)
         } catch (e: Exception) {
-            DanmakuLoadResult.failed(nextBangumiID)
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            FileLogger.w("Danmaku", "在线装载失败: ${e.javaClass.simpleName}: ${e.message}")
+            return DanmakuLoadResult.failed(nextBangumiID)
+        }
+    }
+
+    /** 用标题搜索番剧并自动匹配分集（弹幕为空时的兜底路径） */
+    private suspend fun autoMatchByTitle(title: String, episode: Int): List<DanmakuEntry> {
+        if (title.isBlank()) return emptyList()
+        return try {
+            val animes = danmakuApi.searchAnimes(title).animes
+            if (animes.isEmpty()) return emptyList()
+            val anime = animes.first()
+            val eps = danmakuApi.getDanDanEpisodesByDanDanBangumiID(anime.animeId).episodes
+            if (eps.isEmpty()) return emptyList()
+            val target = eps.getOrNull(episode - 1)
+                ?: eps.firstOrNull { Regex("\\d+").find(it.episodeTitle)?.value?.toIntOrNull() == episode }
+                ?: return emptyList()
+            danmakuApi.getDanDanmakuByEpisodeID(target.episodeId)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            FileLogger.w("Danmaku", "标题匹配弹幕失败: ${e.javaClass.simpleName}: ${e.message}")
+            emptyList()
         }
     }
 

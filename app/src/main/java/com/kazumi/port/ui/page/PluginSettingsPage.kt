@@ -48,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -82,6 +83,7 @@ fun PluginSettingsPage(navController: NavHostController) {
     val repo = app.pluginRepository
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    val focusManager = LocalFocusManager.current
 
     var plugins by remember { mutableStateOf<List<Plugin>>(emptyList()) }
     var query by remember { mutableStateOf("") }
@@ -235,7 +237,7 @@ fun PluginSettingsPage(navController: NavHostController) {
                         trailingIcon = if (query.isNotEmpty()) { { IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Close, contentDescription = "清除搜索") } } } else null,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions.Default,
+                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.size(12.dp))

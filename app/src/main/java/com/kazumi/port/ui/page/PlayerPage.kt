@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.view.ViewGroup
 import android.view.TextureView
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -67,7 +68,9 @@ import androidx.navigation.NavHostController
 import androidx.media3.ui.PlayerView
 import com.kazumi.port.KazumiApp
 import com.kazumi.port.data.model.DanmakuEntry
+import com.kazumi.port.data.repository.BangumiApi
 import com.kazumi.port.data.repository.SettingsManager
+import com.kazumi.port.network.BangumiClient
 import com.kazumi.port.player.PlaybackInitParams
 import com.kazumi.port.player.PlayerAspectRatio
 import com.kazumi.port.player.PlayerController
@@ -147,6 +150,24 @@ fun PlayerPage(
     var danmakuShowBottom by remember { mutableStateOf(true) }
     var danmakuMassive by remember { mutableStateOf(false) }
 
+    // 弹幕批次：每次取到"新弹幕"就自增，渲染层据此消费，避免同秒重复/漏秒
+    var danmakuBatch by remember { mutableIntStateOf(0) }
+
+    // 番剧名：在线播放时路由只带 bangumiId，这里按 id 补名字，供弹幕自动匹配使用
+    var bangumiTitle by remember(bangumiId) { mutableStateOf("") }
+    LaunchedEffect(bangumiId) {
+        if (isLocal || bangumiId <= 0 || bangumiTitle.isNotEmpty()) return@LaunchedEffect
+        try {
+            val name = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                BangumiApi(BangumiClient(app.settings))
+                    .getBangumiInfoByID(bangumiId)?.displayName().orEmpty()
+            }
+            if (name.isNotBlank()) bangumiTitle = name
+        } catch (_: Exception) {
+            // 取不到名字不影响播放，弹幕会退回按 bgm id 映射
+        }
+    }
+
     // 手势/HUD 状态
     var showSeekHud by remember { mutableStateOf(false) }
     var seekHudPosition by remember { mutableLongStateOf(0L) }
@@ -191,7 +212,7 @@ fun PlayerPage(
     }
 
     // 组装播放参数
-    val params = remember(src, episode, road, isLocal, resolvedLocalPath) {
+    val params = remember(src, episode, road, isLocal, resolvedLocalPath, bangumiTitle) {
         if (isLocal) {
             PlaybackInitParams(
                 videoUrl = resolvedLocalPath ?: src,
@@ -212,6 +233,7 @@ fun PlayerPage(
                 episode = episode,
                 currentRoad = road,
                 episodeTitle = "第${episode}集",
+                bangumiName = bangumiTitle,
                 httpHeaders = plugin?.buildHttpHeaders() ?: emptyMap(),
                 referer = plugin?.referer ?: "",
                 adBlockerEnabled = plugin?.adBlocker ?: false
@@ -293,21 +315,33 @@ fun PlayerPage(
 
     // 定时刷新进度 + 弹幕调度
     LaunchedEffect(Unit) {
+        var lastQueryMs = -1L
         while (true) {
             playerController.tickProgress()
-            // 弹幕：每秒取当前秒弹幕
             val pos = playerController.currentPosition()
             val gen = playerController.danmaku.scheduledDanmakuGeneration
             if (gen != danmakuGeneration) {
+                // seek / 切源：重置取用游标，从当前位置重新开始
                 danmakuGeneration = gen
+                lastQueryMs = -1L
             }
             if (danmakuOn) {
-                currentDanmakus = playerController.danmaku.danmakusForPlaybackPosition(pos)
+                if (lastQueryMs >= 0 && pos < lastQueryMs - 1500) {
+                    // 后退 seek：游标回退到当前位置，避免把中间秒全部补出来
+                    lastQueryMs = pos
+                }
+                // 按区间取弹幕（(lastQueryMs, pos] 内跨过的所有秒），避免轮询跨秒导致丢弹幕
+                val fresh = playerController.danmaku.takeDanmakusBetween(lastQueryMs, pos)
+                lastQueryMs = pos
+                if (fresh.isNotEmpty()) {
+                    currentDanmakus = fresh
+                    danmakuBatch++
+                }
                 danmakuDurationSec = playerController.danmaku.danmakuDurationForSpeed(
                     playerController.playbackSpeed
                 )
             }
-            delay(500)
+            delay(200)
         }
     }
 
@@ -317,6 +351,21 @@ fun PlayerPage(
         delay(4000)
         if (!interactiveSeeking && !speedMenuOpen && !moreMenuOpen && !barDragging) {
             controlsVisible = false
+        }
+    }
+
+    // 返回键：锁屏时先解锁，菜单展开时先收起，其余情况退出播放页
+    BackHandler {
+        if (locked) {
+            locked = false
+            controlsVisible = true
+            playerController.setPanel { it.copy(lockPanel = false) }
+        } else if (moreMenuOpen || speedMenuOpen || aspectMenuOpen) {
+            moreMenuOpen = false
+            speedMenuOpen = false
+            aspectMenuOpen = false
+        } else {
+            navController.popBackStack()
         }
     }
 
@@ -449,9 +498,11 @@ fun PlayerPage(
             DanmakuOverlay(
                 modifier = Modifier.fillMaxSize(),
                 playbackPositionMs = uiState.currentPositionMs,
-                visible = controlsVisible || true,
+                visible = true,
                 danmakuOn = danmakuOn,
                 currentDanmakus = currentDanmakus,
+                batch = danmakuBatch,
+                playing = uiState.isPlaying,
                 generation = danmakuGeneration,
                 durationSeconds = danmakuDurationSec,
                 area = danmakuArea,
@@ -562,18 +613,25 @@ fun PlayerPage(
                         maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
-                    // 弹幕开关
+                    // 弹幕开关（弹幕是自动装载的，这里只做开关；
+                    // 没有弹幕时自动重新匹配一次，而不是把"选番剧/选分集"丢给用户）
                     IconButton(onClick = {
                         if (danmakuLoading) return@IconButton
                         if (danmakuOn) {
                             playerController.danmaku.setDanmakuEnabled(false)
-                            scope.launch { app.settings.setBoolean(SettingsManager.Danmaku.ENABLED_BY_DEFAULT, false) }
+                        } else if (playerController.danmaku.danDanmakus.isNotEmpty()) {
+                            playerController.danmaku.setDanmakuEnabled(true)
                         } else {
-                            if (playerController.danmaku.danDanmakus.isEmpty()) {
-                                showDanmakuSource = true
-                            } else {
-                                playerController.danmaku.setDanmakuEnabled(true)
-                                scope.launch { app.settings.setBoolean(SettingsManager.Danmaku.ENABLED_BY_DEFAULT, true) }
+                            scope.launch {
+                                toast("正在匹配弹幕…")
+                                val result = playerController.fetchDanmaku()
+                                toast(
+                                    when {
+                                        result.hasDanmakus -> "弹幕已装载"
+                                        result.isFailed -> "弹幕匹配失败，请稍后再试"
+                                        else -> "没找到这一集的弹幕，可在「更多」里手动切换弹幕源"
+                                    }
+                                )
                             }
                         }
                     }) {
