@@ -1,0 +1,50 @@
+Kazumi — Kotlin / Jetpack Compose Native Port
+================================================
+
+This repository is an unofficial, Android-only port of Kazumi, rewritten in
+Kotlin + Jetpack Compose. It is a derivative work of the original project and is
+distributed under the same license, GNU General Public License v3.0
+(see the LICENSE file).
+
+Original work
+-------------
+ Project  : Kazumi
+ Author(s): Predidit and the Kazumi contributors
+ Source   : https://github.com/Predidit/Kazumi
+ License  : GNU General Public License v3.0
+ Copyright: (C) Predidit and Kazumi contributors
+
+Derivative work
+---------------
+ Project  : Kazumi Kotlin Port (Android package: com.kazumi.port)
+ License  : GNU General Public License v3.0
+ Copyright: (C) 2026 Kazumi Kotlin Port contributors
+
+Statement of changes (since 2026-10)
+------------------------------------
+- The whole application has been rewritten in Kotlin with Jetpack Compose and
+  Material 3. The original Flutter/Dart sources are NOT part of this repository.
+- Android-only build: minSdk 24, targetSdk 35, applicationId com.kazumi.port.
+- Re-implemented modules: XPath rule engine, WebView-based video source
+  resolution (native sniffing + JS injection), Media3/ExoPlayer playback,
+  download manager, danmaku, WebDAV/Bangumi sync, settings (DataStore),
+  and the Compose UI (popular / timeline / search / detail / player / my pages).
+- Behavior and feature set are aligned with upstream Kazumi 2.3.8 where the
+  Android platform allows it; platform-specific behavior may differ.
+
+Notices
+-------
+- "Kazumi" and the original application are the work of the original authors.
+  This port is not affiliated with, sponsored by, or endorsed by them.
+- Third-party components remain under their own licenses, including:
+  AndroidX / Jetpack Compose (Apache-2.0), Media3 / ExoPlayer (Apache-2.0),
+  OkHttp (Apache-2.0), Coil (Apache-2.0), Gson (Apache-2.0),
+  Jsoup (MIT), Room (Apache-2.0), DataStore (Apache-2.0), KSP (Apache-2.0).
+- This application collects no user data and contains no telemetry, matching the
+  upstream project's privacy statement.
+
+Redistribution
+--------------
+If you redistribute this project or a modified version of it, you must keep this
+NOTICE file, the LICENSE file and the copyright notices above, mark your changes,
+and make the complete corresponding source code available under GPL-3.0.

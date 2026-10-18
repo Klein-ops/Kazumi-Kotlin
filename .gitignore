@@ -1,0 +1,32 @@
+# Gradle / Android 构建产物
+.gradle/
+build/
+*/build/
+app/release/
+local.properties
+
+# IDE
+.idea/
+*.iml
+captures/
+.externalNativeBuild
+.cxx
+.kotlin/
+
+# 签名文件（不要提交）
+*.jks
+*.keystore
+*.apk
+*.aab
+!debug.keystore
+
+# 日志
+*.log
+
+# 工作区内部数据（非项目内容）
+.backup/
+.kazumi_progress/
+
+# OS
+.DS_Store
+Thumbs.db
