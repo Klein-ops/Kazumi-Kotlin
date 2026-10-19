@@ -212,7 +212,11 @@ fun PlayerPage(
     }
 
     // 组装播放参数
-    val params = remember(src, episode, road, isLocal, resolvedLocalPath, bangumiTitle) {
+    // 注意：remember 键里不能放 bangumiTitle！它异步返回会重建 params，
+    // 进而让 LaunchedEffect(params, resolveTick) 取消重启——正在进行的 WebView
+    // 视频解析会被中途打断，表现为"视频解析错误"。bangumiName 只用于 UI 标题，
+    // 弹幕自动装载的"补名重试"由下方单独的 LaunchedEffect(bangumiTitle) 负责。
+    val params = remember(src, episode, road, isLocal, resolvedLocalPath) {
         if (isLocal) {
             PlaybackInitParams(
                 videoUrl = resolvedLocalPath ?: src,
@@ -293,6 +297,34 @@ fun PlayerPage(
                     playerController.release()
                 }
             }
+        }
+    }
+
+    // 补名后重试弹幕：番剧名异步返回后，用名字重新自动匹配一次。
+    // 不能依赖 params 重建触发（那会打断视频解析），这里单独监听 bangumiTitle。
+    var lastDanmakuTitle by remember { mutableStateOf("") }
+    LaunchedEffect(bangumiTitle) {
+        if (isLocal || bangumiTitle.isBlank() || bangumiTitle == lastDanmakuTitle) return@LaunchedEffect
+        lastDanmakuTitle = bangumiTitle
+        // 等 init 完成（currentParams 就绪）再重载，最多等 3 秒
+        var waited = 0
+        while (playerController.currentParams == null && waited < 30) {
+            delay(100)
+            waited++
+        }
+        if (playerController.currentParams == null) return@LaunchedEffect
+        // 等首轮弹幕装载跑完，避免并发装载造成重复
+        var loadWaited = 0
+        while (playerController.danmaku.danmakuLoading.value && loadWaited < 50) {
+            delay(100)
+            loadWaited++
+        }
+        // 首轮已经按 bangumiId 映射装到弹幕了，就不要再用标题重拉
+        // （重拉会先清空现有弹幕，万一标题匹配失败反而把好的结果弄丢）
+        if (playerController.danmaku.danDanmakus.isNotEmpty()) return@LaunchedEffect
+        val result = playerController.fetchDanmaku(bangumiTitle)
+        if (result.hasDanmakus && !danmakuOn) {
+            toast("已自动装载弹幕")
         }
     }
 
@@ -607,7 +639,7 @@ fun PlayerPage(
                         Icon(Icons.Filled.ArrowBack, contentDescription = "返回", tint = Color.White)
                     }
                     Text(
-                        text = uiState.bangumiName.ifEmpty { "播放" },
+                        text = bangumiTitle.ifEmpty { uiState.bangumiName.ifEmpty { "播放" } },
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,

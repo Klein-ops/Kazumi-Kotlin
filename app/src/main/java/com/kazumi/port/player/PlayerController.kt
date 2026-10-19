@@ -471,8 +471,11 @@ class PlayerController(
     // 弹幕
     // ------------------------------------------------------------------
 
-    /** 加载当前剧集弹幕（对应原版 fetchDanmaku） */
-    suspend fun fetchDanmaku(): PlayerDanmakuController.DanmakuLoadResult {
+    /** 加载当前剧集弹幕（对应原版 fetchDanmaku）
+     *  @param bangumiName 可选：补取的番剧名（在线播放 init 时可能还没拿到名字，
+     *  补名后重试时传入覆盖 currentParams 里的空快照，供标题兜底匹配）
+     */
+    suspend fun fetchDanmaku(bangumiName: String? = null): PlayerDanmakuController.DanmakuLoadResult {
         val params = currentParams ?: return PlayerDanmakuController.DanmakuLoadResult.failed(0)
         danmaku.beginDanmakuLoad()
         val result = danmaku.fetchDanmaku(
@@ -480,7 +483,7 @@ class PlayerController(
             pluginName = params.pluginName,
             episode = params.episode,
             isLocalPlayback = params.isLocalPlayback,
-            bangumiName = params.bangumiName
+            bangumiName = bangumiName ?: params.bangumiName
         )
         // 自动装载：只要拿到弹幕就直接打开。
         // 旧逻辑用 "result.hasDanmakus && enableByDefault"，而 enableByDefault 默认 false，
