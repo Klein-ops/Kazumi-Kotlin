@@ -46,12 +46,10 @@ fun StorageSettingsPage(navController: NavHostController) {
     fun refreshCacheSize() {
         scope.launch {
             val size = withContext(Dispatchers.IO) {
-                context.imageLoader.diskCache?.let { dc ->
-                    dc.directory?.let { dir ->
-                        val bytes = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-                        bytes
-                    } ?: 0L
-                } ?: 0L
+                val cacheDir = context.cacheDir.resolve("coil_disk")
+                if (cacheDir.exists()) {
+                    cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                } else 0L
             }
             cacheSize = if (size > 0) {
                 val mb = size / 1024.0 / 1024.0

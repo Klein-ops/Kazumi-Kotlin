@@ -91,7 +91,8 @@ data class ApiSearchConfig(
     var request: ApiRequestConfig = ApiRequestConfig(),
     var listPath: String = "$.data[*]",
     var namePath: String = "$.name",
-    var sourcePath: String = "$.url"
+    var sourcePath: String = "$.url",
+    var sourceTemplate: String = ""
 ) {
     companion object {
         fun fromJson(json: JsonObject): ApiSearchConfig {
@@ -101,17 +102,18 @@ data class ApiSearchConfig(
                     ?: ApiRequestConfig(),
                 listPath = json.get("listPath")?.asString ?: "$.data[*]",
                 namePath = json.get("namePath")?.asString ?: "$.name",
-                sourcePath = json.get("sourcePath")?.asString ?: "$.url"
+                sourcePath = json.get("sourcePath")?.asString ?: "$.url",
+                sourceTemplate = (json.get("sourceTemplate")?.asString ?: "").trim()
             )
         }
     }
-
     fun toJson(): JsonObject {
         val obj = JsonObject()
         obj.add("request", request.toJson())
         obj.addProperty("listPath", listPath)
         obj.addProperty("namePath", namePath)
         obj.addProperty("sourcePath", sourcePath)
+        if (sourceTemplate.isNotEmpty()) obj.addProperty("sourceTemplate", sourceTemplate)
         return obj
     }
 }

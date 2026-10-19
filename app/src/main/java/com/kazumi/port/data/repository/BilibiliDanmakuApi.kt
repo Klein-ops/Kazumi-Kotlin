@@ -1,5 +1,5 @@
 package com.kazumi.port.data.repository
-
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.kazumi.port.data.model.DanmakuEntry
 import com.kazumi.port.network.HttpClientFactory

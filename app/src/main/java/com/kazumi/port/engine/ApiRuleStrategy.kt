@@ -65,6 +65,11 @@ class ApiRuleStrategy {
         RestrictedJsonPath.validate(config.listPath)
         RestrictedJsonPath.validate(config.namePath)
         RestrictedJsonPath.validate(config.sourcePath)
+        // 2.3.9：详情页地址模板必须引用 @source 占位符
+        val template = config.sourceTemplate
+        if (template.isNotEmpty() && !template.contains("@source")) {
+            throw ApiRuleFormatException("详情页地址模板必须引用 @source")
+        }
     }
 
     /**
@@ -95,7 +100,14 @@ class ApiRuleStrategy {
                     diagnostics.add("搜索节点 $index 缺少名称或来源，已跳过")
                     return@forEachIndexed
                 }
-                results.add(SearchItem(name = name, src = source))
+                // 2.3.9：详情页地址模板（@source → URL 编码的 source）；模板为空时直接用 source
+                val template = config.sourceTemplate
+                val src = if (template.isEmpty()) {
+                    source
+                } else {
+                    template.replace("@source", URLEncoder.encode(source, "UTF-8"))
+                }
+                results.add(SearchItem(name = name, src = src))
                 fragments.add(gson.toJson(node))
             } catch (e: ApiRuleFormatException) {
                 throw e
