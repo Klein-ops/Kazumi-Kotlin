@@ -3,6 +3,7 @@ package com.kazumi.port.player
 import com.kazumi.port.data.model.DanmakuEntry
 import com.kazumi.port.data.model.DanmakuUtils
 import com.kazumi.port.data.repository.BangumiApi
+import com.kazumi.port.data.repository.BilibiliDanmakuApi
 import com.kazumi.port.data.repository.DanmakuApi
 import com.kazumi.port.data.repository.SettingsManager
 import com.kazumi.port.util.FileLogger
@@ -23,7 +24,9 @@ import kotlinx.coroutines.flow.asStateFlow
 class PlayerDanmakuController(
     private val danmakuApi: DanmakuApi,
     private val settings: SettingsManager,
-    private val downloadRepository: com.kazumi.port.data.repository.DownloadRepository? = null
+    private val downloadRepository: com.kazumi.port.data.repository.DownloadRepository? = null,
+    /** B 站弹幕源（免鉴权）。弹弹play 已强制 AppId 鉴权，B 站是当前默认源 */
+    private val bilibiliApi: BilibiliDanmakuApi = BilibiliDanmakuApi()
 ) {
 
     /** 弹幕加载结果状态 */
@@ -32,7 +35,9 @@ class PlayerDanmakuController(
     data class DanmakuLoadResult(
         val danmakus: List<DanmakuEntry>,
         val bangumiID: Int,
-        val status: DanmakuLoadStatus
+        val status: DanmakuLoadStatus,
+        /** 失败原因（status=FAILED 时用于给用户更准确提示，例如"未配置弹弹play凭据"） */
+        val errorMessage: String? = null
     ) {
         val hasDanmakus: Boolean get() = status == DanmakuLoadStatus.SUCCESS
         val isFailed: Boolean get() = status == DanmakuLoadStatus.FAILED
@@ -45,8 +50,8 @@ class PlayerDanmakuController(
                     status = if (danmakus.isEmpty()) DanmakuLoadStatus.EMPTY else DanmakuLoadStatus.SUCCESS
                 )
 
-            fun failed(bangumiID: Int): DanmakuLoadResult =
-                DanmakuLoadResult(emptyList(), bangumiID, DanmakuLoadStatus.FAILED)
+            fun failed(bangumiID: Int, errorMessage: String? = null): DanmakuLoadResult =
+                DanmakuLoadResult(emptyList(), bangumiID, DanmakuLoadStatus.FAILED, errorMessage)
         }
     }
 
@@ -190,7 +195,7 @@ class PlayerDanmakuController(
             }
         } catch (e: Exception) {
             FileLogger.w("Danmaku", "本地弹幕缓存读取失败: ${e.javaClass.simpleName}: ${e.message}")
-            DanmakuLoadResult.failed(nextBangumiID)
+            DanmakuLoadResult.failed(nextBangumiID, "${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
@@ -221,10 +226,13 @@ class PlayerDanmakuController(
     /**
      * 自动装载弹幕（对应"看哪个番就装哪个"的预期，无需用户手动选择源）
      *
-     * 顺序：
-     * 1) Bangumi ID -> DanDanPlay 番剧 ID -> 按集号取弹幕（最准）
-     * 2) 映射不到 / 返回空 -> 用番剧名搜索，取最匹配番剧，再按集号匹配分集
-     * 3) 仍为空 -> 返回 EMPTY，由播放页提示
+     * 源顺序（2026-10 调整）：
+     *  1) **Bilibili**（免鉴权，默认开启）：番剧名搜索 → season → 按集号取 cid → 弹幕 XML。
+     *     弹弹play 开放 API v2 已强制 AppId/AppSecret 鉴权，第三方无凭据必然 403，
+     *     所以 B 站成为默认可用源。
+     *  2) **弹弹play**：仅当设置里打开开关且已填写 AppId/AppSecret 时才尝试。
+     *
+     * 两者都拿不到时：B 站若报错 → 返回 FAILED 并带上原因；B 站只是没匹配到 → 返回 EMPTY。
      */
     private suspend fun _autoMatchOnline(
         bgmBangumiID: Int,
@@ -233,6 +241,42 @@ class PlayerDanmakuController(
         fallbackBangumiID: Int
     ): DanmakuLoadResult {
         var nextBangumiID = fallbackBangumiID
+        val title = bangumiName.trim()
+        var biliError: String? = null
+
+        // ---------- 源 1：Bilibili（免鉴权） ----------
+        val biliOn = settings.getBoolean(SettingsManager.Danmaku.BILI_SOURCE, true)
+        if (biliOn && title.isNotEmpty()) {
+            try {
+                FileLogger.i("Danmaku", "B站匹配: \"$title\" ep=$episode")
+                val list = bilibiliApi.fetchDanmakuByTitle(title, episode)
+                if (list.isNotEmpty()) {
+                    FileLogger.i("Danmaku", "B站装载成功: ${list.size} 条")
+                    return DanmakuLoadResult.success(list, nextBangumiID)
+                }
+                FileLogger.w("Danmaku", "B站未匹配到弹幕: \"$title\" ep=$episode")
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                biliError = "${e.javaClass.simpleName}: ${e.message}"
+                FileLogger.w("Danmaku", "B站装载失败: $biliError")
+            }
+        } else if (!biliOn) {
+            FileLogger.i("Danmaku", "B站源已关闭（设置 → 弹幕 → BiliBili）")
+        }
+
+        // ---------- 源 2：弹弹play（需开关 + 凭据） ----------
+        val danDanOn = settings.getBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, false)
+        val hasCred = settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_ID, "").isNotBlank() &&
+            settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_SECRET, "").isNotBlank()
+        if (!danDanOn || !hasCred) {
+            FileLogger.i("Danmaku", "弹弹play 源跳过（开关=$danDanOn 凭据=$hasCred）")
+            return if (biliError != null) {
+                DanmakuLoadResult.failed(nextBangumiID, "B站: $biliError")
+            } else {
+                DanmakuLoadResult.success(emptyList(), nextBangumiID)
+            }
+        }
+
         try {
             if (bgmBangumiID > 0) {
                 val danDanId = danmakuApi.getDanDanBangumiIDByBgmBangumiID(bgmBangumiID)
@@ -247,7 +291,6 @@ class PlayerDanmakuController(
                     FileLogger.w("Danmaku", "bgm 映射命中但该集弹幕为空")
                 }
             }
-            val title = bangumiName.trim()
             if (title.isEmpty()) {
                 FileLogger.w("Danmaku", "缺少番剧名，无法标题兜底")
                 return DanmakuLoadResult.success(emptyList(), nextBangumiID)
@@ -259,7 +302,7 @@ class PlayerDanmakuController(
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             FileLogger.w("Danmaku", "在线装载失败: ${e.javaClass.simpleName}: ${e.message}")
-            return DanmakuLoadResult.failed(nextBangumiID)
+            return DanmakuLoadResult.failed(nextBangumiID, "${e.javaClass.simpleName}: ${e.message}")
         }
     }
 

@@ -103,7 +103,7 @@ fun DanmakuSourceSheet(
                 animes = resp.animes
                 if (resp.animes.isEmpty()) error = "未找到番剧"
             } catch (e: Exception) {
-                error = "搜索失败"
+                error = "搜索失败：${e.message ?: e.javaClass.simpleName}"
             }
             loading = false
         }
@@ -121,7 +121,7 @@ fun DanmakuSourceSheet(
                 episodes = resp.episodes
                 if (episodes.isEmpty()) error = "暂无分集"
             } catch (e: Exception) {
-                error = "分集加载失败"
+                error = "分集加载失败：${e.message ?: e.javaClass.simpleName}"
             }
             loading = false
         }
@@ -137,7 +137,7 @@ fun DanmakuSourceSheet(
                 toast(if (has) "已切换弹幕源" else "暂无弹幕")
             } catch (e: Exception) {
                 loading = false
-                toast("弹幕源切换失败")
+                toast("弹幕源切换失败：${e.message ?: e.javaClass.simpleName}")
             }
         }
     }

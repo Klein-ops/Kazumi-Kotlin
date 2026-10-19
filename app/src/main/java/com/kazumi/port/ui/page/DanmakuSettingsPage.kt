@@ -2,6 +2,7 @@ package com.kazumi.port.ui.page
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatLineSpacing
 import androidx.compose.material.icons.filled.FormatSize
@@ -26,9 +28,12 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material.icons.filled.VerticalAlignTop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +66,11 @@ fun DanmakuSettingsPage(navController: NavHostController) {
     var biliSource by remember { mutableStateOf(true) }
     var gamerSource by remember { mutableStateOf(false) }
     var danDanSource by remember { mutableStateOf(false) }
+    var danDanAppId by remember { mutableStateOf("") }
+    var danDanAppSecret by remember { mutableStateOf("") }
+    var showCredDialog by remember { mutableStateOf(false) }
+    var editAppId by remember { mutableStateOf("") }
+    var editAppSecret by remember { mutableStateOf("") }
     var followSpeed by remember { mutableStateOf(false) }
     var danmakuTop by remember { mutableStateOf(true) }
     var danmakuBottom by remember { mutableStateOf(true) }
@@ -81,6 +91,8 @@ fun DanmakuSettingsPage(navController: NavHostController) {
         biliSource = settings.getBoolean(SettingsManager.Danmaku.BILI_SOURCE, true)
         gamerSource = settings.getBoolean(SettingsManager.Danmaku.GAMER_SOURCE, false)
         danDanSource = settings.getBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, false)
+        danDanAppId = settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_ID, "")
+        danDanAppSecret = settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_SECRET, "")
         followSpeed = settings.getBoolean(SettingsManager.Danmaku.FOLLOW_SPEED, false)
         danmakuTop = settings.getBoolean(SettingsManager.Danmaku.TOP, true)
         danmakuBottom = settings.getBoolean(SettingsManager.Danmaku.BOTTOM, true)
@@ -114,21 +126,38 @@ fun DanmakuSettingsPage(navController: NavHostController) {
             SettingGroup("弹幕来源") {
                 SettingSwitchRow(
                     title = "BiliBili",
+                    subtitle = "免鉴权，按番剧名自动匹配，当前默认弹幕源",
                     leading = Icons.Filled.LiveTv,
                     checked = biliSource,
                     onCheckedChange = { biliSource = it; saveBoolean(SettingsManager.Danmaku.BILI_SOURCE, it) }
                 )
                 SettingSwitchRow(
                     title = "Gamer",
+                    subtitle = "巴哈姆特动画疯（接口在当前网络不可达，暂未启用）",
                     leading = Icons.Filled.SportsEsports,
                     checked = gamerSource,
                     onCheckedChange = { gamerSource = it; saveBoolean(SettingsManager.Danmaku.GAMER_SOURCE, it) }
                 )
                 SettingSwitchRow(
                     title = "弹弹play",
+                    subtitle = "官方接口已强制 AppId 鉴权，需先填写下方凭据",
                     leading = Icons.Filled.Forum,
                     checked = danDanSource,
                     onCheckedChange = { danDanSource = it; saveBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, it) }
+                )
+            }
+
+            SettingGroup("弹弹play 凭据") {
+                SettingClickRow(
+                    title = "AppId / AppSecret",
+                    subtitle = "弹弹play 开放接口需鉴权，在 dandanplay.com 开发者中心创建应用后填入；仅保存在本机",
+                    leading = Icons.Filled.Key,
+                    trailingValue = if (danDanAppId.isNotBlank() && danDanAppSecret.isNotBlank()) "已配置" else "未配置",
+                    onClick = {
+                        editAppId = danDanAppId
+                        editAppSecret = danDanAppSecret
+                        showCredDialog = true
+                    }
                 )
             }
 
@@ -313,5 +342,53 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                 )
             }
         }
+    }
+
+    if (showCredDialog) {
+        AlertDialog(
+            onDismissRequest = { showCredDialog = false },
+            title = { Text("弹弹play 凭据") },
+            text = {
+                Column {
+                    Text(
+                        text = "在 dandanplay.com 开发者中心创建应用并审核通过后，可获 1 个 AppId 和 2 个 AppSecret（任选其一）。凭据只保存在本机，不上传。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = editAppId,
+                        onValueChange = { editAppId = it.trim() },
+                        label = { Text("AppId") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
+                    )
+                    OutlinedTextField(
+                        value = editAppSecret,
+                        onValueChange = { editAppSecret = it.trim() },
+                        label = { Text("AppSecret") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    danDanAppId = editAppId.trim()
+                    danDanAppSecret = editAppSecret.trim()
+                    scope.launch {
+                        settings.setString(SettingsManager.Danmaku.DAN_DAN_APP_ID, danDanAppId)
+                        settings.setString(SettingsManager.Danmaku.DAN_DAN_APP_SECRET, danDanAppSecret)
+                    }
+                    showCredDialog = false
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCredDialog = false }) { Text("取消") }
+            }
+        )
     }
 }

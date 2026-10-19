@@ -78,6 +78,7 @@ import com.kazumi.port.service.VideoSourceFormat
 import com.kazumi.port.service.WebViewVideoSourceService
 import com.kazumi.port.ui.components.DanmakuOverlay
 import com.kazumi.port.util.FileLogger
+import com.kazumi.port.util.DanmakuFeature
 import com.kazumi.port.ui.components.DanmakuSourceSheet
 import com.kazumi.port.ui.components.PlayerAdjustmentHud
 import com.kazumi.port.ui.components.PlayerAdjustmentHudType
@@ -253,7 +254,7 @@ fun PlayerPage(
     LaunchedEffect(params, resolveTick) {
         if (isLocal) {
             playerController.init(params)
-            playerController.fetchDanmaku()
+            if (DanmakuFeature.ENABLED) playerController.fetchDanmaku()
         } else {
             // 在线播放：先识别是否直链媒体，否则走 WebView 解析
             val direct = isDirectMediaUrl(params.videoUrl)
@@ -660,7 +661,13 @@ fun PlayerPage(
                                 toast(
                                     when {
                                         result.hasDanmakus -> "弹幕已装载"
-                                        result.isFailed -> "弹幕匹配失败，请稍后再试"
+                                        result.isFailed -> {
+                                            val msg = result.errorMessage.orEmpty()
+                                            if (msg.contains("未配置弹弹play凭据"))
+                                                "弹幕需要弹弹play凭据：设置 → 弹幕 → 弹弹play 凭据"
+                                            else
+                                                "弹幕匹配失败（$msg），请稍后再试"
+                                        }
                                         else -> "没找到这一集的弹幕，可在「更多」里手动切换弹幕源"
                                     }
                                 )

@@ -79,6 +79,10 @@ class SettingsManager(private val context: Context) {
         const val BILI_SOURCE = "danmakuBiliBiliSource"
         const val GAMER_SOURCE = "danmakuGamerSource"
         const val DAN_DAN_SOURCE = "danmakuDanDanSource"
+
+        /** 弹弹play 开放弹幕网络凭据（用户自填，对应上游 CI 的 DANDANAPI_APPID / DANDANAPI_KEY） */
+        const val DAN_DAN_APP_ID = "danmakuDanDanAppId"
+        const val DAN_DAN_APP_SECRET = "danmakuDanDanAppSecret"
         const val FONT_WEIGHT = "danmakuFontWeight"
         const val FOLLOW_SPEED = "danmakuFollowSpeed"
     }

@@ -12,8 +12,8 @@ import com.kazumi.port.network.DanmakuClient
  * 对应 Dart danmaku_api.dart
  */
 class DanmakuApi(
-    private val client: DanmakuClient = DanmakuClient(),
-    private val settings: SettingsManager? = null
+    private val settings: SettingsManager? = null,
+    private val client: DanmakuClient = DanmakuClient(settings)
 ) {
 
     /**
