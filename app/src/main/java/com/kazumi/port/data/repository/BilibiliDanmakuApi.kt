@@ -206,13 +206,13 @@ class BilibiliDanmakuApi {
     // HTTP
     // ---------------------------------------------------------------
 
-    private suspend fun getJson(url: String) = withContext(Dispatchers.IO) {
+    private suspend fun getJson(url: String): JsonObject = withContext(Dispatchers.IO) {
         val text = decodeBody(getBytes(url))
         if (text.isEmpty()) {
             throw NetworkException(NetworkExceptionType.BAD_RESPONSE, "B站响应为空: $url")
         }
         try {
-            JsonParser.parseString(text)
+            JsonParser.parseString(text).asJsonObject
         } catch (e: Exception) {
             throw NetworkException(
                 NetworkExceptionType.BAD_RESPONSE,
