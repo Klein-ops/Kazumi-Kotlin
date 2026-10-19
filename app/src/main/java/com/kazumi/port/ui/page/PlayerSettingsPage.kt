@@ -29,9 +29,11 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SwipeVertical
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,10 +48,12 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.kazumi.port.KazumiApp
 import com.kazumi.port.data.repository.SettingsManager
+import com.kazumi.port.player.PlayerAspectRatio
 import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
 import com.kazumi.port.ui.components.SettingSwitchRow
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
+import com.kazumi.port.ui.components.rememberToast
 import kotlinx.coroutines.launch
 
 /**
@@ -60,6 +64,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
     val app = remember { KazumiApp.get() }
     val settings = app.settings
     val scope = rememberCoroutineScope()
+    val showToast = rememberToast()
 
     var hAenable by remember { mutableStateOf(false) }
     var androidEnableOpenSLES by remember { mutableStateOf(false) }
@@ -79,6 +84,8 @@ fun PlayerSettingsPage(navController: NavHostController) {
     var playerArrowKeySkipTime by remember { mutableIntStateOf(5) }
     var playerButtonSkipTime by remember { mutableIntStateOf(30) }
     var playerControllerLayerDisappearTime by remember { mutableIntStateOf(3000) }
+    var aspectRatioType by remember { mutableIntStateOf(1) }
+    var showAspectDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         hAenable = settings.getBoolean(SettingsManager.Player.HA_ENABLE, false)
@@ -99,6 +106,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
         playerArrowKeySkipTime = settings.getInt(SettingsManager.Player.ARROW_KEY_SKIP_TIME, 5)
         playerButtonSkipTime = settings.getInt(SettingsManager.Player.BUTTON_SKIP_TIME, 30)
         playerControllerLayerDisappearTime = settings.getInt(SettingsManager.Player.PLAYER_CONTROLLER_LAYER_DISAPPEAR_TIME, 3000)
+        aspectRatioType = settings.getInt(SettingsManager.Player.DEFAULT_ASPECT_RATIO_TYPE, 1)
     }
 
     fun saveBoolean(key: String, value: Boolean) {
@@ -130,8 +138,9 @@ fun PlayerSettingsPage(navController: NavHostController) {
                 )
                 SettingClickRow(
                     title = "超分辨率",
+                    subtitle = "AI 画质增强（开发中）",
                     leading = Icons.Filled.AutoAwesome,
-                    onClick = {}
+                    onClick = { showToast("超分辨率功能开发中，敬请期待") }
                 )
             }
 
@@ -281,7 +290,8 @@ fun PlayerSettingsPage(navController: NavHostController) {
                 SettingClickRow(
                     title = "默认视频比例",
                     leading = Icons.Filled.AspectRatio,
-                    onClick = {}
+                    trailingValue = PlayerAspectRatio.fromStorageValue(aspectRatioType).label,
+                    onClick = { showAspectDialog = true }
                 )
             }
 
@@ -307,5 +317,32 @@ fun PlayerSettingsPage(navController: NavHostController) {
                 )
             }
         }
+    }
+
+    // 默认视频比例选择对话框
+    if (showAspectDialog) {
+        AlertDialog(
+            onDismissRequest = { showAspectDialog = false },
+            title = { Text("默认视频比例") },
+            text = {
+                Column {
+                    PlayerAspectRatio.entries.forEach { mode ->
+                        TextButton(
+                            onClick = {
+                                aspectRatioType = mode.storageValue
+                                scope.launch {
+                                    settings.setInt(SettingsManager.Player.DEFAULT_ASPECT_RATIO_TYPE, mode.storageValue)
+                                }
+                                showAspectDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(mode.label) }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAspectDialog = false }) { Text("取消") }
+            }
+        )
     }
 }

@@ -52,6 +52,7 @@ import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
 import com.kazumi.port.ui.components.SettingSwitchRow
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
+import com.kazumi.port.ui.components.rememberToast
 import kotlinx.coroutines.launch
 
 /**
@@ -62,6 +63,7 @@ fun DanmakuSettingsPage(navController: NavHostController) {
     val app = remember { KazumiApp.get() }
     val settings = app.settings
     val scope = rememberCoroutineScope()
+    val showToast = rememberToast()
 
     var biliSource by remember { mutableStateOf(true) }
     var gamerSource by remember { mutableStateOf(false) }
@@ -164,8 +166,9 @@ fun DanmakuSettingsPage(navController: NavHostController) {
             SettingGroup("弹幕屏蔽") {
                 SettingClickRow(
                     title = "关键词屏蔽",
+                    subtitle = "屏蔽含指定关键词的弹幕",
                     leading = Icons.Filled.Block,
-                    onClick = {}
+                    onClick = { showToast("关键词屏蔽开发中，敬请期待") }
                 )
             }
 

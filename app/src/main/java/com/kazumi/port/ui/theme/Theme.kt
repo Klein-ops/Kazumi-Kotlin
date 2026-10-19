@@ -27,7 +27,7 @@ import androidx.core.view.WindowCompat
  * - 动态取色（Android 12+ Monet，app_widget.dart DynamicColorBuilder）
  */
 object KazumiThemeColors {
-    val DEFAULT = Color(0xFF4CAF50)     // Colors.green
+    val DEFAULT = Color(0xFF4CAF50)     // Colors.green 原版默认（非荧光绿）
     val TEAL = Color(0xFF009688)        // Colors.teal
     val BLUE = Color(0xFF2196F3)        // Colors.blue
     val INDIGO = Color(0xFF3F51B5)      // Colors.indigo
@@ -108,9 +108,11 @@ fun kazumiLightColorScheme(seed: Color): ColorScheme {
 
 /** 深色配色：以调亮后的种子色为主色 */
 fun kazumiDarkColorScheme(seed: Color): ColorScheme {
-    val lightSeed = adjust(seed, 1.45f)
+    // 原版 colorSchemeSeed 深色下不会过度提亮主色；这里只做温和提亮，避免荧光感
+    val lightSeed = adjust(seed, 1.15f)
     val onSeed = if (lightSeed.luminance() > 0.5f) Color.Black else Color.White
-    val bg = Color(0xFF121212)
+    // 原版深色背景是带绿调的深色（Material3 fromSeed 对 green 生成的 surface），不是纯黑
+    val bg = Color(0xFF161D16)
     return darkColorScheme(
         primary = lightSeed,
         onPrimary = onSeed,

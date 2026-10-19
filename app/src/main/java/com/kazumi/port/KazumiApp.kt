@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Context
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import com.kazumi.port.data.db.KazumiDatabase
 import com.kazumi.port.data.repository.BangumiApi
 import com.kazumi.port.data.repository.CollectRepository
@@ -143,6 +145,20 @@ class KazumiApp : Application(), ImageLoaderFactory {
             // 通过 okhttp3.Call.Factory 接口每次发请求取当前 client，
             // 保证代理切换（HttpClientFactory.applyProxy）后图片立即走新网络栈。
             .callFactory { request -> HttpClientFactory.getClient().newCall(request) }
+            // 磁盘缓存：图片首次加载后落盘，二次进入秒开（原版 Kazumi 有图片缓存设置，
+            // 移植版必须开，否则每次进列表都重新下载 → 慢）
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve("coil_disk"))
+                    .maxSizeBytes(512L * 1024 * 1024) // 512MB，可存大量封面
+                    .build()
+            }
+            // 内存缓存默认开启（Coil 默认 memoryCache 已启用，这里显式保障）
+            .memoryCache {
+                MemoryCache.Builder(this)
+                    .maxSizePercent(0.25)
+                    .build()
+            }
             .components {
                 add(ImageAccelerationInterceptor { currentImageAcceleration })
             }

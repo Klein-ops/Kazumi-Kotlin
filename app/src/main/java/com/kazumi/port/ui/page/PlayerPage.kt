@@ -251,6 +251,8 @@ fun PlayerPage(
     // 解析出真实媒体 URL（m3u8/mp4），否则 ExoPlayer 拿到 HTML 页 → PARSING_CONTAINER_UNSUPPORTED。
 
     // 播放初始化（参数变化时重新解析+init）
+    // 自动重试：解析失败后自动重试（最多 2 次，间隔 2s），仍失败才显示错误页。
+    // 手动重试按钮（resolveTick++）与自动重试共用同一条路径。
     LaunchedEffect(params, resolveTick) {
         if (isLocal) {
             playerController.init(params)
@@ -266,19 +268,31 @@ fun PlayerPage(
                 isResolving = true
                 resolveError = null
                 val plugin = app.pluginRepository.getPlugin(params.pluginName)
-                val parsed = try {
-                    FileLogger.i("PlayerResolve", "start WebView resolve: url=${params.videoUrl} legacy=${plugin?.useLegacyParser ?: false}")
-                    videoSourceService.resolve(
-                        episodeUrl = params.videoUrl,
-                        useLegacyParser = plugin?.useLegacyParser ?: false,
-                        offset = 0,
-                        timeoutMillis = 20_000
-                    )
-                } catch (e: Exception) {
-                    // 协程取消（换集/重试）必须向上传播，不能当作解析失败
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    FileLogger.w("PlayerResolve", "WebView resolve FAILED: ${e.javaClass.simpleName}: ${e.message} | url=${params.videoUrl}")
-                    null
+                var parsed = null as com.kazumi.port.service.VideoSource? // 见 service 包定义
+                var attempt = 0
+                val maxAttempts = 3 // 首次 + 2 次自动重试
+                while (attempt < maxAttempts) {
+                    attempt++
+                    FileLogger.i("PlayerResolve", "start WebView resolve: url=${params.videoUrl} legacy=${plugin?.useLegacyParser ?: false} attempt=$attempt/$maxAttempts")
+                    parsed = try {
+                        videoSourceService.resolve(
+                            episodeUrl = params.videoUrl,
+                            useLegacyParser = plugin?.useLegacyParser ?: false,
+                            offset = 0,
+                            timeoutMillis = 20_000
+                        )
+                    } catch (e: Exception) {
+                        // 协程取消（换集/重试）必须向上传播，不能当作解析失败
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        FileLogger.w("PlayerResolve", "WebView resolve FAILED(attempt=$attempt): ${e.javaClass.simpleName}: ${e.message} | url=${params.videoUrl}")
+                        null
+                    }
+                    if (parsed != null && parsed.url.isNotBlank()) break
+                    // 失败：等待后自动重试（最后一次失败不再等）
+                    if (attempt < maxAttempts) {
+                        FileLogger.i("PlayerResolve", "resolve failed, auto retry in 2s... (attempt=$attempt)")
+                        delay(2_000)
+                    }
                 }
                 isResolving = false
                 if (parsed != null && parsed.url.isNotBlank()) {
@@ -291,10 +305,10 @@ fun PlayerPage(
                     playerController.init(resolvedParams)
                     playerController.fetchDanmaku()
                 } else {
-                    // 解析失败：不把 HTML 页塞给播放器（那正是 PARSING_CONTAINER_UNSUPPORTED 的根因），
-                    // 直接显示错误 + 重试按钮。
-                    FileLogger.e("PlayerResolve", "resolve failed, show error UI | url=${params.videoUrl}")
-                    resolveError = "视频源解析失败，请重试"
+                    // 3 次（首次+2 重试）都失败：不把 HTML 页塞给播放器（那正是 PARSING_CONTAINER_UNSUPPORTED 的根因），
+                    // 显示错误 + 手动重试按钮。
+                    FileLogger.e("PlayerResolve", "resolve failed after $maxAttempts attempts, show error UI | url=${params.videoUrl}")
+                    resolveError = "视频源解析失败（已自动重试 $maxAttempts 次），可重试"
                     playerController.release()
                 }
             }
@@ -884,16 +898,26 @@ fun PlayerPage(
             }
         }
 
-        // 错误提示
+        // 错误提示（含重试按钮）
         if (uiState.errorMessage != null) {
-            Text(
-                text = "播放出错: ${uiState.errorMessage}",
-                color = Color.White,
+            Box(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .background(Color.Black.copy(alpha = 0.7f))
-                    .padding(16.dp)
-            )
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "播放出错: ${uiState.errorMessage}",
+                        color = Color.White
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = { resolveTick++ }) {
+                        Text("重试", color = Color.White)
+                    }
+                }
+            }
         }
 
         // 弹幕源切换 sheet

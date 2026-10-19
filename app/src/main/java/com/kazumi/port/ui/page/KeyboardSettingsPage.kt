@@ -14,14 +14,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -107,6 +112,7 @@ fun KeyboardSettingsPage(navController: NavHostController) {
     val scope = rememberCoroutineScope()
 
     val shortcuts = remember { mutableStateMapOf<String, List<String>>() }
+    var showHelpDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         defaultShortcuts.forEach { (func, defaults) ->
@@ -199,9 +205,32 @@ fun KeyboardSettingsPage(navController: NavHostController) {
                     title = "快捷键说明",
                     subtitle = "播放控制 / 音量 / 画面与弹幕 / 倍速",
                     leading = Icons.Filled.Keyboard,
-                    onClick = {}
+                    onClick = { showHelpDialog = true }
                 )
             }
         }
+    }
+
+    if (showHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { showHelpDialog = false },
+            title = { Text("快捷键说明") },
+            text = {
+                Text(
+                    "空格：播放/暂停\n" +
+                        "← / →：快退 / 快进\n" +
+                        "↑ / ↓：音量加减\n" +
+                        "M：静音切换\n" +
+                        "F：全屏\n" +
+                        "S：跳过片头\n" +
+                        "N / P：下一集 / 上一集\n" +
+                        "1 / 2 / 3：倍速档位\n" +
+                        "快捷键可在上方列表中点击修改"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showHelpDialog = false }) { Text("知道了") }
+            }
+        )
     }
 }

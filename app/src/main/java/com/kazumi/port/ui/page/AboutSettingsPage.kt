@@ -8,6 +8,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Balance
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Language
@@ -16,8 +18,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import com.kazumi.port.BuildConfig
 import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
@@ -29,6 +33,17 @@ import com.kazumi.port.ui.navigation.Routes
  */
 @Composable
 fun AboutSettingsPage(navController: NavHostController) {
+    val context = LocalContext.current
+
+    fun openUrl(url: String) {
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            // 无可用浏览器时不崩溃
+        }
+    }
+
     SettingsSubPageScaffold(
         title = "关于",
         onBack = { navController.popBackStack() }
@@ -45,7 +60,7 @@ fun AboutSettingsPage(navController: NavHostController) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "版本 2.3.8 (Kotlin 重写版)",
+                    text = "版本 ${BuildConfig.VERSION_NAME} (Kotlin 重写版)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -59,10 +74,22 @@ fun AboutSettingsPage(navController: NavHostController) {
 
             SettingGroup("项目") {
                 SettingClickRow(
+                    title = "源代码",
+                    subtitle = "GitHub 仓库",
+                    leading = Icons.Filled.Code,
+                    onClick = { openUrl("https://github.com/Predidit/Kazumi") }
+                )
+                SettingClickRow(
                     title = "项目主页",
-                    subtitle = "开源番剧应用",
+                    subtitle = "kazumi.app",
                     leading = Icons.Filled.Language,
-                    onClick = {}
+                    onClick = { openUrl("https://kazumi.app/") }
+                )
+                SettingClickRow(
+                    title = "问题反馈",
+                    subtitle = "在 GitHub 提交 Issue",
+                    leading = Icons.Filled.BugReport,
+                    onClick = { openUrl("https://github.com/Predidit/Kazumi/issues") }
                 )
             }
 
@@ -71,7 +98,7 @@ fun AboutSettingsPage(navController: NavHostController) {
                     title = "贡献指南",
                     subtitle = "参与 Kazumi 开发",
                     leading = Icons.Filled.Handshake,
-                    onClick = {}
+                    onClick = { openUrl("https://github.com/Predidit/Kazumi/blob/main/static/doc/CONTRIBUTING.md") }
                 )
                 SettingClickRow(
                     title = "致谢",
@@ -83,13 +110,13 @@ fun AboutSettingsPage(navController: NavHostController) {
                     title = "GPL-3.0 许可证",
                     subtitle = "查看开源许可证",
                     leading = Icons.Filled.Balance,
-                    onClick = {}
+                    onClick = { openUrl("https://github.com/Predidit/Kazumi/blob/main/LICENSE") }
                 )
                 SettingClickRow(
                     title = "更新日志",
                     subtitle = "查看版本发布记录",
                     leading = Icons.Filled.Update,
-                    onClick = {}
+                    onClick = { openUrl("https://github.com/Predidit/Kazumi/releases") }
                 )
             }
         }
