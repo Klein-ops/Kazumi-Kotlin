@@ -12,6 +12,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
+/** DataStore 委托必须定义在文件顶层（官方推荐）：
+ *  若放在类内部，每 new 一个 SettingsManager 都会创建指向同一文件的新 DataStore 实例，
+ *  并发读写会抛 "There are multiple DataStores active for the same file"。
+ *  移到顶层后所有 SettingsManager 实例共享同一个 DataStore。 */
+private val Context.kazumiDataStore by preferencesDataStore(name = "kazumi_settings")
+
 /**
  * 设置管理器
  *
@@ -21,7 +27,6 @@ import kotlinx.coroutines.flow.map
  */
 class SettingsManager(private val context: Context) {
 
-    private val Context.dataStore by preferencesDataStore(name = "kazumi_settings")
 
     /** 播放器设置 */
     object Player {
@@ -183,77 +188,77 @@ class SettingsManager(private val context: Context) {
 
     suspend fun getBoolean(key: String, default: Boolean = false): Boolean {
         val k = booleanPreferencesKey(key)
-        return context.dataStore.data.first()[k] ?: default
+        return context.kazumiDataStore.data.first()[k] ?: default
     }
 
     fun booleanFlow(key: String, default: Boolean = false): Flow<Boolean> {
         val k = booleanPreferencesKey(key)
-        return context.dataStore.data.map { it[k] ?: default }
+        return context.kazumiDataStore.data.map { it[k] ?: default }
     }
 
     suspend fun setBoolean(key: String, value: Boolean) {
         val k = booleanPreferencesKey(key)
-        context.dataStore.edit { it[k] = value }
+        context.kazumiDataStore.edit { it[k] = value }
     }
 
     suspend fun getInt(key: String, default: Int = 0): Int {
         val k = intPreferencesKey(key)
-        return context.dataStore.data.first()[k] ?: default
+        return context.kazumiDataStore.data.first()[k] ?: default
     }
 
     fun intFlow(key: String, default: Int = 0): Flow<Int> {
         val k = intPreferencesKey(key)
-        return context.dataStore.data.map { it[k] ?: default }
+        return context.kazumiDataStore.data.map { it[k] ?: default }
     }
 
     suspend fun setInt(key: String, value: Int) {
         val k = intPreferencesKey(key)
-        context.dataStore.edit { it[k] = value }
+        context.kazumiDataStore.edit { it[k] = value }
     }
 
     suspend fun getDouble(key: String, default: Double = 0.0): Double {
         val k = doublePreferencesKey(key)
-        return context.dataStore.data.first()[k] ?: default
+        return context.kazumiDataStore.data.first()[k] ?: default
     }
 
     fun doubleFlow(key: String, default: Double = 0.0): Flow<Double> {
         val k = doublePreferencesKey(key)
-        return context.dataStore.data.map { it[k] ?: default }
+        return context.kazumiDataStore.data.map { it[k] ?: default }
     }
 
     suspend fun setDouble(key: String, value: Double) {
         val k = doublePreferencesKey(key)
-        context.dataStore.edit { it[k] = value }
+        context.kazumiDataStore.edit { it[k] = value }
     }
 
     suspend fun getString(key: String, default: String = ""): String {
         val k = stringPreferencesKey(key)
-        return context.dataStore.data.first()[k] ?: default
+        return context.kazumiDataStore.data.first()[k] ?: default
     }
 
     fun stringFlow(key: String, default: String = ""): Flow<String> {
         val k = stringPreferencesKey(key)
-        return context.dataStore.data.map { it[k] ?: default }
+        return context.kazumiDataStore.data.map { it[k] ?: default }
     }
 
     suspend fun setString(key: String, value: String) {
         val k = stringPreferencesKey(key)
-        context.dataStore.edit { it[k] = value }
+        context.kazumiDataStore.edit { it[k] = value }
     }
 
     suspend fun getStringList(key: String, default: List<String> = emptyList()): List<String> {
         val k = stringSetPreferencesKey(key)
-        return context.dataStore.data.first()[k]?.toList() ?: default
+        return context.kazumiDataStore.data.first()[k]?.toList() ?: default
     }
 
     suspend fun setStringList(key: String, value: List<String>) {
         val k = stringSetPreferencesKey(key)
-        context.dataStore.edit { it[k] = value.toSet() }
+        context.kazumiDataStore.edit { it[k] = value.toSet() }
     }
 
     suspend fun remove(key: String) {
         val k = stringPreferencesKey(key)
-        context.dataStore.edit { it.remove(k) }
+        context.kazumiDataStore.edit { it.remove(k) }
     }
 
     // ---- 常用设置便捷访问 ----

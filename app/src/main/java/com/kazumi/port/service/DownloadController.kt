@@ -45,6 +45,9 @@ class DownloadController(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val resolverPool = VideoSourceResolverPool(appContext)
 
+    /** 复用 KazumiApp 全局单例 settings（避免 new SettingsManager 造成 DataStore 并发冲突） */
+    private val settings = com.kazumi.port.KazumiApp.get().settings
+
     /** 待解析队列（原版 _resolveQueue） */
     private val resolveQueue = CopyOnWriteArrayList<ResolveRequest>()
 
@@ -418,7 +421,7 @@ class DownloadController(
         if (resolveQueue.isEmpty()) return
 
         resolverPool.resize(
-            SettingsManager(appContext).getInt(SettingsManager.Download.PARALLEL_EPISODES, 2)
+            settings.getInt(SettingsManager.Download.PARALLEL_EPISODES, 2)
         )
 
         var index = 0
@@ -526,7 +529,6 @@ class DownloadController(
                 )
             )
 
-            val settings = SettingsManager(appContext)
             if (settings.getBoolean(SettingsManager.Download.DANMAKU, false)) {
                 fetchAndCacheDanmakuAsync(
                     request.recordKey,
@@ -845,7 +847,7 @@ class DownloadController(
         scope.launch {
             try {
                 Log.i(TAG, "fetching danmaku for episode $episodeNumber (async)")
-                val danmakuApi = DanmakuApi(settings = SettingsManager(appContext))
+                val danmakuApi = DanmakuApi(settings = settings)
                 val danDanBangumiID = danmakuApi.getDanDanBangumiIDByBgmBangumiID(bangumiId)
                 if (danDanBangumiID == 0) {
                     Log.w(TAG, "failed to get DanDan bangumiID for $bangumiId")
