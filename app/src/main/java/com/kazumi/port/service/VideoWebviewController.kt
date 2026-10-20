@@ -42,14 +42,37 @@ class VideoWebviewController(
     /** 当前注入的脚本内容（页面每次导航时在 onPageStarted/onPageFinished 重新注入） */
     private var currentScript: String? = null
 
-    /** 判断是否为媒体直链（m3u8/mp4/mkv/webm 等） */
+    /** 判断是否为媒体直链（m3u8/mp4/mkv/webm 等）。
+     *  只检查 path 部分（? 之前）——query 里带 .m3u8 的 HTML 播放器页
+     *  （如 artplayer 的 index.html?url=xxx.m3u8）不能被误判成视频源。 */
     private fun isMediaUrl(url: String): Boolean {
-        val lower = url.lowercase()
-        // m3u8 用 contains：部分站点的清单地址形如 /hls/index.m3u8/ 或带多余后缀
-        if (lower.contains(".m3u8")) return true
-        val u = url.substringBefore('?').lowercase()
-        return u.endsWith(".mp4") ||
-            u.endsWith(".mkv") || u.endsWith(".webm") || u.endsWith(".flv")
+        val path = url.substringBefore('?').lowercase()
+        // m3u8 用 contains（path 内）：部分站点的清单地址形如 /hls/index.m3u8/ 或带多余后缀
+        if (path.contains(".m3u8")) return true
+        return path.endsWith(".mp4") ||
+            path.endsWith(".mkv") || path.endsWith(".webm") || path.endsWith(".flv")
+    }
+
+    /** 提取播放器页 query 中 url= 参数指向的真实视频源（artplayer 等常见形态：
+     *  xxx/index.html?url=<真实m3u8|mp4>）。返回 null 表示不是这种形态或参数值不是媒体。 */
+    private fun extractEmbeddedMediaUrl(url: String): String? {
+        if (url.contains(".html") || url.contains(".htm")) {
+            val q = url.substringAfter('?', "").ifEmpty { return null }
+            for (pair in q.split('&')) {
+                if (!pair.startsWith("url=")) continue
+                val v = pair.substring(4)
+                if (v.isBlank()) continue
+                // 参数值可能被 URL 编码过，先解码一次再判定；解码失败就用原值
+                if (isMediaUrl(v) || isMediaUrl(try {
+                        java.net.URLDecoder.decode(v, "UTF-8")
+                    } catch (e: Exception) {
+                        v
+                    })) {
+                    return v
+                }
+            }
+        }
+        return null
     }
 
     /** 诊断用：单次解析中已记录的请求数（用于定位"页面到底请求了什么"） */
@@ -227,7 +250,9 @@ class VideoWebviewController(
                                     onLog?.invoke("Native sniff hit: $u (range=${range ?: "none"})")
                                     isIframeLoaded = true
                                     isVideoSourceLoaded = true
-                                    emitSource(VideoParserEvent(u, offset))
+                                    // artplayer 等 HTML 播放器页：query 里的 url= 参数才是真实视频源，
+                                    // 不能把 HTML 页本身喂给播放器（会 PARSING_CONTAINER_UNSUPPORTED）
+                                    emitSource(VideoParserEvent(extractEmbeddedMediaUrl(u) ?: u, offset))
                                 }
                                 return null
                             }
