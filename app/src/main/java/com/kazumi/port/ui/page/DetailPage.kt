@@ -49,7 +49,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.google.gson.JsonParser
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -107,22 +109,59 @@ fun DetailPage(
     val scope = rememberCoroutineScope()
     val bangumiApi = remember { BangumiApi(BangumiClient(KazumiApp.get().settings)) }
 
-    var bangumi by remember { mutableStateOf<BangumiItem?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-    var roadsLoading by remember { mutableStateOf(false) }
-    var roadsLoaded by remember { mutableStateOf(false) }
-    var isCollected by remember { mutableStateOf(false) }
-    var collectType by remember { mutableIntStateOf(0) }
-
-    // 插件 -> (src, roads)
-    var pluginRoads by remember {
-        mutableStateOf<List<Triple<String, String, List<Road>>>>(emptyList())
+    // 详情数据：从播放器返回时详情页组合会被销毁重建，
+    // 用 rememberSaveable 序列化核心状态，避免返回后重新拉详情/线路/重置 Tab
+    var bangumiJson by rememberSaveable { mutableStateOf("") }
+    val bangumi = remember(bangumiJson) {
+        if (bangumiJson.isEmpty()) null
+        else runCatching {
+            BangumiItem.fromJson(JsonParser.parseString(bangumiJson).asJsonObject)
+        }.getOrNull()
     }
-    var selectedPlugin by remember { mutableIntStateOf(-1) }
-    var selectedRoad by remember { mutableIntStateOf(0) }
+    var isLoading by rememberSaveable { mutableStateOf(true) }
+    var roadsLoading by remember { mutableStateOf(false) }
+    var roadsLoaded by rememberSaveable { mutableStateOf(false) }
+    var isCollected by rememberSaveable { mutableStateOf(false) }
+    var collectType by rememberSaveable { mutableIntStateOf(0) }
+
+    // 插件 -> (src, roads)，存 JSON 以便 rememberSaveable 恢复
+    var pluginRoadsJson by rememberSaveable { mutableStateOf("") }
+    val pluginRoads = remember(pluginRoadsJson) {
+        if (pluginRoadsJson.isEmpty()) emptyList()
+        else runCatching {
+            val arr = JsonParser.parseString(pluginRoadsJson).asJsonArray
+            arr.mapNotNull { el ->
+                if (!el.isJsonObject) return@mapNotNull null
+                val obj = el.asJsonObject
+                val name = obj.get("plugin")?.asString ?: return@mapNotNull null
+                val src = obj.get("src")?.asString ?: return@mapNotNull null
+                val roads = obj.getAsJsonArray("roads")?.mapNotNull { r ->
+                    if (r.isJsonObject) Road.fromJson(r.asJsonObject) else null
+                } ?: emptyList()
+                Triple(name, src, roads)
+            }
+        }.getOrDefault(emptyList())
+    }
+    fun savePluginRoads(roads: List<Triple<String, String, List<Road>>>) {
+        pluginRoadsJson = runCatching {
+            val arr = com.google.gson.JsonArray()
+            roads.forEach { (name, src, roadList) ->
+                val obj = com.google.gson.JsonObject()
+                obj.addProperty("plugin", name)
+                obj.addProperty("src", src)
+                val roadsArr = com.google.gson.JsonArray()
+                roadList.forEach { roadsArr.add(it.toJson()) }
+                obj.add("roads", roadsArr)
+                arr.add(obj)
+            }
+            arr.toString()
+        }.getOrDefault("")
+    }
+    var selectedPlugin by rememberSaveable { mutableIntStateOf(-1) }
+    var selectedRoad by rememberSaveable { mutableIntStateOf(0) }
 
     // Tab 状态
-    var tabIndex by remember { mutableIntStateOf(0) }
+    var tabIndex by rememberSaveable { mutableIntStateOf(0) }
     // 评论
     var comments by remember { mutableStateOf<List<CommentItem>>(emptyList()) }
     var commentsLoading by remember { mutableStateOf(false) }
@@ -155,10 +194,14 @@ fun DetailPage(
     // （LaunchedEffect 默认在 Main dispatcher，插件线路查询涉及同步 SQLite/OkHttp，
     //   若在主线程执行会导致整个页面冻结——时间表页无此逻辑所以不卡）
     LaunchedEffect(bangumiId) {
+        // 从播放器返回恢复的状态已含详情/线路，跳过重复加载
+        if (bangumiJson.isNotEmpty() && roadsLoaded) return@LaunchedEffect
         withContext(Dispatchers.IO) {
             val item = bangumiApi.getBangumiInfoByID(bangumiId)
             withContext(Dispatchers.Main) {
-                bangumi = item
+                if (item != null) {
+                    bangumiJson = runCatching { item.toJson().toString() }.getOrDefault(bangumiJson)
+                }
                 isLoading = false
             }
             if (item != null) {
@@ -188,10 +231,10 @@ fun DetailPage(
                     }
                     val loadedRoads = deferred.awaitAll().filterNotNull()
                     withContext(Dispatchers.Main) {
-                        pluginRoads = loadedRoads
+                        savePluginRoads(loadedRoads)
                         roadsLoading = false
                         roadsLoaded = true
-                        if (pluginRoads.isNotEmpty()) selectedPlugin = 0
+                        if (pluginRoads.isNotEmpty() && selectedPlugin < 0) selectedPlugin = 0
                     }
                 }
             }
