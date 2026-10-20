@@ -5,15 +5,11 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -74,67 +70,15 @@ object KazumiThemeColors {
     }
 }
 
-/** 通道缩放，用于从种子色派生 secondary/tertiary */
-private fun adjust(value: Color, factor: Float): Color {
-    fun c(v: Float) = (v * factor).coerceIn(0f, 1f)
-    return Color(c(value.red), c(value.green), c(value.blue), value.alpha)
-}
+/** 浅色配色：官方 M3 调色算法 ColorScheme.fromSeed（与 Flutter fromSeed 同源于 material-color-utilities，色值逐字节一致） */
+@Composable
+fun kazumiLightColorScheme(seed: Color): ColorScheme =
+    ColorScheme.fromSeed(seedColor = seed, darkColorScheme = false)
 
-/** 浅色配色：以种子色为主色（近似 Flutter ColorScheme.fromSeed 的观感） */
-fun kazumiLightColorScheme(seed: Color): ColorScheme {
-    val onSeed = if (seed.luminance() > 0.5f) Color.Black else Color.White
-    return lightColorScheme(
-        primary = seed,
-        onPrimary = onSeed,
-        primaryContainer = seed.copy(alpha = 0.16f).compositeOver(Color.White),
-        onPrimaryContainer = seed,
-        secondary = adjust(seed, 0.8f),
-        onSecondary = onSeed,
-        secondaryContainer = seed.copy(alpha = 0.12f).compositeOver(Color.White),
-        onSecondaryContainer = seed,
-        tertiary = adjust(seed, 0.6f),
-        onTertiary = onSeed,
-        tertiaryContainer = seed.copy(alpha = 0.10f).compositeOver(Color.White),
-        onTertiaryContainer = seed,
-        background = Color.White,
-        onBackground = Color(0xFF1A1A1A),
-        surface = Color.White,
-        onSurface = Color(0xFF1A1A1A),
-        surfaceVariant = Color(0xFFEDEDED),
-        onSurfaceVariant = Color(0xFF444444),
-        outline = Color(0xFF9E9E9E),
-    )
-}
-
-/** 深色配色：以调亮后的种子色为主色 */
-fun kazumiDarkColorScheme(seed: Color): ColorScheme {
-    // 原版 colorSchemeSeed 深色下不会过度提亮主色；这里只做温和提亮，避免荧光感
-    val lightSeed = adjust(seed, 1.15f)
-    val onSeed = if (lightSeed.luminance() > 0.5f) Color.Black else Color.White
-    // 原版深色背景是带绿调的深色（Material3 fromSeed 对 green 生成的 surface），不是纯黑
-    val bg = Color(0xFF161D16)
-    return darkColorScheme(
-        primary = lightSeed,
-        onPrimary = onSeed,
-        primaryContainer = seed.copy(alpha = 0.25f).compositeOver(bg),
-        onPrimaryContainer = lightSeed,
-        secondary = adjust(lightSeed, 0.85f),
-        onSecondary = onSeed,
-        secondaryContainer = seed.copy(alpha = 0.18f).compositeOver(bg),
-        onSecondaryContainer = lightSeed,
-        tertiary = adjust(lightSeed, 0.7f),
-        onTertiary = onSeed,
-        tertiaryContainer = seed.copy(alpha = 0.14f).compositeOver(bg),
-        onTertiaryContainer = lightSeed,
-        background = bg,
-        onBackground = Color(0xFFE0E0E0),
-        surface = bg,
-        onSurface = Color(0xFFE0E0E0),
-        surfaceVariant = Color(0xFF2A2A2A),
-        onSurfaceVariant = Color(0xFFBDBDBD),
-        outline = Color(0xFF757575),
-    )
-}
+/** 深色配色：官方 M3 调色算法生成带 seed 色相的深色色板（原版深色背景的绿调由此而来，不是纯黑也不是提亮荧光绿） */
+@Composable
+fun kazumiDarkColorScheme(seed: Color): ColorScheme =
+    ColorScheme.fromSeed(seedColor = seed, darkColorScheme = true)
 
 /** OLED 深色纯黑覆盖（对应原版 oledDarkTheme） */
 private fun ColorScheme.oledDark(): ColorScheme = copy(

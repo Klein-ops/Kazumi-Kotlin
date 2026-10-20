@@ -5,8 +5,8 @@ package com.kazumi.port.data.model
  * 对应 Dart ApiEndpoints
  */
 object ApiEndpoints {
-    const val VERSION = "2.3.8"
-    const val API_LEVEL = 8
+    const val VERSION = "2.3.9"
+    const val API_LEVEL = 9
 
     /** 规则仓库 */
     const val PLUGIN_SHOP = "https://raw.githubusercontent.com/Predidit/KazumiRules/main/"
