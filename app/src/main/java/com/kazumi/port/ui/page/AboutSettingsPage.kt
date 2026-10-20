@@ -17,11 +17,11 @@ import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import com.kazumi.port.BuildConfig
 import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
@@ -44,6 +44,15 @@ fun AboutSettingsPage(navController: NavHostController) {
         }
     }
 
+    // 运行时读取 APK 实际版本号（不依赖 BuildConfig，避免 CodeAssist 环境不生成该类）
+    val versionName = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
     SettingsSubPageScaffold(
         title = "关于",
         onBack = { navController.popBackStack() }
@@ -60,7 +69,7 @@ fun AboutSettingsPage(navController: NavHostController) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "版本 ${BuildConfig.VERSION_NAME} (Kotlin 重写版)",
+                    text = "版本 $versionName (Kotlin 重写版)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
