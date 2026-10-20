@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,10 +65,19 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun SearchPage(navController: NavHostController) {
-    var keyword by remember { mutableStateOf("") }
-    var bangumiResults by remember { mutableStateOf<List<BangumiItem>>(emptyList()) }
+    var keyword by rememberSaveable { mutableStateOf("") }
+    // 搜索结果必须在导航到详情页后保留（rememberSaveable），否则从详情页返回时
+    // SearchPage 重组后状态全丢 → 回到初始搜索框而非搜索结果（原版 Flutter 页面栈状态是保留的）
+    var searchResultJson by rememberSaveable { mutableStateOf("") }
+    val bangumiResults = remember(searchResultJson) {
+        if (searchResultJson.isEmpty()) emptyList()
+        else runCatching {
+            val arr = JsonParser.parseString(searchResultJson).asJsonArray
+            arr.mapNotNull { if (it.isJsonObject) BangumiItem.fromJson(it.asJsonObject) else null }
+        }.getOrDefault(emptyList())
+    }
     var isLoading by remember { mutableStateOf(false) }
-    var searched by remember { mutableStateOf(false) }
+    var searched by rememberSaveable { mutableStateOf(false) }
     var searchTrigger by remember { mutableStateOf(0) }
     var histories by remember { mutableStateOf<List<SearchHistory>>(emptyList()) }
     var managingHistory by remember { mutableStateOf(false) }
@@ -163,7 +173,13 @@ fun SearchPage(navController: NavHostController) {
             scoreRange = filters.scoreRange,
             weekdays = filters.weekdays
         )
-        bangumiResults = page?.items ?: emptyList()
+        val items = page?.items ?: emptyList()
+        // 存 JSON 数组串（rememberSaveable 只能存可打包类型），返回时反序列化恢复
+        searchResultJson = runCatching {
+            val arr = com.google.gson.JsonArray()
+            items.forEach { arr.add(it.toJson()) }
+            arr.toString()
+        }.getOrDefault("")
         isLoading = false
     }
 

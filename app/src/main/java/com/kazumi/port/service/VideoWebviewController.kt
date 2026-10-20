@@ -750,9 +750,11 @@ class VideoWebviewController(
      */
     private suspend fun readProxyConfig(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
         try {
-            val settings = com.kazumi.port.data.repository.SettingsManager(
-                context.applicationContext
-            )
+            // 复用 KazumiApp 的全局 settings 单例，不能在这里 new SettingsManager：
+            // 那会创建第二个 DataStore 实例，两个实例并发读写同一个 preferences 文件
+            // 会抛 "There are multiple DataStores active for the same file"
+            val app = com.kazumi.port.KazumiApp.get()
+            val settings = app.settings
             val enabled = settings.getBoolean(
                 com.kazumi.port.data.repository.SettingsManager.Proxy.ENABLE_SYSTEM_PROXY,
                 false
