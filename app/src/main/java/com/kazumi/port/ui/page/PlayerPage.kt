@@ -155,18 +155,25 @@ fun PlayerPage(
     var danmakuBatch by remember { mutableIntStateOf(0) }
 
     // 番剧名：在线播放时路由只带 bangumiId，这里按 id 补名字，供弹幕自动匹配使用
+    // 取名失败会静默导致 B 站弹幕匹配拿空关键词 → 永远匹配不到；这里带日志 + 最多 3 次重试
     var bangumiTitle by remember(bangumiId) { mutableStateOf("") }
     LaunchedEffect(bangumiId) {
         if (isLocal || bangumiId <= 0 || bangumiTitle.isNotEmpty()) return@LaunchedEffect
-        try {
-            val name = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                BangumiApi(BangumiClient(app.settings))
-                    .getBangumiInfoByID(bangumiId)?.displayName().orEmpty()
+        FileLogger.i("Danmaku", "补名开始: bgm=$bangumiId")
+        var name = ""
+        for (attempt in 1..3) {
+            val item = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    BangumiApi(BangumiClient(app.settings)).getBangumiInfoByID(bangumiId)
+                }.getOrNull()
             }
-            if (name.isNotBlank()) bangumiTitle = name
-        } catch (_: Exception) {
-            // 取不到名字不影响播放，弹幕会退回按 bgm id 映射
+            name = item?.displayName().orEmpty()
+            if (name.isNotBlank()) break
+            FileLogger.w("Danmaku", "补名尝试 $attempt/3 未取到名字: bgm=$bangumiId item=${item != null}")
+            if (attempt < 3) delay(2_000)
         }
+        FileLogger.i("Danmaku", "补名完成: bgm=$bangumiId name=\"$name\"")
+        if (name.isNotBlank()) bangumiTitle = name
     }
 
     // 手势/HUD 状态
