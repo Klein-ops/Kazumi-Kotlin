@@ -87,6 +87,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -213,19 +215,25 @@ fun DetailPage(
                 }
                 val name = item.displayName()
                 coroutineScope {
+                    // 信号量限并发：全部插件同时打搜索+线路=2N 个请求并发爆发，
+                    // 打爆 OkHttp 连接池+带宽，进入详情页瞬间全局卡顿。
+                    // 限 3 路并发：消除风暴，且 awaitAll 不会被最慢源拖住 UI。
+                    val roadSemaphore = Semaphore(3)
                     val deferred = app.pluginRepository.allPlugins().map { plugin ->
                         async {
-                            try {
-                                withTimeout(8_000) {
-                                    val search = app.pluginRepository.searchBangumi(plugin.name, name)
-                                    val hit = search.data.firstOrNull() ?: return@withTimeout null
-                                    if (hit.src.isEmpty()) return@withTimeout null
-                                    val roads = app.pluginRepository.queryChapterRoads(plugin.name, hit.src)
-                                    if (roads.isEmpty()) null
-                                    else Triple(plugin.name, hit.src, roads)
+                            roadSemaphore.withPermit {
+                                try {
+                                    withTimeout(6_000) {
+                                        val search = app.pluginRepository.searchBangumi(plugin.name, name)
+                                        val hit = search.data.firstOrNull() ?: return@withTimeout null
+                                        if (hit.src.isEmpty()) return@withTimeout null
+                                        val roads = app.pluginRepository.queryChapterRoads(plugin.name, hit.src)
+                                        if (roads.isEmpty()) null
+                                        else Triple(plugin.name, hit.src, roads)
+                                    }
+                                } catch (_: Exception) {
+                                    null
                                 }
-                            } catch (_: Exception) {
-                                null
                             }
                         }
                     }
