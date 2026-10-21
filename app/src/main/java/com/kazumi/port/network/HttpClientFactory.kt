@@ -3,9 +3,16 @@ package com.kazumi.port.network
 import android.content.Context
 import com.kazumi.port.data.model.HttpHeaders
 import okhttp3.OkHttpClient
+import okhttp3.OkHttpClient.Builder
 import java.net.InetSocketAddress
 import java.net.Proxy
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 /**
  * 全局 OkHttp 客户端工厂
@@ -57,7 +64,22 @@ object HttpClientFactory {
         }
     }
 
-    private fun buildClient(proxy: Proxy? = null): OkHttpClient {
+    @Volatile
+    private var lenientClient: OkHttpClient? = null
+
+    /**
+     * 宽松 TLS 客户端：信任所有证书、不校验 hostname。
+     * 仅用于播放器拉取视频流/弹幕 CDN（聚合播放器行业惯例：视频源 CDN
+     * 证书链五花八门，官方 Kazumi 同样不校验证书）。
+     * 绝不用于登录/凭据/收藏等全局请求（那些仍走 getClient 严格校验）。
+     */
+    fun getLenientClient(): OkHttpClient {
+        return lenientClient ?: synchronized(this) {
+            lenientClient ?: buildClient(currentProxy, lenientTls = true).also { lenientClient = it }
+        }
+    }
+
+    private fun buildClient(proxy: Proxy? = null, lenientTls: Boolean = false): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(12, TimeUnit.SECONDS)
@@ -82,6 +104,18 @@ object HttpClientFactory {
             } else {
                 chain.proceed(original)
             }
+        }
+        if (lenientTls) {
+            // 信任所有证书 + 任意 hostname（仅播放器拉流用）
+            val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+            })
+            val sslContext = SSLContext.getInstance("TLS")
+            sslContext.init(null, trustAll, SecureRandom())
+            builder.sslSocketFactory(sslContext.socketFactory, trustAll[0] as X509TrustManager)
+            builder.hostnameVerifier(HostnameVerifier { _, _ -> true })
         }
         return builder.build()
     }

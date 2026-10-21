@@ -329,7 +329,10 @@ class PlayerController(
         // 播放器网络复用全局 OkHttp（media3-datasource-okhttp 标准桥接）：
         // 自动带随机浏览器 UA + 代理设置 + 连接复用，与原版一致性最高
         //（原版 media_kit 也走应用网络栈：随机 UA + http-proxy）。
-        val factory = OkHttpDataSource.Factory(HttpClientFactory.getClient())
+        // 播放器拉流使用宽松 TLS client：视频 CDN 证书链五花八门（如 v5.ppqrrs.com），
+        // 严格校验会报 Trust anchor not found → ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+        // （官方 Kazumi 聚合播放器同样不校验证书）。仅播放器拉流走 lenient，全局请求不受影响。
+        val factory = OkHttpDataSource.Factory(HttpClientFactory.getLenientClient())
         // 注意：setDefaultRequestProperties 是"整体替换"而不是合并，
         // 以前在循环里逐个 set 会让最终只剩最后一个头（UA 或 Referer 被丢掉）。
         val headers = LinkedHashMap<String, String>()
