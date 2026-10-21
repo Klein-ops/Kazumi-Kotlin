@@ -17,7 +17,15 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +63,11 @@ fun TimelinePage(navController: NavHostController) {
     var calendar by remember { mutableStateOf<List<List<BangumiItem>>>(List(7) { emptyList() }) }
     var selectedDay by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
+    var showSeasonSheet by remember { mutableStateOf(false) }
+    var selectedYear by remember { mutableIntStateOf(java.time.LocalDate.now().year) }
+    var selectedQuarter by remember { mutableIntStateOf(((java.time.LocalDate.now().monthValue - 1) / 3) * 3 + 1) }
+    var sortMode by remember { mutableIntStateOf(0) }
+    var showOptionsSheet by remember { mutableStateOf(false) }
 
     val bangumiApi = remember { BangumiApi(BangumiClient(KazumiApp.get().settings)) }
 
@@ -84,6 +97,18 @@ fun TimelinePage(navController: NavHostController) {
     MainScaffold(navController) {
         Column(modifier = Modifier.fillMaxSize()) {
             PageHeader(title = "时间表")
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                TextButton(onClick = { showSeasonSheet = true }) {
+                    Text("${selectedYear}年${quarterLabel(selectedQuarter)}季")
+                }
+                IconButton(onClick = { showOptionsSheet = true }) {
+                    Icon(Icons.Filled.Tune, contentDescription = "排序与筛选")
+                }
+            }
 
             // 星期选择器（对齐原版 _TimelineWeekSelector）
             val counts = calendar.map { it.size }
@@ -105,7 +130,7 @@ fun TimelinePage(navController: NavHostController) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(calendar[selectedDay], key = { it.id }) { item ->
+                    items(sorted(calendar[selectedDay], sortMode), key = { it.id }) { item ->
                         BangumiCard(
                             item = item,
                             onClick = { navController.navigate(Routes.detail(item.id)) }
@@ -171,4 +196,20 @@ private fun TimelineWeekSelector(
             }
         }
     }
+}
+/** 季度中文标签 */
+private fun quarterLabel(q: Int): String = when (q) {
+    1 -> "1"; 4 -> "4"; 7 -> "7"; 10 -> "10"; else -> "1"
+}
+
+/** 排序中文标签（原版 TimelineSort） */
+private fun sortLabel(mode: Int): String = when (mode) {
+    1 -> "评分优先"; 2 -> "默认顺序"; else -> "热度优先"
+}
+
+/** 按排序模式对某天剧集排序 */
+private fun sorted(items: List<BangumiItem>, mode: Int): List<BangumiItem> = when (mode) {
+    1 -> items.sortedByDescending { it.ratingScore }
+    2 -> items
+    else -> items.sortedByDescending { it.votes }
 }
