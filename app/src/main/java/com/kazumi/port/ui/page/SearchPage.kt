@@ -57,6 +57,7 @@ import com.kazumi.port.ui.components.EmptyState
 import com.kazumi.port.ui.components.LoadingState
 import com.kazumi.port.ui.components.SearchFilterSheet
 import com.kazumi.port.ui.navigation.Routes
+import com.google.gson.JsonParser
 import kotlinx.coroutines.launch
 
 /**
@@ -69,7 +70,7 @@ fun SearchPage(navController: NavHostController) {
     // 搜索结果必须在导航到详情页后保留（rememberSaveable），否则从详情页返回时
     // SearchPage 重组后状态全丢 → 回到初始搜索框而非搜索结果（原版 Flutter 页面栈状态是保留的）
     var searchResultJson by rememberSaveable { mutableStateOf("") }
-    val bangumiResults = remember(searchResultJson) {
+    val bangumiResults: List<BangumiItem> = remember(searchResultJson) {
         if (searchResultJson.isEmpty()) emptyList()
         else runCatching {
             val arr = JsonParser.parseString(searchResultJson).asJsonArray
@@ -189,7 +190,7 @@ fun SearchPage(navController: NavHostController) {
             managingHistory = false
         } else if (searched) {
             searched = false
-            bangumiResults = emptyList()
+            searchResultJson = ""
         }
     }
 

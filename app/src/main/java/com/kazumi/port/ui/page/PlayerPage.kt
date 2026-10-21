@@ -203,6 +203,10 @@ fun PlayerPage(
 
     // 手势 seek 会话
     var seekStartPos by remember { mutableLongStateOf(0L) }
+    // 手势拖动累计增量：detectHorizontalDragGestures 每次回调的是"单次事件的瞬时增量"，
+    // 不是从起点开始的累计值。若不自己累加，seekHudPosition 每次只在起点附近摆动，
+    // 表现为 HUD 永远显示 ±0 秒、拖动松手后几乎不跳转。
+    var seekDragAccum by remember { mutableLongStateOf(0L) }
     var seekWasPlaying by remember { mutableStateOf(false) }
     var interactiveSeeking by remember { mutableStateOf(false) }
 
@@ -586,6 +590,7 @@ fun PlayerPage(
                     if (!locked) {
                         interactiveSeeking = true
                         seekStartPos = playerController.currentPosition()
+                        seekDragAccum = 0L
                         seekWasPlaying = playerController.isPlaying()
                         playerController.pause(enableSync = false)
                         showSeekHud = true
@@ -598,12 +603,13 @@ fun PlayerPage(
                     if (!locked) {
                         val duration = playerController.duration()
                         val seekPerFullDrag = 120_000L // 全宽 120 秒
-                        val deltaMs = (deltaPx / viewportWidth * seekPerFullDrag).toLong()
-                        var target = seekStartPos + deltaMs
+                        // 累加而不是每次重新算：onHorizontalDrag 回调的是单次事件瞬时增量
+                        seekDragAccum += (deltaPx / viewportWidth * seekPerFullDrag).toLong()
+                        var target = seekStartPos + seekDragAccum
                         if (target < 0) target = 0
                         if (duration > 0 && target > duration) target = duration
                         seekHudPosition = target
-                        seekHudDirection = if (deltaMs >= 0) 1 else -1
+                        seekHudDirection = if (seekDragAccum >= 0) 1 else -1
                     }
                 },
                 onHorizontalDragEnd = { cancelled ->
