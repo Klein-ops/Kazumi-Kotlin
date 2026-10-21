@@ -301,18 +301,37 @@ class BangumiApi(
      * 对应 getBangumiInfoByID()
      */
     suspend fun getBangumiInfoByID(id: Int): BangumiItem? {
-        return try {
+        // 先用 next 接口（/p1/subjects/{id}，兼容新旧镜像）
+        val fromNext = try {
             val jsonData = client.get(
                 ApiEndpoints.formatUrl(
                     ApiEndpoints.BANGUMI_API_NEXT_DOMAIN + ApiEndpoints.BANGUMI_INFO_BY_ID_NEXT,
                     listOf(id)
                 )
             )
-            if (jsonData.isJsonObject) {
-                BangumiItem.fromJson(jsonData.asJsonObject)
-            } else null
+            if (jsonData.isJsonObject) BangumiItem.fromJson(jsonData.asJsonObject) else null
         } catch (e: Exception) {
             null
+        }
+        // 若评分/放送时间为空（部分镜像 next 接口缺 rating/date），
+        // 回退 v0 接口（/v0/subjects/{id} 必定含完整 rating + date）
+        if (fromNext != null && (fromNext.ratingScore > 0 || fromNext.airDate.isNotEmpty())) {
+            return fromNext
+        }
+        return try {
+            val jsonData = client.get(
+                ApiEndpoints.formatUrl(
+                    ApiEndpoints.BANGUMI_API_DOMAIN + ApiEndpoints.BANGUMI_INFO_BY_ID,
+                    listOf(id)
+                )
+            )
+            if (jsonData.isJsonObject) {
+                val item = BangumiItem.fromJson(jsonData.asJsonObject)
+                // v0 有完整字段则用之；否则退回 next 结果（至少标题/封面在）
+                if (item.ratingScore > 0 || item.airDate.isNotEmpty()) item else fromNext
+            } else fromNext
+        } catch (e: Exception) {
+            fromNext
         }
     }
 

@@ -89,10 +89,17 @@ object DownloadHttpClient {
         maxBytes: Long = 2 * 1024 * 1024,
         onReceiveProgress: ((Long, Long) -> Unit)? = null
     ): String = withContext(Dispatchers.IO) {
+        // 复用全局 baseClient（连接池挂在 Client 实例上，每调用 newBuilder()
+        // 会新建实例导致连接池失效，每个分片都重新 TCP+TLS 握手 → 下载极慢）
+        val client = if (receiveTimeoutMillis == 30_000L) {
+            baseClient
+        } else {
+            baseClient.newBuilder().readTimeout(receiveTimeoutMillis, TimeUnit.MILLISECONDS).build()
+        }
         val response = execute(
             url = url,
             headers = headers,
-            client = baseClient.newBuilder().readTimeout(receiveTimeoutMillis, TimeUnit.MILLISECONDS).build(),
+            client = client,
             cancelToken = cancelToken
         )
 
@@ -138,10 +145,16 @@ object DownloadHttpClient {
         cancelToken: CancelToken? = null,
         receiveTimeoutMillis: Long = 30 * 60 * 1000L
     ): Response = withContext(Dispatchers.IO) {
+        // 复用全局 streamClient（默认 30min 超时）
+        val client = if (receiveTimeoutMillis == 30L * 60 * 1000L) {
+            streamClient
+        } else {
+            streamClient.newBuilder().readTimeout(receiveTimeoutMillis, TimeUnit.MILLISECONDS).build()
+        }
         execute(
             url = url,
             headers = headers,
-            client = streamClient.newBuilder().readTimeout(receiveTimeoutMillis, TimeUnit.MILLISECONDS).build(),
+            client = client,
             cancelToken = cancelToken
         )
     }
@@ -157,10 +170,16 @@ object DownloadHttpClient {
         cancelToken: CancelToken? = null,
         receiveTimeoutMillis: Long = 30_000
     ): Long = withContext(Dispatchers.IO) {
+        // 复用全局 baseClient（连接池复用，分片下载不再重复握手）
+        val client = if (receiveTimeoutMillis == 30_000L) {
+            baseClient
+        } else {
+            baseClient.newBuilder().readTimeout(receiveTimeoutMillis, TimeUnit.MILLISECONDS).build()
+        }
         val response = execute(
             url = url,
             headers = headers,
-            client = baseClient.newBuilder().readTimeout(receiveTimeoutMillis, TimeUnit.MILLISECONDS).build(),
+            client = client,
             cancelToken = cancelToken
         )
 
