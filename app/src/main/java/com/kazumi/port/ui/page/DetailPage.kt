@@ -1,5 +1,11 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -618,47 +624,127 @@ fun DetailPage(
  */
 @Composable
 private fun DetailHeader(item: BangumiItem) {
-    Row(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-        AsyncImage(
-            model = item.coverUrl(),
-            contentDescription = item.displayName(),
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .width(100.dp)
-                .height(140.dp)
-                .clip(MaterialTheme.shapes.medium)
+    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        // 大标题（对齐原版 info 页 headline 标题）
+        Text(
+            text = item.displayName(),
+            style = MaterialTheme.typography.headlineSmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
-        Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
-            Text(
-                text = item.displayName(),
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+        Spacer(Modifier.height(12.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            AsyncImage(
+                model = item.coverUrl(),
+                contentDescription = item.displayName(),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .width(100.dp)
+                    .height(140.dp)
+                    .clip(MaterialTheme.shapes.medium)
             )
-            if (item.ratingScore > 0) {
+            Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+                // 放送开始（对齐原版强调色）
                 Text(
-                    text = "评分 ${String.format("%.1f", item.ratingScore)} · ${item.votes} 人评分",
+                    text = "放送开始:",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = item.airDate.ifEmpty { "未知" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                // 评分 + 星级
+                Text(
+                    text = if (item.votes > 0) "${item.votes} 人评分:" else "评分:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = String.format("%.1f", item.ratingScore),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    // 五星（评分/2 = 5 星制，对齐原版 RatingBarIndicator）
+                    repeat(5) { i ->
+                        Icon(
+                            imageVector = if (item.ratingScore / 2 > i) Icons.Filled.Star
+                            else Icons.Filled.StarBorder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                // Rank
+                Text(
+                    text = "Bangumi Ranked:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = if (item.rank > 0) "#${item.rank}" else "#--",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
-            if (item.airDate.isNotEmpty()) {
-                Text(
-                    text = "首播 ${item.airDate}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+        }
+        if (item.summary.isNotEmpty()) {
+            Text(
+                text = item.summary,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+        }
+        // 评分透视柱状图（对齐原版 fl_chart 10 档柱状，纯 Canvas 手绘零依赖）
+        if (item.votesCount.isNotEmpty() && item.votes > 0) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "评分透视:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(6.dp))
+            val maxVote = item.votesCount.maxOrNull()?.coerceAtLeast(1) ?: 1
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(90.dp)
+            ) {
+                val barWidth = size.width / item.votesCount.size
+                item.votesCount.forEachIndexed { index, count ->
+                    val h = (count.toFloat() / maxVote) * size.height
+                    val left = index * barWidth + barWidth * 0.2f
+                    val right = (index + 1) * barWidth - barWidth * 0.2f
+                    drawRect(
+                        color = if (index == item.votesCount.indices.last) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                        },
+                        topLeft = Offset(left, size.height - h),
+                        size = Size(right - left, h),
+                        style = Stroke(width = 4.dp.toPx())
+                    )
+                }
             }
-            if (item.summary.isNotEmpty()) {
-                Text(
-                    text = item.summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("1", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("5", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("10", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
