@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Subtitles
@@ -65,6 +66,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.media3.ui.PlayerView
 import com.kazumi.port.KazumiApp
 import com.kazumi.port.data.model.DanmakuEntry
@@ -104,7 +106,8 @@ fun PlayerPage(
     src: String,
     episode: Int,
     road: Int,
-    isLocal: Boolean
+    isLocal: Boolean,
+    roadsJson: String = ""
 ) {
     val context = LocalContext.current
     val app = remember { KazumiApp.get() }
@@ -120,6 +123,18 @@ fun PlayerPage(
     val panelState by playerController.panelState.collectAsState()
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+
+    // 选集切换：路由携带的线路 JSON（DetailPage 传来），解析出 Road 列表
+    val roads = remember(roadsJson) {
+        if (roadsJson.isEmpty()) emptyList()
+        else runCatching {
+            val arr = com.google.gson.JsonParser.parseString(roadsJson).asJsonArray
+            arr.mapNotNull { el ->
+                if (el.isJsonObject) com.kazumi.port.data.model.Road.fromJson(el.asJsonObject) else null
+            }
+        }.getOrDefault(emptyList())
+    }
+    var showEpisodeSheet by remember { mutableStateOf(false) }
 
     var resolvedLocalPath by remember { mutableStateOf<String?>(null) }
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
@@ -673,6 +688,16 @@ fun PlayerPage(
                         maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
+                    // 选集切换（原版 video_page 选集面板入口）
+                    if (roads.isNotEmpty()) {
+                        IconButton(onClick = { showEpisodeSheet = true }) {
+                            Icon(
+                                Icons.Filled.PlaylistPlay,
+                                contentDescription = "选集",
+                                tint = Color.White
+                            )
+                        }
+                    }
                     // 弹幕开关（弹幕是自动装载的，这里只做开关；
                     // 没有弹幕时自动重新匹配一次，而不是把"选番剧/选分集"丢给用户）
                     IconButton(onClick = {
@@ -953,6 +978,39 @@ fun PlayerPage(
                 settings = app.settings,
                 onDismiss = { showSyncPlay = false },
                 toast = toast
+            )
+        }
+        // 选集切换 sheet（线路数据来自详情页）
+        if (showEpisodeSheet && roads.isNotEmpty()) {
+            EpisodeSelectionSheet(
+                title = bangumiTitle.ifEmpty { uiState.bangumiName },
+                roads = roads,
+                selectedRoad = road,
+                selectedEpisode = episode,
+                onSelect = { episodeIndex, roadIndex ->
+                    showEpisodeSheet = false
+                    val newUrl = roads.getOrNull(roadIndex)?.data?.getOrNull(episodeIndex)
+                    if (newUrl != null && (episodeIndex + 1 != episode || roadIndex != road)) {
+                        navController.navigate(
+                            com.kazumi.port.ui.navigation.Routes.player(
+                                bangumiId = bangumiId,
+                                pluginName = pluginName,
+                                src = newUrl,
+                                episode = episodeIndex + 1,
+                                road = roadIndex,
+                                isLocal = isLocal,
+                                roadsJson = roadsJson
+                            )
+                        ) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                },
+                onDismiss = { showEpisodeSheet = false }
             )
         }
     }

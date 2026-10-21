@@ -48,7 +48,7 @@ object Routes {
     const val ONBOARDING = "onboarding"
     const val IMAGE_SEARCH = "search/image"
     const val DETAIL = "detail/{bangumiId}?pluginName={pluginName}&src={src}"
-    const val PLAYER = "player/{bangumiId}?pluginName={pluginName}&src={src}&episode={episode}&road={road}&isLocal={isLocal}"
+    const val PLAYER = "player/{bangumiId}?pluginName={pluginName}&src={src}&episode={episode}&road={road}&isLocal={isLocal}&roadsJson={roadsJson}"
 
     // 设置子页（对应原版 /settings/xxx 路由）
     const val SETTINGS_PLAYER = "settings/player"
@@ -78,9 +78,10 @@ object Routes {
         src: String = "",
         episode: Int = 1,
         road: Int = 0,
-        isLocal: Boolean = false
+        isLocal: Boolean = false,
+        roadsJson: String = ""
     ): String =
-        "player/$bangumiId?pluginName=$pluginName&src=$src&episode=$episode&road=$road&isLocal=$isLocal"
+        "player/$bangumiId?pluginName=$pluginName&src=$src&episode=$episode&road=$road&isLocal=$isLocal&roadsJson=${android.net.Uri.encode(roadsJson)}"
 
     /**
      * 把原版 defaultStartupPage 字符串（如 /tab/popular/）映射为 Kotlin 路由
@@ -148,7 +149,8 @@ fun KazumiNavHost(
                 src = entry.arguments?.getString("src").orEmpty(),
                 episode = entry.arguments?.getString("episode")?.toIntOrNull() ?: 1,
                 road = entry.arguments?.getString("road")?.toIntOrNull() ?: 0,
-                isLocal = entry.arguments?.getString("isLocal")?.toBoolean() ?: false
+                isLocal = entry.arguments?.getString("isLocal")?.toBoolean() ?: false,
+                roadsJson = entry.arguments?.getString("roadsJson").orEmpty()
             )
         }
     }

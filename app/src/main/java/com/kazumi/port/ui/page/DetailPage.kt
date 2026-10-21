@@ -376,6 +376,11 @@ fun DetailPage(
         val plugin = pluginRoads.getOrNull(selectedPlugin) ?: return
         val road = plugin.third.getOrNull(selectedRoad) ?: return
         val url = road.data.getOrNull(episodeIndex) ?: return
+        val roadsJson = runCatching {
+            val arr = com.google.gson.JsonArray()
+            plugin.third.forEach { arr.add(it.toJson()) }
+            arr.toString()
+        }.getOrDefault("")
         navController.navigate(
             Routes.player(
                 bangumiId = item.id,
@@ -383,7 +388,8 @@ fun DetailPage(
                 src = url,
                 episode = episodeIndex + 1,
                 road = selectedRoad,
-                isLocal = false
+                isLocal = false,
+                roadsJson = roadsJson
             )
         )
     }
