@@ -78,18 +78,17 @@ fun CollectPage(navController: NavHostController) {
 
     MainScaffold(navController) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-            ) {
-                PageHeader(title = "收藏", modifier = Modifier.weight(1f))
-                IconButton(onClick = { listLayout = !listLayout }) {
-                    Icon(
-                        imageVector = if (listLayout) Icons.Filled.GridView else Icons.Filled.ViewList,
-                        contentDescription = if (listLayout) "卡片布局" else "列表布局"
-                    )
+            PageHeader(
+                title = "收藏",
+                trailing = {
+                    IconButton(onClick = { listLayout = !listLayout }) {
+                        Icon(
+                            imageVector = if (listLayout) Icons.Filled.GridView else Icons.Filled.ViewList,
+                            contentDescription = if (listLayout) "卡片布局" else "列表布局"
+                        )
+                    }
                 }
-            }
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),

@@ -111,7 +111,7 @@ fun EpisodeSelectionSheet(
             ) {
                 items(count) { idx ->
                     val ep = idx + 1
-                    val name = road.identifier.getOrNull(idx)?.trim()?.takeIf { it.isNotEmpty() }
+                    val name = road?.identifier?.getOrNull(idx)?.trim()?.takeIf { it.isNotEmpty() }
                         ?: "第${ep}集"
                     val selected = visibleRoad == selectedRoad && ep == selectedEpisode
                     Column(

@@ -674,10 +674,10 @@ private fun DetailHeader(item: BangumiItem) {
                     // 五星（评分/2 = 5 星制，对齐原版 RatingBarIndicator）
                     repeat(5) { i ->
                         Icon(
-                            imageVector = if (item.ratingScore / 2 > i) Icons.Filled.Star
-                            else Icons.Filled.StarBorder,
+                            imageVector = Icons.Filled.Star,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = if (item.ratingScore / 2 > i) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -716,6 +716,9 @@ private fun DetailHeader(item: BangumiItem) {
             )
             Spacer(Modifier.height(6.dp))
             val maxVote = item.votesCount.maxOrNull()?.coerceAtLeast(1) ?: 1
+            // Canvas drawScope 内不能调 MaterialTheme（@Composable），提前缓存
+            val barColor = MaterialTheme.colorScheme.primary
+            val barColorFaint = barColor.copy(alpha = 0.35f)
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -727,11 +730,7 @@ private fun DetailHeader(item: BangumiItem) {
                     val left = index * barWidth + barWidth * 0.2f
                     val right = (index + 1) * barWidth - barWidth * 0.2f
                     drawRect(
-                        color = if (index == item.votesCount.indices.last) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                        },
+                        color = if (index == item.votesCount.indices.last) barColor else barColorFaint,
                         topLeft = Offset(left, size.height - h),
                         size = Size(right - left, h),
                         style = Stroke(width = 4.dp.toPx())
