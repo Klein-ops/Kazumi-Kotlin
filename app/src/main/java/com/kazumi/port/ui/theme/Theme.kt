@@ -72,51 +72,96 @@ object KazumiThemeColors {
     }
 }
 
-/** 浅色配色：M3 风格绿色方案（fromSeed 算法在 CodeAssist 的旧 material3 上无法编译，改用等价的显式色板） */
-fun kazumiLightColorScheme(seed: Color): ColorScheme = lightColorScheme(
-    primary = Color(0xFF2E7D32),            // M3 浅色主绿
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFA5D6A7),
-    onPrimaryContainer = Color(0xFF002200),
-    secondary = Color(0xFF4E8A55),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFCDEED0),
-    onSecondaryContainer = Color(0xFF0A2F10),
-    tertiary = Color(0xFF3F7A6A),
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFC2F2E3),
-    onTertiaryContainer = Color(0xFF00241B),
-    background = Color(0xFFF4FBF4),         // 带绿调的浅背景
-    onBackground = Color(0xFF191C19),
-    surface = Color(0xFFF4FBF4),
-    onSurface = Color(0xFF191C19),
-    surfaceVariant = Color(0xFFDCE8DD),
-    onSurfaceVariant = Color(0xFF434A44),
-    outline = Color(0xFF738074),
-)
+/** 浅色配色：基于 seed 主色动态生成（HSV 近似 M3 色调映射，绕开 CodeAssist 对 fromSeed 的解析缺陷） */
+fun kazumiLightColorScheme(seed: Color): ColorScheme {
+    fun mix(a: Color, b: Color, frac: Float) = Color(
+        red = (a.red * (1 - frac) + b.red * frac).coerceIn(0f, 1f),
+        green = (a.green * (1 - frac) + b.green * frac).coerceIn(0f, 1f),
+        blue = (a.blue * (1 - frac) + b.blue * frac).coerceIn(0f, 1f),
+        alpha = 1f
+    )
+    fun mixB(c: Color, frac: Float) = mix(c, Color.Black, frac)
+    fun mixW(c: Color, frac: Float) = mix(c, Color.White, frac)
+    fun secondaryOf(c: Color) = mix(c, Color(0xFF808080), 0.28f) // 去饱和
+    fun tertiaryOf(c: Color) = mix(c, Color(0xFF008080), 0.18f)  // 微转青色调
 
-/** 深色配色：M3 风格深色绿方案——主色柔和（非荧光），背景深墨绿（不是纯黑），对齐原版观感 */
-fun kazumiDarkColorScheme(seed: Color): ColorScheme = darkColorScheme(
-    primary = Color(0xFF8BC98E),            // M3 深色主绿（tone80 柔和绿，非提亮荧光绿）
-    onPrimary = Color(0xFF002E16),          // 深绿
-    primaryContainer = Color(0xFF1C5C29),
-    onPrimaryContainer = Color(0xFFB8F5BE),
-    secondary = Color(0xFF9CD3A1),
-    onSecondary = Color(0xFF0A3B15),
-    secondaryContainer = Color(0xFF2A5C33),
-    onSecondaryContainer = Color(0xFFC9F0CC),
-    tertiary = Color(0xFF81C9B0),
-    onTertiary = Color(0xFF00382B),
-    tertiaryContainer = Color(0xFF1E5C4A),
-    onTertiaryContainer = Color(0xFFB2F0DC),
-    background = Color(0xFF17271B),         // 深墨绿背景（肉眼可见的绿调，非纯黑）
-    onBackground = Color(0xFFDDE9DF),
-    surface = Color(0xFF17271B),
-    onSurface = Color(0xFFDDE9DF),
-    surfaceVariant = Color(0xFF2A3A2E),
-    onSurfaceVariant = Color(0xFFA8B8AB),
-    outline = Color(0xFF718477),
-)
+    val primary = seed
+    val secondary = secondaryOf(seed)
+    val tertiary = tertiaryOf(seed)
+    return lightColorScheme(
+        primary = primary,
+        onPrimary = contrastColor(primary),
+        primaryContainer = mixW(primary, 0.82f),
+        onPrimaryContainer = contrastColor(mixW(primary, 0.82f)),
+        secondary = secondary,
+        onSecondary = contrastColor(secondary),
+        secondaryContainer = mixW(secondary, 0.80f),
+        onSecondaryContainer = contrastColor(mixW(secondary, 0.80f)),
+        tertiary = tertiary,
+        onTertiary = contrastColor(tertiary),
+        tertiaryContainer = mixW(tertiary, 0.80f),
+        onTertiaryContainer = contrastColor(mixW(tertiary, 0.80f)),
+        background = mixW(seed, 0.92f),
+        onBackground = Color(0xFF191C19),
+        surface = mixW(seed, 0.92f),
+        onSurface = Color(0xFF191C19),
+        surfaceVariant = mixW(seed, 0.86f),
+        onSurfaceVariant = Color(0xFF434A44),
+        outline = mixB(mixW(seed, 0.6f), 0.35f),
+    )
+}
+
+/** 深色配色：基于 seed 主色动态生成（深墨色调，非纯黑；OLED 纯黑由 oledDark 覆盖） */
+fun kazumiDarkColorScheme(seed: Color): ColorScheme {
+    fun mix(a: Color, b: Color, frac: Float) = Color(
+        red = (a.red * (1 - frac) + b.red * frac).coerceIn(0f, 1f),
+        green = (a.green * (1 - frac) + b.green * frac).coerceIn(0f, 1f),
+        blue = (a.blue * (1 - frac) + b.blue * frac).coerceIn(0f, 1f),
+        alpha = 1f
+    )
+    fun mixB(c: Color, frac: Float) = mix(c, Color.Black, frac)
+    fun mixW(c: Color, frac: Float) = mix(c, Color.White, frac)
+    fun secondaryOf(c: Color) = mix(c, Color(0xFF9E9E9E), 0.25f)
+    fun tertiaryOf(c: Color) = mix(c, Color(0xFF3FBFAF), 0.15f)
+
+    val primary = mixW(seed, 0.22f)        // 深色模式主色提亮
+    val secondary = secondaryOf(seed)
+    val tertiary = tertiaryOf(seed)
+    val bg = mixB(mixW(seed, 0.10f), 0.72f) // 深墨背景带 seed 色调
+    return darkColorScheme(
+        primary = primary,
+        onPrimary = contrastColor(primary),
+        primaryContainer = mixB(seed, 0.55f),
+        onPrimaryContainer = mixW(seed, 0.60f),
+        secondary = secondary,
+        onSecondary = contrastColor(secondary),
+        secondaryContainer = mixB(secondary, 0.55f),
+        onSecondaryContainer = mixW(secondary, 0.55f),
+        tertiary = tertiary,
+        onTertiary = contrastColor(tertiary),
+        tertiaryContainer = mixB(tertiary, 0.55f),
+        onTertiaryContainer = mixW(tertiary, 0.45f),
+        background = bg,
+        onBackground = Color(0xFFDDE9DF),
+        surface = bg,
+        onSurface = Color(0xFFDDE9DF),
+        surfaceVariant = mixB(mixW(seed, 0.08f), 0.35f),
+        onSurfaceVariant = Color(0xFFA8B8AB),
+        outline = Color(0xFF718477),
+    )
+}
+
+/** WCAG 相对亮度（0..1），用于选对比色（黄/青等亮主色配深字，暗主色配白字） */
+private fun luminance(c: Color): Double {
+    fun lin(ch: Float): Double {
+        val v = ch.toDouble()
+        return if (v <= 0.03928) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * lin(c.red) + 0.7152 * lin(c.green) + 0.0722 * lin(c.blue)
+}
+
+/** 黑白对比色选择 */
+private fun contrastColor(c: Color): Color = if (luminance(c) > 0.5) Color(0xFF002200) else Color.White
 
 /** OLED 深色纯黑覆盖（对应原版 oledDarkTheme） */
 private fun ColorScheme.oledDark(): ColorScheme = copy(
