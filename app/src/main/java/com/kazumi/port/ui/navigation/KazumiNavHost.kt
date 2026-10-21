@@ -3,6 +3,9 @@ package com.kazumi.port.ui.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -104,7 +107,12 @@ fun KazumiNavHost(
     NavHost(
         navController = navController,
         startDestination = startDestination,
-        modifier = modifier
+        modifier = modifier,
+        // 页面过渡动画（对齐原版 index_module：打开淡入 220ms，退出淡出 220ms）
+        enterTransition = { fadeIn(animationSpec = tween(220)) },
+        exitTransition = { fadeOut(animationSpec = tween(220)) },
+        popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+        popExitTransition = { fadeOut(animationSpec = tween(220)) }
     ) {
         composable(Routes.ONBOARDING) { OnboardingPage(navController) }
         composable(Routes.IMAGE_SEARCH) { ImageSearchPage(navController) }
