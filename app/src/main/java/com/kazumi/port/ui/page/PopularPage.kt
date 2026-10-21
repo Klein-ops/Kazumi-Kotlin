@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -153,7 +155,9 @@ fun PopularPage(navController: NavHostController) {
             }
     }
 
+    // 回顶 FAB（对齐原版 PopularPage floatingActionButton: scroll to top）
     MainScaffold(navController) {
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             // 顶栏：大标题 + 标签下拉 + 搜索/历史按钮（对齐原版 SliverAppBar actions）
             Row(
@@ -231,6 +235,16 @@ fun PopularPage(navController: NavHostController) {
                             }
                         }
                     }
+                }
+            }
+        }
+            // 回顶 FAB（列表较长时显示）
+            if (bangumiList.size > 6) {
+                FloatingActionButton(
+                    onClick = { scope.launch { gridState.animateScrollToItem(0) } },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+                ) {
+                    Icon(Icons.Filled.ArrowUpward, contentDescription = "回顶")
                 }
             }
         }
