@@ -7,6 +7,19 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.shape.RoundedCornerShape
+import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -53,6 +66,7 @@ fun CollectPage(navController: NavHostController) {
     var selectedType by remember { mutableIntStateOf(0) }
     var allItems by remember { mutableStateOf<List<CollectedBangumi>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var listLayout by remember { mutableStateOf(false) } // false=卡片  true=列表
 
     LaunchedEffect(Unit) {
         isLoading = true
@@ -64,7 +78,18 @@ fun CollectPage(navController: NavHostController) {
 
     MainScaffold(navController) {
         Column(modifier = Modifier.fillMaxSize()) {
-            PageHeader(title = "收藏")
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                PageHeader(title = "收藏", modifier = Modifier.weight(1f))
+                IconButton(onClick = { listLayout = !listLayout }) {
+                    Icon(
+                        imageVector = if (listLayout) Icons.Filled.GridView else Icons.Filled.ViewList,
+                        contentDescription = if (listLayout) "卡片布局" else "列表布局"
+                    )
+                }
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
@@ -89,19 +114,71 @@ fun CollectPage(navController: NavHostController) {
             when {
                 isLoading -> LoadingState(modifier = Modifier.padding(top = 32.dp))
                 filtered.isEmpty() -> EmptyState("还没有收藏")
-                else -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    contentPadding = PaddingValues(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(filtered, key = { it.bangumiItem.id }) { collected ->
-                        BangumiCard(
-                            item = collected.bangumiItem,
-                            onClick = {
-                                navController.navigate(Routes.detail(collected.bangumiItem.id))
+                else -> if (!listLayout) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        contentPadding = PaddingValues(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(filtered, key = { it.bangumiItem.id }) { collected ->
+                            BangumiCard(
+                                item = collected.bangumiItem,
+                                onClick = {
+                                    navController.navigate(Routes.detail(collected.bangumiItem.id))
+                                }
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        itemsIndexed(filtered) { _, collected ->
+                            val item = collected.bangumiItem
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        navController.navigate(Routes.detail(item.id))
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = item.coverUrl(),
+                                    contentDescription = item.displayName(),
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .width(72.dp)
+                                        .height(100.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                                Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
+                                    Text(
+                                        text = item.displayName(),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    if (item.ratingScore > 0) {
+                                        Text(
+                                            text = "评分 ${String.format("%.1f", item.ratingScore)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = item.airDate,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
                             }
-                        )
+                        }
                     }
                 }
             }
