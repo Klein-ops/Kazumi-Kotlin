@@ -222,7 +222,9 @@ fun SearchPage(navController: NavHostController) {
                         }
                     }
                 }
-            )
+            ) {
+                // 折叠态搜索建议内容：active=false 时不渲染；原版无可展开建议，保持空
+            }
 
             // 按条件查找入口（对齐原版 search_page.dart 的"按条件查找"ListTile）
             Row(
