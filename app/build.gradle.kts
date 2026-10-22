@@ -33,8 +33,11 @@ android {
         }
         val dandanAppId = (localProps.getProperty("dandanAppId") ?: "").trim()
         val dandanAppSecret = (localProps.getProperty("dandanAppSecret") ?: "").trim()
-        buildConfigField("String", "DANDAN_APP_ID", "\"$dandanAppId\"")
-        buildConfigField("String", "DANDAN_APP_SECRET", "\"$dandanAppSecret\"")
+        // 注意：此处不能用 "$dandanAppId" 字符串插值——CodeAssist 环境的 Gradle 会把
+        // "$dandanAppId" 当成字面量写进 BuildConfig（曾导致内置凭据变 "$dandanAppId" 报 403），
+        // 改用常量拼接，保证注入真实值。
+        buildConfigField("String", "DANDAN_APP_ID", "\"" + dandanAppId + "\"")
+        buildConfigField("String", "DANDAN_APP_SECRET", "\"" + dandanAppSecret + "\"")
     }
 
     buildTypes {

@@ -323,7 +323,8 @@ fun PlayerPage(
             FileLogger.i("PlayerResolve", "init: src=${params.videoUrl} direct=$direct plugin=${params.pluginName}")
             if (direct) {
                 playerController.init(params)
-                playerController.fetchDanmaku()
+                // 带标题装载：直链场景同样可能在解析完成前还没补名，这里带上当前已补到的名字
+                playerController.fetchDanmaku(bangumiTitle.ifBlank { null })
             } else {
                 isResolving = true
                 resolveError = null
@@ -363,7 +364,9 @@ fun PlayerPage(
                         offset = parsed.offset
                     )
                     playerController.init(resolvedParams)
-                    playerController.fetchDanmaku()
+                    // 带补名结果装载弹幕：params.bangumiName 在视频解析期间往往还是空串，
+                    // 若不带标题，B 站兜底会因 title.isEmpty() 被跳过，弹弹play 失败后直接 EMPTY。
+                    playerController.fetchDanmaku(bangumiTitle.ifBlank { null })
                 } else {
                     // 3 次（首次+2 重试）都失败：不把 HTML 页塞给播放器（那正是 PARSING_CONTAINER_UNSUPPORTED 的根因），
                     // 显示错误 + 手动重试按钮。
