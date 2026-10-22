@@ -79,7 +79,7 @@ fun CollectPage(navController: NavHostController) {
     MainScaffold(navController) {
         Column(modifier = Modifier.fillMaxSize()) {
             PageHeader(
-                title = "收藏",
+                title = "追番",
                 trailing = {
                     IconButton(onClick = { listLayout = !listLayout }) {
                         Icon(
