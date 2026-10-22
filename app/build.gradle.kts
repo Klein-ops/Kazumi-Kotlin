@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -19,6 +21,20 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // 弹弹play 凭据：从 local.properties 读取（git 排除，不进入代码仓库，仅本机构建注入）。
+        // local.properties: dandanAppId=xxx  dandanAppSecret=xxx
+        // 未配置时为空字符串，运行时用户可在「设置→弹幕→弹弹play 凭据」手动填写。
+        val localProps = Properties().apply {
+            val f = rootProject.file("local.properties")
+            if (f.exists()) {
+                f.inputStream().use { load(it) }
+            }
+        }
+        val dandanAppId = (localProps.getProperty("dandanAppId") ?: "").trim()
+        val dandanAppSecret = (localProps.getProperty("dandanAppSecret") ?: "").trim()
+        buildConfigField("String", "DANDAN_APP_ID", "\"$dandanAppId\"")
+        buildConfigField("String", "DANDAN_APP_SECRET", "\"$dandanAppSecret\"")
     }
 
     buildTypes {

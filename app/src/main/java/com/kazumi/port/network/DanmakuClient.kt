@@ -44,8 +44,16 @@ class DanmakuClient(
                     "弹幕请求 URL 非法: $fullUrl"
                 )
 
-            val appId = settings?.getString(SettingsManager.Danmaku.DAN_DAN_APP_ID, "")?.trim().orEmpty()
-            val appSecret = settings?.getString(SettingsManager.Danmaku.DAN_DAN_APP_SECRET, "")?.trim().orEmpty()
+            val builtinAppId = com.kazumi.port.BuildConfig.DANDAN_APP_ID.trim()
+            val builtinAppSecret = com.kazumi.port.BuildConfig.DANDAN_APP_SECRET.trim()
+            // 优先用构建时注入的凭据（local.properties，git 排除不进仓库）；
+            // 未内置时用用户手动填写的设置（可覆盖）。
+            val appId = builtinAppId.ifEmpty {
+                settings?.getString(SettingsManager.Danmaku.DAN_DAN_APP_ID, "")?.trim().orEmpty()
+            }
+            val appSecret = builtinAppSecret.ifEmpty {
+                settings?.getString(SettingsManager.Danmaku.DAN_DAN_APP_SECRET, "")?.trim().orEmpty()
+            }
             val hasCredentials = appId.isNotEmpty() && appSecret.isNotEmpty()
 
             val builder = Request.Builder()
