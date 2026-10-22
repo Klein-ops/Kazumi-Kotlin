@@ -29,7 +29,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SearchBar
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -64,6 +65,7 @@ import kotlinx.coroutines.launch
  * 搜索页（对应原版 search_page.dart）
  * 搜索框 + 历史记录（管理/清空/单条删除）+ 以图搜番 + 条件筛选入口
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SearchPage(navController: NavHostController) {
     var keyword by rememberSaveable { mutableStateOf("") }
@@ -197,37 +199,42 @@ fun SearchPage(navController: NavHostController) {
     MainScaffold(navController) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             // 搜索框 + 以图搜番
-            OutlinedTextField(
-                value = keyword,
-                onValueChange = { keyword = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("搜索番剧名称") },
-                leadingIcon = {
-                    IconButton(onClick = { doSearch() }) {
-                        Icon(Icons.Filled.Search, contentDescription = "搜索")
-                    }
-                },
-                trailingIcon = {
-                    Row {
-                        if (keyword.isNotEmpty()) {
-                            IconButton(onClick = { keyword = "" }) {
-                                Icon(Icons.Filled.Close, contentDescription = "清空")
+            // M3 SearchBar（对齐原版 search_page.dart SearchBar：圆角、surfaceContainerHigh、minHeight 64）
+            SearchBar(
+                inputField = {
+                    SearchBarDefaults.InputField(
+                        value = keyword,
+                        onValueChange = { keyword = it },
+                        placeholder = { Text("搜索番剧名称") },
+                        leadingIcon = {
+                            IconButton(onClick = { doSearch() }) {
+                                Icon(Icons.Filled.Search, contentDescription = "搜索")
                             }
-                        }
-                        IconButton(onClick = { navController.navigate(Routes.IMAGE_SEARCH) }) {
-                            Icon(Icons.Filled.ImageSearch, contentDescription = "以图搜番")
-                        }
-                    }
+                        },
+                        trailingIcon = {
+                            Row {
+                                if (keyword.isNotEmpty()) {
+                                    IconButton(onClick = { keyword = "" }) {
+                                        Icon(Icons.Filled.Close, contentDescription = "清空")
+                                    }
+                                }
+                                IconButton(onClick = { navController.navigate(Routes.IMAGE_SEARCH) }) {
+                                    Icon(Icons.Filled.ImageSearch, contentDescription = "以图搜番")
+                                }
+                            }
+                        },
+                        keyboardActions = KeyboardActions(
+                            onSearch = { doSearch() },
+                            onDone = { doSearch() }
+                        ),
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Search
+                        )
+                    )
                 },
-                singleLine = true,
-                keyboardActions = KeyboardActions(
-                    // ImeAction.Search 只触发 onSearch；旧代码只绑 onDone，导致回车搜不了
-                    onSearch = { doSearch() },
-                    onDone = { doSearch() }
-                ),
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Search
-                )
+                expanded = false,
+                onExpandedChange = {},
+                modifier = Modifier.fillMaxWidth()
             )
 
             // 按条件查找入口（对齐原版 search_page.dart 的"按条件查找"ListTile）
