@@ -25,6 +25,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -157,6 +158,8 @@ fun PopularPage(navController: NavHostController) {
 
     // 回顶 FAB（对齐原版 PopularPage floatingActionButton: scroll to top）
     MainScaffold(navController) {
+        androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val maxWidth = maxWidth
         Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             // 顶栏：大标题 + 标签下拉 + 搜索/历史按钮（对齐原版 SliverAppBar actions）
@@ -203,13 +206,26 @@ fun PopularPage(navController: NavHostController) {
                 }
             }
 
+            // 加载更多顶部线性条（对齐原版 popular Scaffold LinearProgressIndicator）
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isLoadingMore,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(4.dp))
+            }
             when {
                 isLoading -> LoadingState()
                 bangumiList.isEmpty() -> EmptyState(if (isTimeout) "加载超时，请检查网络或切换镜像" else "还没有数据")
                 else -> {
+                    // 响应式列数（对齐原版 contentGrid：<紧凑 3 列，>compact 5 列，>medium 6 列）
+                    val crossCount = when {
+                        maxWidth >= 900.dp -> 6
+                        maxWidth >= 600.dp -> 5
+                        else -> 3
+                    }
                     LazyVerticalGrid(
                         state = gridState,
-                        columns = GridCells.Fixed(3),
+                        columns = GridCells.Fixed(crossCount),
                         contentPadding = PaddingValues(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -247,6 +263,7 @@ fun PopularPage(navController: NavHostController) {
                     Icon(Icons.Filled.ArrowUpward, contentDescription = "回顶")
                 }
             }
+        }
         }
     }
 }
