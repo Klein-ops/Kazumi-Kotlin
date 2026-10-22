@@ -570,17 +570,27 @@ fun DetailPage(
                                 roads.forEach { arr.add(it.toJson()) }
                                 arr.toString()
                             }.getOrDefault("")
-                            navController.navigate(
-                                Routes.player(
-                                    bangumiId = bangumi!!.id,
-                                    pluginName = pluginName,
-                                    src = src,
-                                    episode = 1,
-                                    road = 0,
-                                    isLocal = false,
-                                    roadsJson = roadsJson
+                            // 关键修复：播放器要解析的是"播放页 URL"，不是搜索结果的详情页 URL。
+                            // 原版 source_sheet.dart 的 _openSearchItem 用 searchItem.src 查线路后，
+                            // 播放的是 roads 里第一集（road.data[0]），而非详情页本身。
+                            // 之前把详情页 src 传给播放器 → WebView 加载详情页（无视频）→ 3×20s 超时，
+                            // 这就是"解析视频源极慢"的根因（同源同线路原版几秒出画面）。
+                            val firstEpisodeUrl = roads.firstOrNull()?.data?.firstOrNull()
+                            if (firstEpisodeUrl.isNullOrBlank()) {
+                                showToast("未能获取播放列表")
+                            } else {
+                                navController.navigate(
+                                    Routes.player(
+                                        bangumiId = bangumi!!.id,
+                                        pluginName = pluginName,
+                                        src = firstEpisodeUrl,
+                                        episode = 1,
+                                        road = 0,
+                                        isLocal = false,
+                                        roadsJson = roadsJson
+                                    )
                                 )
-                            )
+                            }
                         }
                     } catch (e: Exception) {
                         showToast("未能获取播放列表")
