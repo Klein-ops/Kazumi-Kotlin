@@ -108,7 +108,8 @@ class PluginRepository(
         plugins.clear()
         val dir = pluginsDir
         if (!dir.exists()) return
-        dir.listFiles()?.filter { it.extension == "json" }?.forEach { file ->
+        // 按文件名排序保证加载顺序稳定（listFiles() 本身无序）
+        dir.listFiles()?.filter { it.extension == "json" }?.sortedBy { it.name }?.forEach { file ->
             try {
                 val plugin = parsePluginJson(file.readText())
                 if (plugin != null && plugin.name.isNotEmpty()) {
@@ -131,7 +132,9 @@ class PluginRepository(
     }
 
     @Synchronized
-    fun allPlugins(): List<Plugin> = plugins.values.toList()
+    fun allPlugins(): List<Plugin> = plugins.values
+        // 按持久化 sort 字段排序（对齐原版 pluginList 配置顺序；sort 相等时保持插入顺序）
+        .sortedWith(compareBy({ it.sort }, { it.name }))
 
     @Synchronized
     fun getPlugin(name: String): Plugin? = plugins[name.lowercase()]

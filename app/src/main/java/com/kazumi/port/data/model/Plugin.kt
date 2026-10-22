@@ -84,6 +84,7 @@ data class Plugin(
     var chapterRoads: String = "",
     var chapterResult: String = "",
     var referer: String = "",
+    var sort: Int = 0,
     var searchMode: String = RuleMode.XPATH,
     var chapterMode: String = RuleMode.XPATH,
     var searchApiConfig: ApiSearchConfig = ApiSearchConfig(),
@@ -117,6 +118,7 @@ data class Plugin(
                 chapterRoads = json.get("chapterRoads")?.asString ?: "",
                 chapterResult = json.get("chapterResult")?.asString ?: "",
                 referer = json.get("referer")?.asString ?: "",
+                sort = json.get("sort")?.asInt ?: 0,
                 searchMode = RuleMode.normalize(json.get("searchMode")?.asString),
                 chapterMode = RuleMode.normalize(json.get("chapterMode")?.asString),
                 searchApiConfig = json.get("searchApiConfig")?.takeIf { it.isJsonObject }
@@ -155,6 +157,7 @@ data class Plugin(
         obj.addProperty("chapterRoads", chapterRoads)
         obj.addProperty("chapterResult", chapterResult)
         obj.addProperty("referer", referer)
+        obj.addProperty("sort", sort)
         obj.addProperty("searchMode", searchMode)
         obj.addProperty("chapterMode", chapterMode)
         if (searchMode == RuleMode.API || searchApiConfig.request.url.isNotEmpty()) {
