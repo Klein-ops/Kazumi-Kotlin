@@ -95,11 +95,25 @@ fun CollectPage(navController: NavHostController) {
                 com.kazumi.port.data.repository.SettingsManager.Bangumi.SYNC_ENABLE, false
             )
             val done = if (webEnabled) {
+                // 本地收藏序列化为 JSON（merge 必须返回非空 String）
+                val localJson = runCatching {
+                    val arr = com.google.gson.JsonArray()
+                    allItems.forEach { c ->
+                        val obj = com.google.gson.JsonObject()
+                        obj.add("bangumiItem", c.bangumiItem.toJson())
+                        obj.addProperty("time", c.time)
+                        obj.addProperty("type", c.type)
+                        arr.add(obj)
+                    }
+                    arr.toString()
+                }.getOrDefault("[]")
                 app.webDavSyncService.syncCollectibles { remote ->
-                    // merge：本地无数据用远端；有数据则保留本地（简单策略，避免复杂合并）
-                    if (remote == null) null
-                    else if (allItems.isEmpty()) remote
-                    else null
+                    // merge：远端无数据→传本地；本地无数据→用远端；都有→保留本地（简单策略）
+                    when {
+                        remote == null -> localJson
+                        allItems.isEmpty() -> remote
+                        else -> localJson
+                    }
                 } != null
             } else if (bangumiEnabled) {
                 app.bangumiSyncService.syncCollectibles()

@@ -73,22 +73,16 @@ object KazumiThemeColors {
 /**
  * 浅色配色：与原版普通模式完全一致。
  * 原版 Flutter: ThemeData(useMaterial3: true, brightness: light, colorSchemeSeed: seed)
- * 我们用 Compose material3 的 ColorScheme.fromSeed——两者同源于 material-color-utilities，
- * 输出色板逐值一致（primary/secondary/tertiary/background/surface/... 全部同算法生成）。
+ * 本构建环境 ColorScheme.fromSeed 不可用，改用同源算法（@material/material-color-utilities）
+ * 生成的显式色板 M3SeedPalettes，输出与原版逐值一致。
  */
-fun kazumiLightColorScheme(seed: Color): ColorScheme = ColorScheme.fromSeed(
-    seedColor = seed,
-    darkColorScheme = false,
-)
+fun kazumiLightColorScheme(seed: Color): ColorScheme = M3SeedPalettes.light(seed)
 
 /**
  * 深色配色：与原版普通模式深色完全一致（非 OLED 纯黑，就是原版默认深色）。
  * 原版 Flutter: ThemeData(useMaterial3: true, brightness: dark, colorSchemeSeed: seed)
  */
-fun kazumiDarkColorScheme(seed: Color): ColorScheme = ColorScheme.fromSeed(
-    seedColor = seed,
-    darkColorScheme = true,
-)
+fun kazumiDarkColorScheme(seed: Color): ColorScheme = M3SeedPalettes.dark(seed)
 
 /** OLED 深色纯黑覆盖（对应原版 oledDarkTheme） */
 private fun ColorScheme.oledDark(): ColorScheme = copy(

@@ -16,9 +16,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
@@ -30,7 +27,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
-import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -200,41 +196,32 @@ fun SearchPage(navController: NavHostController) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             // 搜索框 + 以图搜番
             // M3 SearchBar（对齐原版 search_page.dart SearchBar：圆角、surfaceContainerHigh、minHeight 64）
+            // 注：本环境 material3 仅支持旧式 query 签名（新式 inputField 签名不可用）
             SearchBar(
-                inputField = {
-                    SearchBarDefaults.InputField(
-                        value = keyword,
-                        onValueChange = { keyword = it },
-                        placeholder = { Text("搜索番剧名称") },
-                        leadingIcon = {
-                            IconButton(onClick = { doSearch() }) {
-                                Icon(Icons.Filled.Search, contentDescription = "搜索")
-                            }
-                        },
-                        trailingIcon = {
-                            Row {
-                                if (keyword.isNotEmpty()) {
-                                    IconButton(onClick = { keyword = "" }) {
-                                        Icon(Icons.Filled.Close, contentDescription = "清空")
-                                    }
-                                }
-                                IconButton(onClick = { navController.navigate(Routes.IMAGE_SEARCH) }) {
-                                    Icon(Icons.Filled.ImageSearch, contentDescription = "以图搜番")
-                                }
-                            }
-                        },
-                        keyboardActions = KeyboardActions(
-                            onSearch = { doSearch() },
-                            onDone = { doSearch() }
-                        ),
-                        keyboardOptions = KeyboardOptions(
-                            imeAction = ImeAction.Search
-                        )
-                    )
+                query = keyword,
+                onQueryChange = { keyword = it },
+                onSearch = { doSearch() },
+                active = false,
+                onActiveChange = {},
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("搜索番剧名称") },
+                leadingIcon = {
+                    IconButton(onClick = { doSearch() }) {
+                        Icon(Icons.Filled.Search, contentDescription = "搜索")
+                    }
                 },
-                expanded = false,
-                onExpandedChange = {},
-                modifier = Modifier.fillMaxWidth()
+                trailingIcon = {
+                    Row {
+                        if (keyword.isNotEmpty()) {
+                            IconButton(onClick = { keyword = "" }) {
+                                Icon(Icons.Filled.Close, contentDescription = "清空")
+                            }
+                        }
+                        IconButton(onClick = { navController.navigate(Routes.IMAGE_SEARCH) }) {
+                            Icon(Icons.Filled.ImageSearch, contentDescription = "以图搜番")
+                        }
+                    }
+                }
             )
 
             // 按条件查找入口（对齐原版 search_page.dart 的"按条件查找"ListTile）

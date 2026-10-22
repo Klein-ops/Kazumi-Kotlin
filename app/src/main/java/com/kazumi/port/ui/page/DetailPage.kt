@@ -773,6 +773,7 @@ private fun DetailHeader(item: BangumiItem) {
 /**
  * 概览 Tab：简介 + 标签 + 集数网格
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OverviewTab(
     item: BangumiItem,
