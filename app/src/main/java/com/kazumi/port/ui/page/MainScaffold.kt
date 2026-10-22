@@ -4,12 +4,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -28,14 +30,15 @@ import com.kazumi.port.ui.navigation.Routes
 private data class MainTab(
     val route: String,
     val label: String,
-    val icon: @Composable () -> androidx.compose.ui.graphics.vector.ImageVector
+    val icon: @Composable () -> androidx.compose.ui.graphics.vector.ImageVector,
+    val selectedIcon: @Composable () -> androidx.compose.ui.graphics.vector.ImageVector
 )
 
 private val mainTabs = listOf(
-    MainTab(Routes.POPULAR, "推荐", { Icons.Filled.Home }),
-    MainTab(Routes.TIMELINE, "时间表", { Icons.Outlined.CalendarMonth }),
-    MainTab(Routes.COLLECT, "追番", { Icons.Filled.Star }),
-    MainTab(Routes.MY, "我的", { Icons.Filled.Settings })
+    MainTab(Routes.POPULAR, "推荐", { Icons.Outlined.Home }, { Icons.Filled.Home }),
+    MainTab(Routes.TIMELINE, "时间表", { Icons.Outlined.Timeline }, { Icons.Filled.Timeline }),
+    MainTab(Routes.COLLECT, "追番", { Icons.Outlined.FavoriteBorder }, { Icons.Filled.Favorite }),
+    MainTab(Routes.MY, "我的", { Icons.Outlined.Settings }, { Icons.Filled.Settings })
 )
 
 /**
@@ -64,7 +67,7 @@ fun MainScaffold(
                                 }
                             }
                         },
-                        icon = { Icon(tab.icon(), contentDescription = tab.label) },
+                        icon = { Icon(if (currentRoute == tab.route) tab.selectedIcon() else tab.icon(), contentDescription = tab.label) },
                         label = { Text(tab.label) }
                     )
                 }
