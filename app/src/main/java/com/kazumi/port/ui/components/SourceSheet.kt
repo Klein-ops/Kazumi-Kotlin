@@ -101,7 +101,8 @@ fun SourceSheet(
                                 group.status = PluginSearchStatus.NO_RESULT
                             } else {
                                 group.status = PluginSearchStatus.SUCCESS
-                                group.results.addAll(resp.data)
+                                // 对齐原版按 src 去重（seenBySource：同一插件内重复 src 只显示一次）
+                                group.results.addAll(resp.data.distinctBy { it.src })
                             }
                         }
                     } catch (e: Exception) {
@@ -113,7 +114,11 @@ fun SourceSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 显式不透明背景（对齐原版 showModalBottomSheet 的 surface 背景；老版本 material3 默认容器可能透明）
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // 标题 + 进度（对齐原版 MaterialBottomSheetHeader）
             Row(
