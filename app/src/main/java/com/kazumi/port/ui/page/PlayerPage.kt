@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Subtitles
@@ -190,6 +191,38 @@ fun PlayerPage(
         }
         FileLogger.i("Danmaku", "补名完成: bgm=$bangumiId name=\"$name\"")
         if (name.isNotBlank()) bangumiTitle = name
+    }
+
+    // 切换上一集/下一集（对齐原版 handlePreNextEpisode：越界提示 toast，不走选集弹窗）
+    fun playNextOrPrev(delta: Int) {
+        if (roads.isEmpty()) return
+        val target = episode + delta
+        if (target <= 0) {
+            toast("已经是第一集")
+            return
+        }
+        val currentRoad = roads.getOrNull(road)
+        val maxEp = currentRoad?.data?.size ?: 0
+        if (target > maxEp) {
+            toast("已经是最新一集")
+            return
+        }
+        val newUrl = currentRoad?.data?.getOrNull(target - 1) ?: return
+        navController.navigate(
+            com.kazumi.port.ui.navigation.Routes.player(
+                bangumiId = bangumiId,
+                pluginName = pluginName,
+                src = newUrl,
+                episode = target,
+                road = road,
+                isLocal = isLocal,
+                roadsJson = roadsJson
+            )
+        ) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
     }
 
     // 手势/HUD 状态
@@ -683,12 +716,21 @@ fun PlayerPage(
                         Icon(Icons.Filled.ArrowBack, contentDescription = "返回", tint = Color.White)
                     }
                     Text(
-                        text = bangumiTitle.ifEmpty { uiState.bangumiName.ifEmpty { "播放" } },
+                        text = buildString {
+                            append(bangumiTitle.ifEmpty { uiState.bangumiName.ifEmpty { "播放" } })
+                            if (episode > 0 && roads.isNotEmpty()) append(" [第${episode}集]")
+                        },
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
+                    // 下一集（对齐原版 _forwardButton / nextEpisode）
+                    if (roads.isNotEmpty()) {
+                        IconButton(onClick = { playNextOrPrev(1) }) {
+                            Icon(Icons.Filled.SkipNext, contentDescription = "下一集", tint = Color.White)
+                        }
+                    }
                     // 选集切换（原版 video_page 选集面板入口）
                     if (roads.isNotEmpty()) {
                         IconButton(onClick = { showEpisodeSheet = true }) {
