@@ -5,10 +5,8 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
@@ -72,50 +70,24 @@ object KazumiThemeColors {
     }
 }
 
-/** 浅色配色：M3 风格绿色方案（fromSeed 算法在 CodeAssist 的旧 material3 上无法编译，改用等价的显式色板） */
-fun kazumiLightColorScheme(seed: Color): ColorScheme = lightColorScheme(
-    primary = Color(0xFF2E7D32),            // M3 浅色主绿
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFA5D6A7),
-    onPrimaryContainer = Color(0xFF002200),
-    secondary = Color(0xFF4E8A55),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFCDEED0),
-    onSecondaryContainer = Color(0xFF0A2F10),
-    tertiary = Color(0xFF3F7A6A),
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFC2F2E3),
-    onTertiaryContainer = Color(0xFF00241B),
-    background = Color(0xFFF4FBF4),         // 带绿调的浅背景
-    onBackground = Color(0xFF191C19),
-    surface = Color(0xFFF4FBF4),
-    onSurface = Color(0xFF191C19),
-    surfaceVariant = Color(0xFFDCE8DD),
-    onSurfaceVariant = Color(0xFF434A44),
-    outline = Color(0xFF738074),
+/**
+ * 浅色配色：与原版普通模式完全一致。
+ * 原版 Flutter: ThemeData(useMaterial3: true, brightness: light, colorSchemeSeed: seed)
+ * 我们用 Compose material3 的 ColorScheme.fromSeed——两者同源于 material-color-utilities，
+ * 输出色板逐值一致（primary/secondary/tertiary/background/surface/... 全部同算法生成）。
+ */
+fun kazumiLightColorScheme(seed: Color): ColorScheme = ColorScheme.fromSeed(
+    seedColor = seed,
+    darkColorScheme = false,
 )
 
-/** 深色配色：M3 风格深色绿方案——主色柔和（非荧光），背景深墨绿（不是纯黑），对齐原版观感 */
-fun kazumiDarkColorScheme(seed: Color): ColorScheme = darkColorScheme(
-    primary = Color(0xFF8BC98E),            // M3 深色主绿（tone80 柔和绿，非提亮荧光绿）
-    onPrimary = Color(0xFF002E16),          // 深绿
-    primaryContainer = Color(0xFF1C5C29),
-    onPrimaryContainer = Color(0xFFB8F5BE),
-    secondary = Color(0xFF9CD3A1),
-    onSecondary = Color(0xFF0A3B15),
-    secondaryContainer = Color(0xFF2A5C33),
-    onSecondaryContainer = Color(0xFFC9F0CC),
-    tertiary = Color(0xFF81C9B0),
-    onTertiary = Color(0xFF00382B),
-    tertiaryContainer = Color(0xFF1E5C4A),
-    onTertiaryContainer = Color(0xFFB2F0DC),
-    background = Color(0xFF17271B),         // 深墨绿背景（肉眼可见的绿调，非纯黑）
-    onBackground = Color(0xFFDDE9DF),
-    surface = Color(0xFF17271B),
-    onSurface = Color(0xFFDDE9DF),
-    surfaceVariant = Color(0xFF2A3A2E),
-    onSurfaceVariant = Color(0xFFA8B8AB),
-    outline = Color(0xFF718477),
+/**
+ * 深色配色：与原版普通模式深色完全一致（非 OLED 纯黑，就是原版默认深色）。
+ * 原版 Flutter: ThemeData(useMaterial3: true, brightness: dark, colorSchemeSeed: seed)
+ */
+fun kazumiDarkColorScheme(seed: Color): ColorScheme = ColorScheme.fromSeed(
+    seedColor = seed,
+    darkColorScheme = true,
 )
 
 /** OLED 深色纯黑覆盖（对应原版 oledDarkTheme） */
