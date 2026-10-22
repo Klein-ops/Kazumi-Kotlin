@@ -210,6 +210,11 @@ class ApiRuleStrategy {
                             diagnostics.add("线路 $roadIndex 的剧集节点 $episodeIndex 缺少 URL，已跳过")
                             return@forEachIndexed
                         }
+                        // 归一化后按 URL 去重：同一 URL 只保留第一个（避免站点重复渲染导致集数翻倍）
+                        if (urls.contains(pageUrl)) {
+                            diagnostics.add("线路 $roadIndex 的剧集节点 $episodeIndex 重复 URL，已跳过: $pageUrl")
+                            return@forEachIndexed
+                        }
                         urls.add(pageUrl)
                         names.add(if (episodeName.isEmpty()) "第${episodeIndex + 1}集" else episodeName)
                     } catch (e: ApiRuleFormatException) {

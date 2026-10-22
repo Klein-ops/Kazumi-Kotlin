@@ -150,7 +150,11 @@ fun RatingReviewSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

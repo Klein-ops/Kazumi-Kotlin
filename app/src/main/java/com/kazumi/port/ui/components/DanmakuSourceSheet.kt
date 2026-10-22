@@ -142,7 +142,10 @@ fun DanmakuSourceSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+    ) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             // 头部
             Row(

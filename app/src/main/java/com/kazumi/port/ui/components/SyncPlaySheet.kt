@@ -74,7 +74,10 @@ fun SyncPlaySheet(
 ) {
     var destination by remember { mutableStateOf("home") } // home/create/join/server
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+    ) {
         when (destination) {
             "create", "join" -> RoomSheet(
                 isCreate = destination == "create",

@@ -138,7 +138,8 @@ fun SearchFilterSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        sheetState = sheetState,
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
     ) {
         Column(
             modifier = Modifier

@@ -133,9 +133,16 @@ class XPathRuleStrategy {
                             diagnostics.add("线路 $roadIndex 的剧集节点 $episodeIndex 缺少 URL，已跳过")
                             return@forEachIndexed
                         }
+                        // 归一化后按 URL 去重：部分站点页面会重复渲染同一集（列表/推荐/移动版），
+                        // 不去重会把 3 集解析成 24 集（全重复）。同一 URL 只保留第一个。
+                        val normalized = EpisodeUrl.normalizeEpisodeUrl(config.baseUrl, source)
+                        if (normalized.isEmpty() || urls.contains(normalized)) {
+                            diagnostics.add("线路 $roadIndex 的剧集节点 $episodeIndex 重复 URL，已跳过: $normalized")
+                            return@forEachIndexed
+                        }
                         val text = XPathEvaluator.nodeText(episodeNode)
                         val name = text.replace(Regex("\\s+"), "")
-                        urls.add(EpisodeUrl.normalizeEpisodeUrl(config.baseUrl, source))
+                        urls.add(normalized)
                         names.add(if (name.isEmpty()) "第${episodeIndex + 1}集" else name)
                     } catch (e: Exception) {
                         diagnostics.add("线路 $roadIndex 的剧集节点 $episodeIndex 解析失败: $e")

@@ -55,7 +55,10 @@ fun EpisodeSelectionSheet(
     val road = roads.getOrNull(visibleRoad)
     val count = road?.data?.size ?: 0
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+    ) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             // 标题
             Text(

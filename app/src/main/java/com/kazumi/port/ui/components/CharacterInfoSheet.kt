@@ -100,7 +100,11 @@ fun CharacterInfoSheet(
         loadComments()
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+    ) {
         val name = characterName.trim()
         Column(modifier = Modifier.fillMaxWidth().heightIn(max = 680.dp)) {
             Row(
