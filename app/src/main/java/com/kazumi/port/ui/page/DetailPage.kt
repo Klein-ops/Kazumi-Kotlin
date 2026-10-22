@@ -8,7 +8,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,19 +22,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PeopleAlt
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,6 +88,7 @@ import com.kazumi.port.ui.components.CommentCardBone
 import com.kazumi.port.ui.components.GeneralEmptyState
 import com.kazumi.port.ui.components.GeneralErrorWidget
 import com.kazumi.port.ui.components.RatingReviewSheet
+import com.kazumi.port.ui.components.SourceSheet
 import com.kazumi.port.ui.components.RelatedBangumiCard
 import com.kazumi.port.ui.components.StaffCard
 import com.kazumi.port.ui.components.rememberToast
@@ -193,6 +197,7 @@ fun DetailPage(
     var relationsLoaded by remember { mutableStateOf(false) }
 
     // 弹窗
+    var showSourceSheet by remember { mutableStateOf(false) }
     var showReviewSheet by remember { mutableStateOf(false) }
     var selectedCharacter by remember { mutableStateOf<CharacterItem?>(null) }
     var reviewSubmitted by remember { mutableStateOf(false) }
@@ -383,47 +388,7 @@ fun DetailPage(
         }
     }
 
-    fun playEpisode(episodeIndex: Int) {
-        val item = bangumi ?: return
-        val plugin = pluginRoads.getOrNull(selectedPlugin) ?: return
-        val road = plugin.third.getOrNull(selectedRoad) ?: return
-        val url = road.data.getOrNull(episodeIndex) ?: return
-        val roadsJson = runCatching {
-            val arr = com.google.gson.JsonArray()
-            plugin.third.forEach { arr.add(it.toJson()) }
-            arr.toString()
-        }.getOrDefault("")
-        navController.navigate(
-            Routes.player(
-                bangumiId = item.id,
-                pluginName = plugin.first,
-                src = url,
-                episode = episodeIndex + 1,
-                road = selectedRoad,
-                isLocal = false,
-                roadsJson = roadsJson
-            )
-        )
-    }
 
-    fun downloadEpisode(episodeIndex: Int) {
-        val item = bangumi ?: return
-        val plugin = pluginRoads.getOrNull(selectedPlugin) ?: return
-        val road = plugin.third.getOrNull(selectedRoad) ?: return
-        val url = road.data.getOrNull(episodeIndex) ?: return
-        scope.launch {
-            app.downloadController.startDownload(
-                bangumiId = item.id,
-                bangumiName = item.displayName(),
-                bangumiCover = item.coverUrl(),
-                pluginName = plugin.first,
-                episodeNumber = episodeIndex + 1,
-                episodeName = "第${episodeIndex + 1}集",
-                road = selectedRoad,
-                episodePageUrl = url
-            )
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -442,18 +407,37 @@ fun DetailPage(
                 },
                 actions = {
                     if (bangumi != null) {
-                        OutlinedButton(onClick = { toggleCollect() }) {
+                        // 滚动后显示收藏（对齐原版 SliverAppBar actions 的 CollectButton）
+                        IconButton(onClick = { toggleCollect() }) {
                             Icon(
-                                Icons.Filled.Star,
-                                contentDescription = null,
+                                if (isCollected) Icons.Filled.Star else Icons.Filled.Star,
+                                contentDescription = if (isCollected) "取消收藏" else "收藏",
                                 tint = if (isCollected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
+                                else MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Text(
-                                if (isCollected) "已收藏" else "收藏",
-                                modifier = Modifier.padding(start = 4.dp)
-                            )
+                        }
+                        // 更多操作（对齐原版 InfoActionsMenu：保存封面/复制标题/外部打开）
+                        var menuExpanded by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(Icons.Filled.MoreHoriz, contentDescription = "更多操作")
+                            }
+                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("复制标题") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showToast("标题已复制")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("外部打开") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showToast("外部打开")
+                                    }
+                                )
+                            }
                         }
                     }
                 },
@@ -463,15 +447,12 @@ fun DetailPage(
             )
         },
         floatingActionButton = {
-            if (bangumi != null && pluginRoads.isNotEmpty()) {
-                FloatingActionButton(
-                    onClick = {
-                        val ep = episodesOf(pluginRoads, selectedPlugin, selectedRoad)
-                        if (ep != null) playEpisode(ep)
-                    }
-                ) {
-                    Text("开始观看")
-                }
+            if (bangumi != null) {
+                ExtendedFloatingActionButton(
+                    onClick = { showSourceSheet = true },
+                    icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
+                    text = { Text("开始观看") }
+                )
             }
         }
     ) { innerPadding ->
@@ -490,14 +471,6 @@ fun DetailPage(
                     Column(modifier = Modifier.fillMaxSize()) {
                         // 头部：封面 + 信息 + 线路/集数
                         DetailHeader(item)
-                        SourceSelector(
-                            pluginRoads = pluginRoads,
-                            roadsLoading = roadsLoading,
-                            selectedPlugin = selectedPlugin,
-                            selectedRoad = selectedRoad,
-                            onSelectPlugin = { selectedPlugin = it },
-                            onSelectRoad = { selectedRoad = it }
-                        )
 
                         TabRow(selectedTabIndex = tabIndex) {
                             INFO_TABS.forEachIndexed { index, title ->
@@ -512,17 +485,21 @@ fun DetailPage(
                         when (tabIndex) {
                             0 -> OverviewTab(
                                 item = item,
-                                pluginRoads = pluginRoads,
-                                roadsLoading = roadsLoading,
-                                selectedPlugin = selectedPlugin,
-                                selectedRoad = selectedRoad,
-                                onPlayEpisode = { playEpisode(it) },
-                                onDownloadEpisode = { downloadEpisode(it) },
                                 onOpenReview = {
                                     if (collectType == 0) {
                                         showToast("请先追番")
                                     } else {
                                         showReviewSheet = true
+                                    }
+                                },
+                                onTagClick = { tagName ->
+                                    // 复用 SearchPage 已监听的 image_search_keyword 通道（对齐原版 pushNamed('/search/$tag')）
+                                    navController.navigate(Routes.SEARCH)
+                                    // 等导航完成、SearchPage 成为当前 entry 后再写入关键词
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(150)
+                                        navController.currentBackStackEntry?.savedStateHandle
+                                            ?.set("image_search_keyword", tagName)
                                     }
                                 }
                             )
@@ -578,6 +555,44 @@ fun DetailPage(
                 }
             }
         }
+    }
+
+    // 播放来源弹窗（对齐原版 SourceSheet：点 FAB「开始观看」弹出）
+    if (showSourceSheet && bangumi != null) {
+        SourceSheet(
+            keyword = bangumi!!.displayName(),
+            onPlay = { pluginName, src, title ->
+                showSourceSheet = false
+                scope.launch {
+                    try {
+                        val roads = app.pluginRepository.queryChapterRoads(pluginName, src)
+                        if (roads.isEmpty()) {
+                            showToast("未能获取播放列表")
+                        } else {
+                            val roadsJson = runCatching {
+                                val arr = com.google.gson.JsonArray()
+                                roads.forEach { arr.add(it.toJson()) }
+                                arr.toString()
+                            }.getOrDefault("")
+                            navController.navigate(
+                                Routes.player(
+                                    bangumiId = bangumi!!.id,
+                                    pluginName = pluginName,
+                                    src = src,
+                                    episode = 1,
+                                    road = 0,
+                                    isLocal = false,
+                                    roadsJson = roadsJson
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        showToast("未能获取播放列表")
+                    }
+                }
+            },
+            onDismiss = { showSourceSheet = false }
+        )
     }
 
     // 角色详情弹窗
@@ -756,189 +771,121 @@ private fun DetailHeader(item: BangumiItem) {
 }
 
 /**
- * 线路/集数选择区
- */
-@Composable
-private fun SourceSelector(
-    pluginRoads: List<Triple<String, String, List<Road>>>,
-    roadsLoading: Boolean,
-    selectedPlugin: Int,
-    selectedRoad: Int,
-    onSelectPlugin: (Int) -> Unit,
-    onSelectRoad: (Int) -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        when {
-            roadsLoading -> {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp))
-                    Text(
-                        "正在加载线路…",
-                        modifier = Modifier.padding(start = 8.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            pluginRoads.isEmpty() -> {
-                Text(
-                    "没有可用线路",
-                    modifier = Modifier.padding(16.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            else -> {
-                // 插件线路选择
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    pluginRoads.forEachIndexed { index, entry ->
-                        val selected = index == selectedPlugin
-                        Text(
-                            text = entry.first,
-                            style = if (selected) MaterialTheme.typography.titleSmall
-                            else MaterialTheme.typography.bodyMedium,
-                            color = if (selected) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .padding(horizontal = 10.dp, vertical = 8.dp)
-                                .clickable { onSelectPlugin(index) }
-                        )
-                    }
-                }
-
-                // 线路（分线）选择
-                val roads = pluginRoads.getOrNull(selectedPlugin)?.third
-                if (roads != null && roads.size > 1) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        roads.forEachIndexed { index, road ->
-                            val selected = index == selectedRoad
-                            Text(
-                                text = road.name,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (selected) MaterialTheme.colorScheme.tertiary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .padding(horizontal = 8.dp, vertical = 6.dp)
-                                    .clickable { onSelectRoad(index) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
  * 概览 Tab：简介 + 标签 + 集数网格
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OverviewTab(
     item: BangumiItem,
-    pluginRoads: List<Triple<String, String, List<Road>>>,
-    roadsLoading: Boolean,
-    selectedPlugin: Int,
-    selectedRoad: Int,
-    onPlayEpisode: (Int) -> Unit,
-    onDownloadEpisode: (Int) -> Unit,
-    onOpenReview: () -> Unit
+    onOpenReview: () -> Unit,
+    onTagClick: (String) -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp)
-    ) {
-        // 简介
+    // 对齐原版 infoBody：maxWidth 950 居中，简介标题 18sp，标签 ActionChip
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
-            Text(
-                text = "简介",
-                style = MaterialTheme.typography.titleMedium
-            )
-        }
-        item {
-            Text(
-                text = item.summary.ifEmpty { "暂无简介" },
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
-            )
-        }
-        // 标签
-        if (item.tags.isNotEmpty()) {
-            item {
-                Text(
-                    text = "标签",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-            item {
-                FlowRow(
-                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.foundation.layout.Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .widthIn(max = 950.dp)
                 ) {
-                    item.tags.take(13).forEach { tag ->
-                        OutlinedButton(
-                            onClick = {},
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    Text(
+                        text = "简介",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    var fullIntro by remember { mutableStateOf(false) }
+                    val summary = item.summary.ifEmpty { "暂无简介" }
+                    if (summary.length > 160 && !fullIntro) {
+                        Text(
+                            text = summary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 7,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        TextButton(
+                            onClick = { fullIntro = true },
+                            modifier = Modifier.align(Alignment.End)
                         ) {
-                            Text("${tag.name} ${tag.count}")
+                            Text("加载更多")
+                        }
+                    } else {
+                        Text(
+                            text = summary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (fullIntro) {
+                            TextButton(
+                                onClick = { fullIntro = false },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Text("加载更少")
+                            }
                         }
                     }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }
-        // 集数
-        val roads = pluginRoads.getOrNull(selectedPlugin)?.third
-        val episodes = roads?.getOrNull(selectedRoad)?.data
-        if (!roadsLoading && episodes != null) {
+        if (item.tags.isNotEmpty()) {
             item {
-                Text(
-                    "选集",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-            item {
-                FlowRow(
+                androidx.compose.foundation.layout.Box(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    contentAlignment = Alignment.Center
                 ) {
-                    episodes.forEachIndexed { index, _ ->
-                        Box(
-                            modifier = Modifier
-                                .size(width = 52.dp, height = 52.dp)
-                                .clip(MaterialTheme.shapes.small)
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                .clickable { onPlayEpisode(index) },
-                            contentAlignment = Alignment.Center
+                    androidx.compose.foundation.layout.Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .widthIn(max = 950.dp)
+                    ) {
+                        Text(
+                            text = "标签",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        var fullTag by remember { mutableStateOf(false) }
+                        val visible = if (fullTag || item.tags.size < 13) item.tags else item.tags.take(13)
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "${index + 1}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            visible.forEach { tag ->
+                                androidx.compose.material3.InputChip(
+                                    selected = false,
+                                    onClick = { onTagClick(tag.name) },
+                                    label = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(tag.name)
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(
+                                                text = tag.count.toString(),
+                                                color = MaterialTheme.colorScheme.primary,
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                        }
+                                    }
+                                )
+                            }
+                            if (item.tags.size >= 13 && !fullTag) {
+                                androidx.compose.material3.InputChip(
+                                    selected = false,
+                                    onClick = { fullTag = true },
+                                    label = { Text("更多 +", color = MaterialTheme.colorScheme.primary) }
+                                )
+                            }
                         }
+                        Spacer(Modifier.height(16.dp))
                     }
                 }
             }
         }
     }
 }
-
 /**
  * 吐槽 Tab：评论区（自己评论置顶 + 滑动到底加载更多）
  */
@@ -1205,12 +1152,3 @@ private fun StaffTab(
     }
 }
 
-private fun episodesOf(
-    pluginRoads: List<Triple<String, String, List<Road>>>,
-    pluginIndex: Int,
-    roadIndex: Int
-): Int? {
-    val plugin = pluginRoads.getOrNull(pluginIndex) ?: return null
-    val road = plugin.third.getOrNull(roadIndex) ?: return null
-    return road.data.indices.firstOrNull()
-}
