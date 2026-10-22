@@ -5,14 +5,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,9 +27,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -67,11 +72,48 @@ fun CollectPage(navController: NavHostController) {
     var allItems by remember { mutableStateOf<List<CollectedBangumi>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var listLayout by remember { mutableStateOf(false) } // false=卡片  true=列表
+    var syncing by remember { mutableStateOf(false) }
+    var syncTrigger by remember { mutableIntStateOf(0) }
+    val toast = com.kazumi.port.ui.components.rememberToast()
 
     LaunchedEffect(Unit) {
         isLoading = true
         allItems = app.collectRepository.getAll()
         isLoading = false
+    }
+    // 同步收藏：WebDAV 优先（同步收藏数据），否则 Bangumi 追番同步；完成刷新列表
+    LaunchedEffect(syncTrigger) {
+        if (syncTrigger == 0) return@LaunchedEffect
+        syncing = true
+        try {
+            val webEnabled = app.settings.getBoolean(
+                com.kazumi.port.data.repository.SettingsManager.WebDav.ENABLE, false
+            ) && app.settings.getBoolean(
+                com.kazumi.port.data.repository.SettingsManager.WebDav.ENABLE_COLLECT, false
+            )
+            val bangumiEnabled = app.settings.getBoolean(
+                com.kazumi.port.data.repository.SettingsManager.Bangumi.SYNC_ENABLE, false
+            )
+            val done = if (webEnabled) {
+                app.webDavSyncService.syncCollectibles { remote ->
+                    // merge：本地无数据用远端；有数据则保留本地（简单策略，避免复杂合并）
+                    if (remote == null) null
+                    else if (allItems.isEmpty()) remote
+                    else null
+                } != null
+            } else if (bangumiEnabled) {
+                app.bangumiSyncService.syncCollectibles()
+            } else false
+            if (done) {
+                allItems = app.collectRepository.getAll()
+            } else {
+                toast("未配置同步，请到设置→同步 开启")
+            }
+        } catch (e: Exception) {
+            toast("同步失败：${e.message}")
+        } finally {
+            syncing = false
+        }
     }
 
     val filtered = if (selectedType == 0) allItems else allItems.filter { it.type == selectedType }
@@ -81,6 +123,23 @@ fun CollectPage(navController: NavHostController) {
             PageHeader(
                 title = "追番",
                 trailing = {
+                    // 同步收藏（对齐原版 collect_page actions 的 StateActionButton.tonal 同步）
+                    TextButton(onClick = { syncTrigger++ }) {
+                        if (syncing) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Sync,
+                                contentDescription = "同步收藏",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        Text("同步")
+                    }
                     IconButton(onClick = { listLayout = !listLayout }) {
                         Icon(
                             imageVector = if (listLayout) Icons.Filled.GridView else Icons.Filled.ViewList,
