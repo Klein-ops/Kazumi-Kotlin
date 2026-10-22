@@ -92,7 +92,7 @@ fun DanmakuSettingsPage(navController: NavHostController) {
     LaunchedEffect(Unit) {
         biliSource = settings.getBoolean(SettingsManager.Danmaku.BILI_SOURCE, true)
         gamerSource = settings.getBoolean(SettingsManager.Danmaku.GAMER_SOURCE, false)
-        danDanSource = settings.getBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, false)
+        danDanSource = settings.getBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, true)
         danDanAppId = settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_ID, "")
         danDanAppSecret = settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_SECRET, "")
         followSpeed = settings.getBoolean(SettingsManager.Danmaku.FOLLOW_SPEED, false)

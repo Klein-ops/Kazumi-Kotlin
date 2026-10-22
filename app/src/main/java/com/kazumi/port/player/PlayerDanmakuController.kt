@@ -226,13 +226,13 @@ class PlayerDanmakuController(
     /**
      * 自动装载弹幕（对应"看哪个番就装哪个"的预期，无需用户手动选择源）
      *
-     * 源顺序（2026-10 调整）：
-     *  1) **Bilibili**（免鉴权，默认开启）：番剧名搜索 → season → 按集号取 cid → 弹幕 XML。
-     *     弹弹play 开放 API v2 已强制 AppId/AppSecret 鉴权，第三方无凭据必然 403，
-     *     所以 B 站成为默认可用源。
-     *  2) **弹弹play**：仅当设置里打开开关且已填写 AppId/AppSecret 时才尝试。
+     * 源顺序（2026-10-22 更新）：
+     *  1) **弹弹play**（官方，凭据已内置）：bgm 番剧 ID 映射 → 标题自动匹配。
+     *  2) **Bilibili**（免鉴权，默认开启）：番剧名搜索 → season → 按集号取 cid → 弹幕 XML。
      *
-     * 两者都拿不到时：B 站若报错 → 返回 FAILED 并带上原因；B 站只是没匹配到 → 返回 EMPTY。
+     * 弹弹play 凭据来源二选一：构建注入（local.properties → BuildConfig，git 排除不进仓库）
+     * 或用户在「设置 → 弹幕 → 弹弹play 凭据」手动填写。两者都有时用用户填写值（可覆盖）。
+     * 弹弹play 开关默认关（用户可在设置里开）；凭据内置后无需再手动填即可用官方源。
      */
     private suspend fun _autoMatchOnline(
         bgmBangumiID: Int,
@@ -242,9 +242,53 @@ class PlayerDanmakuController(
     ): DanmakuLoadResult {
         var nextBangumiID = fallbackBangumiID
         val title = bangumiName.trim()
-        var biliError: String? = null
 
-        // ---------- 源 1：Bilibili（免鉴权） ----------
+        // ---------- 源 1：弹弹play（官方主源；开关默认开，凭据=内置 BuildConfig 或用户手动填写） ----------
+        val danDanOn = settings.getBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, true)
+        val builtinHasCred = com.kazumi.port.BuildConfig.DANDAN_APP_ID.isNotBlank() &&
+            com.kazumi.port.BuildConfig.DANDAN_APP_SECRET.isNotBlank()
+        val manualHasCred = settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_ID, "").isNotBlank() &&
+            settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_SECRET, "").isNotBlank()
+        val hasCred = builtinHasCred || manualHasCred
+        if (danDanOn && hasCred) {
+            // 弹弹play 失败/无结果时记下原因，降级到 B 站；网络错误直接抛给上层处理
+            var danDanError: String? = null
+            try {
+                if (bgmBangumiID > 0) {
+                    val danDanId = danmakuApi.getDanDanBangumiIDByBgmBangumiID(bgmBangumiID)
+                    FileLogger.i("Danmaku", "bgm=$bgmBangumiID -> danDan=$danDanId ep=$episode")
+                    if (danDanId != 0) {
+                        nextBangumiID = danDanId
+                        val res = danmakuApi.getDanDanmaku(danDanId, episode)
+                        if (res.isNotEmpty()) {
+                            FileLogger.i("Danmaku", "弹弹play 按 bgm 映射装载成功: ${res.size} 条")
+                            return DanmakuLoadResult.success(res, nextBangumiID)
+                        }
+                        FileLogger.w("Danmaku", "bgm 映射命中但该集弹幕为空")
+                    }
+                }
+                if (title.isNotEmpty()) {
+                    FileLogger.i("Danmaku", "弹弹play 改用标题自动匹配: \"$title\" ep=$episode")
+                    val auto = autoMatchByTitle(title, episode)
+                    if (auto.isNotEmpty()) {
+                        FileLogger.i("Danmaku", "弹弹play 标题匹配成功: ${auto.size} 条")
+                        return DanmakuLoadResult.success(auto, nextBangumiID)
+                    }
+                    FileLogger.w("Danmaku", "弹弹play 标题未匹配到弹幕: \"$title\" ep=$episode")
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                danDanError = "${e.javaClass.simpleName}: ${e.message}"
+                FileLogger.w("Danmaku", "弹弹play 装载失败: $danDanError")
+            }
+        } else {
+            FileLogger.i(
+                "Danmaku",
+                "弹弹play 源跳过（开关=$danDanOn 内置凭据=$builtinHasCred 手动凭据=$manualHasCred）"
+            )
+        }
+
+        // ---------- 源 2：Bilibili（免鉴权兜底） ----------
         val biliOn = settings.getBoolean(SettingsManager.Danmaku.BILI_SOURCE, true)
         if (biliOn && title.isNotEmpty()) {
             try {
@@ -257,53 +301,15 @@ class PlayerDanmakuController(
                 FileLogger.w("Danmaku", "B站未匹配到弹幕: \"$title\" ep=$episode")
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                biliError = "${e.javaClass.simpleName}: ${e.message}"
-                FileLogger.w("Danmaku", "B站装载失败: $biliError")
+                FileLogger.w("Danmaku", "B站装载失败: ${e.javaClass.simpleName}: ${e.message}")
+                return DanmakuLoadResult.failed(nextBangumiID, "B站: ${e.javaClass.simpleName}: ${e.message}")
             }
         } else if (!biliOn) {
             FileLogger.i("Danmaku", "B站源已关闭（设置 → 弹幕 → BiliBili）")
         }
 
-        // ---------- 源 2：弹弹play（需开关 + 凭据） ----------
-        val danDanOn = settings.getBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, false)
-        val hasCred = settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_ID, "").isNotBlank() &&
-            settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_SECRET, "").isNotBlank()
-        if (!danDanOn || !hasCred) {
-            FileLogger.i("Danmaku", "弹弹play 源跳过（开关=$danDanOn 凭据=$hasCred）")
-            return if (biliError != null) {
-                DanmakuLoadResult.failed(nextBangumiID, "B站: $biliError")
-            } else {
-                DanmakuLoadResult.success(emptyList(), nextBangumiID)
-            }
-        }
-
-        try {
-            if (bgmBangumiID > 0) {
-                val danDanId = danmakuApi.getDanDanBangumiIDByBgmBangumiID(bgmBangumiID)
-                FileLogger.i("Danmaku", "bgm=$bgmBangumiID -> danDan=$danDanId ep=$episode")
-                if (danDanId != 0) {
-                    nextBangumiID = danDanId
-                    val res = danmakuApi.getDanDanmaku(danDanId, episode)
-                    if (res.isNotEmpty()) {
-                        FileLogger.i("Danmaku", "按 bgm 映射装载成功: ${res.size} 条")
-                        return DanmakuLoadResult.success(res, nextBangumiID)
-                    }
-                    FileLogger.w("Danmaku", "bgm 映射命中但该集弹幕为空")
-                }
-            }
-            if (title.isEmpty()) {
-                FileLogger.w("Danmaku", "缺少番剧名，无法标题兜底")
-                return DanmakuLoadResult.success(emptyList(), nextBangumiID)
-            }
-            FileLogger.i("Danmaku", "改用标题自动匹配: \"$title\" ep=$episode")
-            val auto = autoMatchByTitle(title, episode)
-            FileLogger.i("Danmaku", "标题自动匹配结果: ${auto.size} 条")
-            return DanmakuLoadResult.success(auto, nextBangumiID)
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            FileLogger.w("Danmaku", "在线装载失败: ${e.javaClass.simpleName}: ${e.message}")
-            return DanmakuLoadResult.failed(nextBangumiID, "${e.javaClass.simpleName}: ${e.message}")
-        }
+        // 两个源都没拿到：以弹弹play 的失败原因优先（更贴近官方主源）
+        return DanmakuLoadResult.success(emptyList(), nextBangumiID)
     }
 
     /** 用标题搜索番剧并自动匹配分集（弹幕为空时的兜底路径） */
