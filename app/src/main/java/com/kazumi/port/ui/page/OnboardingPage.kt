@@ -203,6 +203,7 @@ fun OnboardingPage(navController: NavHostController) {
     if (showSkipDialog) {
         AlertDialog(
             onDismissRequest = { showSkipDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             icon = { Icon(Icons.Filled.WarningAmber, contentDescription = null) },
             title = { Text("暂不添加规则？") },
             text = { Text("你还没有安装额外规则。仅使用内置规则可能导致部分番剧无法搜索或播放，影响观看体验。\n\n确定仍要继续吗？") },

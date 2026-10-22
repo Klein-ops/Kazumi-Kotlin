@@ -176,6 +176,7 @@ fun DownloadSettingsPage(navController: NavHostController) {
     if (showConcurrentInfo) {
         AlertDialog(
             onDismissRequest = { showConcurrentInfo = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("关于并发设置") },
             text = {
                 Text(

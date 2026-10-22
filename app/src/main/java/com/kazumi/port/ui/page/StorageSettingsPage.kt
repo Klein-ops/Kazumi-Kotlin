@@ -112,6 +112,7 @@ fun StorageSettingsPage(navController: NavHostController) {
     if (showCacheInfo) {
         AlertDialog(
             onDismissRequest = { showCacheInfo = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("缓存说明") },
             text = {
                 Text(

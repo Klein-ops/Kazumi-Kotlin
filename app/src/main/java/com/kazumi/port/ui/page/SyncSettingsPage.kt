@@ -178,6 +178,7 @@ fun SyncSettingsPage(navController: NavHostController) {
     if (showWebDavDialog) {
         AlertDialog(
             onDismissRequest = { showWebDavDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("WebDAV 服务器配置") },
             text = {
                 Column {

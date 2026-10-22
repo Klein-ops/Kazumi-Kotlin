@@ -350,6 +350,7 @@ fun DanmakuSettingsPage(navController: NavHostController) {
     if (showCredDialog) {
         AlertDialog(
             onDismissRequest = { showCredDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("弹弹play 凭据") },
             text = {
                 Column {

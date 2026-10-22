@@ -214,6 +214,7 @@ fun KeyboardSettingsPage(navController: NavHostController) {
     if (showHelpDialog) {
         AlertDialog(
             onDismissRequest = { showHelpDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("快捷键说明") },
             text = {
                 Text(

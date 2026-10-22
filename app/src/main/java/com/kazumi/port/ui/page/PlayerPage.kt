@@ -208,6 +208,8 @@ fun PlayerPage(
             return
         }
         val newUrl = currentRoad?.data?.getOrNull(target - 1) ?: return
+        // 切集：替换当前 PlayerPage（popUpTo 当前页 + launchSingleTop），避免导航栈叠出
+        // 多个 PlayerPage（旧实例 dispose 恢复方向互相打架 → 横竖屏错乱；后台实例残留 → 无限重组）
         navController.navigate(
             com.kazumi.port.ui.navigation.Routes.player(
                 bangumiId = bangumiId,
@@ -219,9 +221,8 @@ fun PlayerPage(
                 roadsJson = roadsJson
             )
         ) {
-            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            popUpTo(com.kazumi.port.ui.navigation.Routes.PLAYER) { inclusive = true }
             launchSingleTop = true
-            restoreState = true
         }
     }
 
@@ -480,14 +481,17 @@ fun PlayerPage(
     }
 
     DisposableEffect(Unit) {
-        // 进入播放页强制横屏（Manifest 已声明 configChanges=orientation|screenSize，
-        // 旋转不会重建 Activity）；退出时恢复原方向
+        // 进入播放页强制横屏。用全局方向引用计数：切集是"替换"当前页（旧实例 dispose +
+        // 新实例组合同时发生），若没有计数，旧实例 dispose 会把方向恢复成竖屏、新实例又设横屏，
+        // 中间状态导致"切集后竖屏/回主页横屏"错乱。计数归零才真正恢复进入前的方向。
         val activity = context.findActivity()
-        val previousOrientation = activity?.requestedOrientation
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        if (activity != null) {
+            PlayerOrientationManager.enter(activity)
+        }
         onDispose {
-            activity?.requestedOrientation =
-                previousOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            if (activity != null) {
+                PlayerOrientationManager.exit(activity)
+            }
             playerController.dispose()
             // 释放 WebView 解析服务
             scope.launch {
@@ -705,7 +709,7 @@ fun PlayerPage(
             )
         }
 
-        // 顶部控制条
+        // 顶部控制条（对齐原版：只保留返回 + 标题 + 下一集；选集/弹幕/截图/锁屏进「更多」菜单）
         if (controlsVisible && !locked) {
             Column(
                 modifier = Modifier
@@ -733,87 +737,6 @@ fun PlayerPage(
                         IconButton(onClick = { playNextOrPrev(1) }) {
                             Icon(Icons.Filled.SkipNext, contentDescription = "下一集", tint = Color.White)
                         }
-                    }
-                    // 选集切换（原版 video_page 选集面板入口）
-                    if (roads.isNotEmpty()) {
-                        IconButton(onClick = { showEpisodeSheet = true }) {
-                            Icon(
-                                Icons.Filled.PlaylistPlay,
-                                contentDescription = "选集",
-                                tint = Color.White
-                            )
-                        }
-                    }
-                    // 弹幕开关（弹幕是自动装载的，这里只做开关；
-                    // 没有弹幕时自动重新匹配一次，而不是把"选番剧/选分集"丢给用户）
-                    IconButton(onClick = {
-                        if (danmakuLoading) return@IconButton
-                        if (danmakuOn) {
-                            playerController.danmaku.setDanmakuEnabled(false)
-                        } else if (playerController.danmaku.danDanmakus.isNotEmpty()) {
-                            playerController.danmaku.setDanmakuEnabled(true)
-                        } else {
-                            scope.launch {
-                                toast("正在匹配弹幕…")
-                                val result = playerController.fetchDanmaku()
-                                toast(
-                                    when {
-                                        result.hasDanmakus -> "弹幕已装载"
-                                        result.isFailed -> {
-                                            val msg = result.errorMessage.orEmpty()
-                                            if (msg.contains("未配置弹弹play凭据"))
-                                                "弹幕需要弹弹play凭据：设置 → 弹幕 → 弹弹play 凭据"
-                                            else
-                                                "弹幕匹配失败（$msg），请稍后再试"
-                                        }
-                                        else -> "没找到这一集的弹幕，可在「更多」里手动切换弹幕源"
-                                    }
-                                )
-                            }
-                        }
-                    }) {
-                        if (danmakuLoading) {
-                            Text("…", color = Color.White)
-                        } else {
-                            Icon(
-                                Icons.Filled.Subtitles,
-                                contentDescription = if (danmakuOn) "关闭弹幕" else "打开弹幕",
-                                tint = if (danmakuOn) MaterialTheme.colorScheme.primary else Color.White
-                            )
-                        }
-                    }
-                    // 截图
-                    IconButton(onClick = {
-                        scope.launch {
-                            screenshotCapturing = true
-                            val view = playerView
-                            val ok = playerController.captureScreenshot {
-                                capturePlayerBitmap(view)
-                            }
-                            screenshotCapturing = false
-                            toast(
-                                if (ok) "截图已保存到相册"
-                                else playerController.screenshots.state.value.message ?: "截图失败"
-                            )
-                        }
-                    }) {
-                        if (screenshotCapturing) {
-                            Text("…", color = Color.White)
-                        } else {
-                            Icon(Icons.Filled.CameraAlt, contentDescription = "截图", tint = Color.White)
-                        }
-                    }
-                    // 锁屏
-                    IconButton(onClick = {
-                        locked = !locked
-                        controlsVisible = !locked
-                        playerController.setPanel { it.copy(lockPanel = locked) }
-                    }) {
-                        Icon(
-                            if (locked) Icons.Filled.Lock else Icons.Filled.LockOpen,
-                            contentDescription = if (locked) "解锁" else "锁定",
-                            tint = Color.White
-                        )
                     }
                 }
             }
@@ -952,7 +875,7 @@ fun PlayerPage(
                                 }
                             }
                         }
-                        // 更多（弹幕源/一起看）
+                        // 更多（选集/弹幕/截图/锁屏/弹幕源/一起看）
                         Box {
                             IconButton(onClick = { moreMenuOpen = !moreMenuOpen }) {
                                 Icon(Icons.Filled.MoreVert, contentDescription = "更多选项", tint = Color.White)
@@ -961,6 +884,72 @@ fun PlayerPage(
                                 expanded = moreMenuOpen,
                                 onDismissRequest = { moreMenuOpen = false }
                             ) {
+                                if (roads.isNotEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("选集") },
+                                        onClick = {
+                                            moreMenuOpen = false
+                                            showEpisodeSheet = true
+                                        }
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(if (danmakuOn) "关闭弹幕" else "打开弹幕") },
+                                    onClick = {
+                                        moreMenuOpen = false
+                                        if (danmakuLoading) return@DropdownMenuItem
+                                        if (danmakuOn) {
+                                            playerController.danmaku.setDanmakuEnabled(false)
+                                        } else if (playerController.danmaku.danDanmakus.isNotEmpty()) {
+                                            playerController.danmaku.setDanmakuEnabled(true)
+                                        } else {
+                                            scope.launch {
+                                                toast("正在匹配弹幕…")
+                                                val result = playerController.fetchDanmaku()
+                                                toast(
+                                                    when {
+                                                        result.hasDanmakus -> "弹幕已装载"
+                                                        result.isFailed -> {
+                                                            val msg = result.errorMessage.orEmpty()
+                                                            if (msg.contains("未配置弹弹play凭据"))
+                                                                "弹幕需要弹弹play凭据：设置 → 弹幕 → 弹弹play 凭据"
+                                                            else
+                                                                "弹幕匹配失败（$msg），请稍后再试"
+                                                        }
+                                                        else -> "没找到这一集的弹幕，可在「更多」里手动切换弹幕源"
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("截图") },
+                                    onClick = {
+                                        moreMenuOpen = false
+                                        scope.launch {
+                                            screenshotCapturing = true
+                                            val view = playerView
+                                            val ok = playerController.captureScreenshot {
+                                                capturePlayerBitmap(view)
+                                            }
+                                            screenshotCapturing = false
+                                            toast(
+                                                if (ok) "截图已保存到相册"
+                                                else playerController.screenshots.state.value.message ?: "截图失败"
+                                            )
+                                        }
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (locked) "解锁" else "锁定") },
+                                    onClick = {
+                                        moreMenuOpen = false
+                                        locked = !locked
+                                        controlsVisible = !locked
+                                        playerController.setPanel { it.copy(lockPanel = locked) }
+                                    }
+                                )
                                 DropdownMenuItem(
                                     text = { Text("弹幕源切换") },
                                     onClick = {
@@ -1037,6 +1026,7 @@ fun PlayerPage(
                     showEpisodeSheet = false
                     val newUrl = roads.getOrNull(roadIndex)?.data?.getOrNull(episodeIndex)
                     if (newUrl != null && (episodeIndex + 1 != episode || roadIndex != road)) {
+                        // 切集：替换当前 PlayerPage，避免导航栈叠页（横竖屏错乱/无限重组）
                         navController.navigate(
                             com.kazumi.port.ui.navigation.Routes.player(
                                 bangumiId = bangumiId,
@@ -1048,11 +1038,8 @@ fun PlayerPage(
                                 roadsJson = roadsJson
                             )
                         ) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
+                            popUpTo(com.kazumi.port.ui.navigation.Routes.PLAYER) { inclusive = true }
                             launchSingleTop = true
-                            restoreState = true
                         }
                     }
                 },
@@ -1186,4 +1173,35 @@ private fun Context.findActivity(): Activity? {
         ctx = ctx.baseContext
     }
     return null
+}
+
+/**
+ * 播放页方向引用计数管理器。
+ *
+ * 进入播放页 +1（设横屏），离开 -1（归零才恢复进入前的方向）。
+ * 解决"切集 = 替换页面（旧实例 dispose + 新实例组合同时发生）"导致的方向错乱：
+ * 旧实例 dispose 不直接恢复，等所有播放页实例都离开后再恢复，保证退出播放页始终回竖屏。
+ */
+private object PlayerOrientationManager {
+    private var refCount = 0
+    private var previousOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+
+    @Synchronized
+    fun enter(activity: Activity) {
+        if (refCount == 0) {
+            previousOrientation = activity.requestedOrientation
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+        refCount++
+    }
+
+    @Synchronized
+    fun exit(activity: Activity) {
+        if (refCount <= 0) return
+        refCount--
+        if (refCount == 0) {
+            activity.requestedOrientation =
+                previousOrientation.let { if (it == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else it }
+        }
+    }
 }

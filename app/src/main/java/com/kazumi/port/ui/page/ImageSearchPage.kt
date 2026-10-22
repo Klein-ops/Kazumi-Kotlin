@@ -511,6 +511,7 @@ fun ImageSearchPage(navController: NavHostController) {
     if (showHelp) {
         AlertDialog(
             onDismissRequest = { showHelp = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             icon = { Icon(Icons.Filled.ImageSearch, contentDescription = null) },
             title = { Text("让截图更容易被找到") },
             text = {

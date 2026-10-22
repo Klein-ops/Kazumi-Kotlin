@@ -66,6 +66,7 @@ fun RuleAddDialog(
 ) {
     AlertDialog(
         onDismissRequest = { onResult(null) },
+        containerColor = MaterialTheme.colorScheme.surface,
         title = { Text("添加规则") },
         text = {
             Column {
@@ -119,6 +120,7 @@ fun RuleImportDialog(
 
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
+        containerColor = MaterialTheme.colorScheme.surface,
         title = { Text("导入规则") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
@@ -197,6 +199,7 @@ fun RuleShareDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
         title = { Text("分享规则") },
         text = {
             Column {
@@ -243,6 +246,7 @@ fun ConfirmRuleDeletionDialog(
 ) {
     AlertDialog(
         onDismissRequest = { onResult(false) },
+        containerColor = MaterialTheme.colorScheme.surface,
         icon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
         title = { Text(if (names.size == 1) "删除这条规则？" else "删除 ${names.size} 条规则？") },
         text = {

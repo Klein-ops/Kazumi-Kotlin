@@ -154,6 +154,7 @@ fun ThemeSettingsPage(navController: NavHostController) {
     if (showPaletteDialog) {
         AlertDialog(
             onDismissRequest = { showPaletteDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("配色方案") },
             text = {
                 FlowRow(

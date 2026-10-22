@@ -323,6 +323,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
     if (showAspectDialog) {
         AlertDialog(
             onDismissRequest = { showAspectDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("默认视频比例") },
             text = {
                 Column {
