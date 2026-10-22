@@ -223,7 +223,7 @@ fun DetailPage(
                 // 逐个插件加载：每完成一个就把已收集的线路先显示（不等全部），
                 // 用户要求"加载出一个就显示一个"；信号量限 3 路并发防风暴。
                 val roadSemaphore = Semaphore(3)
-                val collected = java.util.concurrent.ConcurrentLinkedQueue<Triple<String, String, List<Road>>>()
+                val collectedRoads = java.util.concurrent.ConcurrentLinkedQueue<Triple<String, String, List<Road>>>()
                 val jobs = app.pluginRepository.allPlugins().map { plugin ->
                     async {
                         roadSemaphore.withPermit {
@@ -235,10 +235,10 @@ fun DetailPage(
                                     val roads = app.pluginRepository.queryChapterRoads(plugin.name, hit.src)
                                     if (roads.isNotEmpty()) {
                                         val entry = Triple(plugin.name, hit.src, roads)
-                                        collected.add(entry)
+                                        collectedRoads.add(entry)
                                         // 立即通知 UI 刷新（主线程）
                                         withContext(Dispatchers.Main) {
-                                            savePluginRoads(collected.toList())
+                                            savePluginRoads(collectedRoads.toList())
                                             roadsLoading = false
                                             roadsLoaded = true
                                             if (pluginRoads.isNotEmpty() && selectedPlugin < 0) selectedPlugin = 0
@@ -252,7 +252,7 @@ fun DetailPage(
                 }
                 jobs.forEach { it.join() }
                 withContext(Dispatchers.Main) {
-                    savePluginRoads(collected.toList())
+                    savePluginRoads(collectedRoads.toList())
                     roadsLoading = false
                     roadsLoaded = true
                     if (pluginRoads.isNotEmpty() && selectedPlugin < 0) selectedPlugin = 0
