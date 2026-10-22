@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.kazumi.port.KazumiApp
@@ -71,6 +72,8 @@ fun TimelinePage(navController: NavHostController) {
 
     val bangumiApi = remember { BangumiApi(BangumiClient(KazumiApp.get().settings)) }
 
+    // 屏幕宽度（响应式列数，对齐原版 _buildDay minCardWidth 逻辑）
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
     // 今天（周一=1..周日=7，容器下标 0..6）
     val todayIndex = runCatching {
         LocalDate.now().get(ChronoField.DAY_OF_WEEK) - 1
@@ -125,7 +128,13 @@ fun TimelinePage(navController: NavHostController) {
                 isLoading -> LoadingState(modifier = Modifier.padding(top = 32.dp))
                 calendar[selectedDay].isEmpty() -> EmptyState("当天暂无放送")
                 else -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
+                    columns = GridCells.Fixed(
+                        when {
+                            screenWidthDp >= 880 -> 3
+                            screenWidthDp >= 600 -> 2
+                            else -> 1
+                        }
+                    ),
                     contentPadding = PaddingValues(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
