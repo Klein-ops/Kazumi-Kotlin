@@ -1066,8 +1066,11 @@ fun PlayerPage(
  */
 private fun isDirectMediaUrl(url: String): Boolean {
     if (url.isBlank()) return false
-    // 本地路径
-    if (url.startsWith("/") || url.startsWith("file://")) return true
+    // 本地文件：file:// 或 Android 本地存储绝对路径（/data/...、/storage/...、/sdcard/...）
+    // 注意：网站相对路径（/voddetail/xxx.html、/play/xxx 等以 / 开头但无本地前缀）不算直链，
+    // 必须走 WebView 解析出真实媒体地址，否则 ExoPlayer 拿到 HTML/相对路径 → Malformed URL。
+    if (url.startsWith("file://")) return true
+    if (url.startsWith("/data/") || url.startsWith("/storage/") || url.startsWith("/sdcard")) return true
     // blob:/data: 视频流
     if (url.startsWith("blob:") || url.startsWith("data:")) return true
     // 带媒体扩展名
