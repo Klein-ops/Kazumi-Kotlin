@@ -226,32 +226,28 @@ fun DetailPage(
                 }
                 val name = item.displayName()
                 // 逐个插件加载：每完成一个就把已收集的线路先显示（不等全部），
-                // 用户要求"加载出一个就显示一个"；信号量限 3 路并发防风暴。
-                val roadSemaphore = Semaphore(3)
+                // 用户要求"加载出一个就显示一个"；对齐原版全并发，无信号量/硬超时限流
+                // （信号量 3 路 + 6s 超时叠加会让慢插件拖慢整批，原版 2-3s 出结果）
                 val collectedRoads = java.util.concurrent.ConcurrentLinkedQueue<Triple<String, String, List<Road>>>()
                 val jobs = app.pluginRepository.allPlugins().map { plugin ->
                     async {
-                        roadSemaphore.withPermit {
-                            try {
-                                withTimeout(6_000) {
-                                    val search = app.pluginRepository.searchBangumi(plugin.name, name)
-                                    val hit = search.data.firstOrNull() ?: return@withTimeout null
-                                    if (hit.src.isEmpty()) return@withTimeout null
-                                    val roads = app.pluginRepository.queryChapterRoads(plugin.name, hit.src)
-                                    if (roads.isNotEmpty()) {
-                                        val entry = Triple(plugin.name, hit.src, roads)
-                                        collectedRoads.add(entry)
-                                        // 立即通知 UI 刷新（主线程）
-                                        withContext(Dispatchers.Main) {
-                                            savePluginRoads(collectedRoads.toList())
-                                            roadsLoading = false
-                                            roadsLoaded = true
-                                            if (pluginRoads.isNotEmpty() && selectedPlugin < 0) selectedPlugin = 0
-                                        }
-                                    }
+                        try {
+                            val search = app.pluginRepository.searchBangumi(plugin.name, name)
+                            val hit = search.data.firstOrNull() ?: return@async
+                            if (hit.src.isEmpty()) return@async
+                            val roads = app.pluginRepository.queryChapterRoads(plugin.name, hit.src)
+                            if (roads.isNotEmpty()) {
+                                val entry = Triple(plugin.name, hit.src, roads)
+                                collectedRoads.add(entry)
+                                // 立即通知 UI 刷新（主线程）
+                                withContext(Dispatchers.Main) {
+                                    savePluginRoads(collectedRoads.toList())
+                                    roadsLoading = false
+                                    roadsLoaded = true
+                                    if (pluginRoads.isNotEmpty() && selectedPlugin < 0) selectedPlugin = 0
                                 }
-                            } catch (_: Exception) {
                             }
+                        } catch (_: Exception) {
                         }
                     }
                 }

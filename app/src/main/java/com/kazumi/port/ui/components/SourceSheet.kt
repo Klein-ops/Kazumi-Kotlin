@@ -88,28 +88,25 @@ fun SourceSheet(
     }
 
     LaunchedEffect(keyword) {
-        // 并发检索所有插件（信号量限定 3 路，与详情页线路加载一致）
-        val semaphore = kotlinx.coroutines.sync.Semaphore(3)
+        // 并发检索所有插件（对齐原版 queryAllSource：Future.wait 全并发，无信号量限流）
         plugins.forEach { plugin ->
             scope.launch {
-                semaphore.withPermit {
-                    val group = groups.firstOrNull { it.name == plugin.name } ?: return@withPermit
-                    try {
-                        withTimeout(6_000) {
-                            val resp = app.pluginRepository.searchBangumi(plugin.name, keyword)
-                            if (resp.data.isEmpty()) {
-                                group.status = PluginSearchStatus.NO_RESULT
-                            } else {
-                                group.status = PluginSearchStatus.SUCCESS
-                                // 对齐原版按 src 去重（seenBySource：同一插件内重复 src 只显示一次）
-                                group.results.addAll(resp.data.distinctBy { it.src })
-                            }
-                        }
-                    } catch (e: Exception) {
-                        group.status = PluginSearchStatus.ERROR
+                val group = groups.firstOrNull { it.name == plugin.name } ?: return@launch
+                try {
+                    // 无 per-plugin 硬超时（对齐原版）：依赖 OkHttp 12s 超时兜底，
+                    // 信号量 + 超时叠加会让慢插件拖慢整批（原版 2-3s 出结果）
+                    val resp = app.pluginRepository.searchBangumi(plugin.name, keyword)
+                    if (resp.data.isEmpty()) {
+                        group.status = PluginSearchStatus.NO_RESULT
+                    } else {
+                        group.status = PluginSearchStatus.SUCCESS
+                        // 对齐原版按 src 去重（seenBySource：同一插件内重复 src 只显示一次）
+                        group.results.addAll(resp.data.distinctBy { it.src })
                     }
-                    withContext(Dispatchers.Main.immediate) { updateCount() }
+                } catch (e: Exception) {
+                    group.status = PluginSearchStatus.ERROR
                 }
+                withContext(Dispatchers.Main.immediate) { updateCount() }
             }
         }
     }
