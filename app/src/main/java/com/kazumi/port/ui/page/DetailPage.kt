@@ -6,6 +6,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,7 +24,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.stickyHeader
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountTree
@@ -111,7 +113,7 @@ private val INFO_TABS = listOf("概览", "吐槽", "角色", "关联", "制作�
  * 番剧详情页（对应原版 info_page.dart + info_tabview.dart）
  * 5 个 Tab：概览 / 吐槽（评论区）/ 角色 / 关联 / 制作人员
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DetailPage(
     navController: NavHostController,
@@ -507,42 +509,40 @@ fun DetailPage(
                 )
                 else -> {
                     val item = bangumi!!
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // 头部：封面 + 信息 + 线路/集数
-                        DetailHeader(item)
-
-                        TabRow(selectedTabIndex = tabIndex) {
-                            INFO_TABS.forEachIndexed { index, title ->
-                                Tab(
-                                    selected = tabIndex == index,
-                                    onClick = { tabIndex = index },
-                                    text = { Text(title) }
-                                )
+                    val selectedTab = tabIndex
+                    // 统一滚动：头部作为普通 item 参与滚动，TabRow 用 stickyHeader 吸顶，
+                    // 5 个 Tab 的内容全部展开进同一个 LazyColumn（对齐原版 NestedScrollView + SliverAppBar）
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            DetailHeader(item)
+                        }
+                        stickyHeader(key = "tab_row") {
+                            TabRow(selectedTabIndex = selectedTab) {
+                                INFO_TABS.forEachIndexed { index, title ->
+                                    Tab(
+                                        selected = selectedTab == index,
+                                        onClick = { tabIndex = index },
+                                        text = { Text(title) }
+                                    )
+                                }
                             }
                         }
-
-                        when (tabIndex) {
-                            0 -> OverviewTab(
-                                item = item,
-                                onOpenReview = {
-                                    if (collectType == 0) {
-                                        showToast("请先追番")
-                                    } else {
-                                        showReviewSheet = true
-                                    }
-                                },
-                                onTagClick = { tagName ->
-                                    // 复用 SearchPage 已监听的 image_search_keyword 通道（对齐原版 pushNamed('/search/$tag')）
-                                    navController.navigate(Routes.SEARCH)
-                                    // 等导航完成、SearchPage 成为当前 entry 后再写入关键词
-                                    scope.launch {
-                                        kotlinx.coroutines.delay(150)
-                                        navController.currentBackStackEntry?.savedStateHandle
-                                            ?.set("image_search_keyword", tagName)
-                                    }
+                        when (selectedTab) {
+                            0 -> OverviewTabContent(item = item, onOpenReview = {
+                                if (collectType == 0) {
+                                    showToast("请先追番")
+                                } else {
+                                    showReviewSheet = true
                                 }
-                            )
-                            1 -> CommentsTab(
+                            }, onTagClick = { tagName ->
+                                navController.navigate(Routes.SEARCH)
+                                scope.launch {
+                                    kotlinx.coroutines.delay(150)
+                                    navController.currentBackStackEntry?.savedStateHandle
+                                        ?.set("image_search_keyword", tagName)
+                                }
+                            })
+                            1 -> CommentsTabContent(
                                 comments = comments,
                                 loading = commentsLoading,
                                 loaded = commentsLoaded,
@@ -558,7 +558,7 @@ fun DetailPage(
                                 onRetry = { loadComments() },
                                 onLoadMore = { loadComments(loadMore = true) }
                             )
-                            2 -> CharactersTab(
+                            2 -> CharactersTabContent(
                                 characters = characters,
                                 loading = charactersLoading,
                                 error = charactersError,
@@ -568,7 +568,7 @@ fun DetailPage(
                                     selectedCharacter = character
                                 }
                             )
-                            3 -> RelationsTab(
+                            3 -> RelationsTabContent(
                                 relations = relations,
                                 loading = relationsLoading,
                                 error = relationsError,
@@ -582,7 +582,7 @@ fun DetailPage(
                                     }
                                 }
                             )
-                            4 -> StaffTab(
+                            4 -> StaffTabContent(
                                 staffs = staffs,
                                 loading = staffLoading,
                                 error = staffError,
@@ -824,16 +824,14 @@ private fun DetailHeader(item: BangumiItem) {
  * 概览 Tab：简介 + 标签 + 集数网格
  */
 @OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun OverviewTab(
+private fun LazyListScope.OverviewTabContent(
     item: BangumiItem,
     onOpenReview: () -> Unit,
     onTagClick: (String) -> Unit
 ) {
     // 对齐原版 infoBody：maxWidth 950 居中，简介标题 18sp，标签 ActionChip
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        item {
-            androidx.compose.foundation.layout.Box(
+    item {
+        androidx.compose.foundation.layout.Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
@@ -935,13 +933,11 @@ private fun OverviewTab(
                 }
             }
         }
-    }
 }
 /**
  * 吐槽 Tab：评论区（自己评论置顶 + 滑动到底加载更多）
  */
-@Composable
-private fun CommentsTab(
+private fun LazyListScope.CommentsTabContent(
     comments: List<CommentItem>,
     loading: Boolean,
     loaded: Boolean,
@@ -951,8 +947,7 @@ private fun CommentsTab(
     onRetry: () -> Unit,
     onLoadMore: () -> Unit
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        // 写吐槽入口
+    // 写吐槽入口
         if (!hasReview) {
             item {
                 OutlinedButton(
@@ -1019,14 +1014,12 @@ private fun CommentsTab(
                 }
             }
         }
-    }
 }
 
 /**
  * 角色 Tab
  */
-@Composable
-private fun CharactersTab(
+private fun LazyListScope.CharactersTabContent(
     characters: List<CharacterItem>,
     loading: Boolean,
     error: Boolean,
@@ -1035,18 +1028,22 @@ private fun CharactersTab(
     onCharacterClick: (CharacterItem) -> Unit
 ) {
     when {
-        error -> GeneralErrorWidget(
-            title = "角色列表加载失败",
-            errMsg = "请检查网络连接后重试。",
-            onRetry = onRetry,
-            modifier = Modifier.padding(vertical = 48.dp)
-        )
-        empty -> GeneralEmptyState(
-            icon = Icons.Filled.PeopleAlt,
-            title = "暂无角色信息",
-            modifier = Modifier.padding(vertical = 48.dp)
-        )
-        loading && characters.isEmpty() -> {
+        error -> item {
+            GeneralErrorWidget(
+                title = "角色列表加载失败",
+                errMsg = "请检查网络连接后重试。",
+                onRetry = onRetry,
+                modifier = Modifier.padding(vertical = 48.dp)
+            )
+        }
+        empty -> item {
+            GeneralEmptyState(
+                icon = Icons.Filled.PeopleAlt,
+                title = "暂无角色信息",
+                modifier = Modifier.padding(vertical = 48.dp)
+            )
+        }
+        loading && characters.isEmpty() -> item {
             Column(modifier = Modifier.padding(16.dp)) {
                 repeat(4) {
                     Row(modifier = Modifier.padding(vertical = 8.dp)) {
@@ -1078,14 +1075,12 @@ private fun CharactersTab(
             }
         }
         else -> {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(characters, key = { it.id }) { character ->
-                    CharacterCard(
-                        item = character,
-                        onClick = { onCharacterClick(character) }
-                    )
-                    HorizontalDivider(thickness = 0.5.dp)
-                }
+            items(characters, key = { it.id }) { character ->
+                CharacterCard(
+                    item = character,
+                    onClick = { onCharacterClick(character) }
+                )
+                HorizontalDivider(thickness = 0.5.dp)
             }
         }
     }
@@ -1094,8 +1089,7 @@ private fun CharactersTab(
 /**
  * 关联 Tab
  */
-@Composable
-private fun RelationsTab(
+private fun LazyListScope.RelationsTabContent(
     relations: List<BangumiRelation>,
     loading: Boolean,
     error: Boolean,
@@ -1104,30 +1098,32 @@ private fun RelationsTab(
     onRelationClick: (BangumiRelation) -> Unit
 ) {
     when {
-        error -> GeneralErrorWidget(
-            title = "关联条目加载失败",
-            errMsg = "请检查网络连接后重试。",
-            onRetry = onRetry,
-            modifier = Modifier.padding(vertical = 48.dp)
-        )
-        loaded && relations.isEmpty() -> GeneralEmptyState(
-            icon = Icons.Filled.AccountTree,
-            title = "暂无关联条目",
-            modifier = Modifier.padding(vertical = 48.dp)
-        )
-        loading && !loaded -> Box(
-            modifier = Modifier.fillMaxWidth().padding(48.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator()
+        error -> item {
+            GeneralErrorWidget(
+                title = "关联条目加载失败",
+                errMsg = "请检查网络连接后重试。",
+                onRetry = onRetry,
+                modifier = Modifier.padding(vertical = 48.dp)
+            )
+        }
+        loaded && relations.isEmpty() -> item {
+            GeneralEmptyState(
+                icon = Icons.Filled.AccountTree,
+                title = "暂无关联条目",
+                modifier = Modifier.padding(vertical = 48.dp)
+            )
+        }
+        loading && !loaded -> item {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
         }
         else -> {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(relations, key = { it.bangumiItem.id }) { relation ->
+            items(relations, key = { it.bangumiItem.id }) { relation ->
+                Box(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 12.dp)) {
                     RelatedBangumiCard(
                         relation = relation,
                         onClick = { onRelationClick(relation) }
@@ -1141,8 +1137,7 @@ private fun RelationsTab(
 /**
  * 制作人员 Tab
  */
-@Composable
-private fun StaffTab(
+private fun LazyListScope.StaffTabContent(
     staffs: List<StaffFullItem>,
     loading: Boolean,
     error: Boolean,
@@ -1150,18 +1145,22 @@ private fun StaffTab(
     onRetry: () -> Unit
 ) {
     when {
-        error -> GeneralErrorWidget(
-            title = "制作人员加载失败",
-            errMsg = "请检查网络连接后重试。",
-            onRetry = onRetry,
-            modifier = Modifier.padding(vertical = 48.dp)
-        )
-        empty -> GeneralEmptyState(
-            icon = Icons.Filled.Groups,
-            title = "暂无制作人员信息",
-            modifier = Modifier.padding(vertical = 48.dp)
-        )
-        loading && staffs.isEmpty() -> {
+        error -> item {
+            GeneralErrorWidget(
+                title = "制作人员加载失败",
+                errMsg = "请检查网络连接后重试。",
+                onRetry = onRetry,
+                modifier = Modifier.padding(vertical = 48.dp)
+            )
+        }
+        empty -> item {
+            GeneralEmptyState(
+                icon = Icons.Filled.Groups,
+                title = "暂无制作人员信息",
+                modifier = Modifier.padding(vertical = 48.dp)
+            )
+        }
+        loading && staffs.isEmpty() -> item {
             Column(modifier = Modifier.padding(16.dp)) {
                 repeat(6) {
                     Row(modifier = Modifier.padding(vertical = 8.dp)) {
@@ -1193,11 +1192,9 @@ private fun StaffTab(
             }
         }
         else -> {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(staffs, key = { it.staff.id }) { staff ->
-                    StaffCard(item = staff)
-                    HorizontalDivider(thickness = 0.5.dp)
-                }
+            items(staffs, key = { it.staff.id }) { staff ->
+                StaffCard(item = staff)
+                HorizontalDivider(thickness = 0.5.dp)
             }
         }
     }
