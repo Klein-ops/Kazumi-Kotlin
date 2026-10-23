@@ -53,6 +53,7 @@ fun MainScaffold(
     val currentRoute = backStackEntry?.destination?.route
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
         bottomBar = {
             NavigationBar {
                 mainTabs.forEach { tab ->

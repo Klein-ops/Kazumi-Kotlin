@@ -196,9 +196,10 @@ fun PopularPage(navController: NavHostController) {
             }
 
             DropdownMenu(
-                expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false }
-            ) {
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
                 animeTags.forEach { tag ->
                     DropdownMenuItem(
                         text = { Text(tagLabel(tag)) },

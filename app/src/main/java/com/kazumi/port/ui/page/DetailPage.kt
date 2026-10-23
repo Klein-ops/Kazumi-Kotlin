@@ -387,6 +387,7 @@ fun DetailPage(
 
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
                 title = {
@@ -418,7 +419,8 @@ fun DetailPage(
                             IconButton(onClick = { menuExpanded = true }) {
                                 Icon(Icons.Filled.MoreHoriz, contentDescription = "更多操作")
                             }
-                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false },
+                                containerColor = MaterialTheme.colorScheme.surface) {
                                 DropdownMenuItem(
                                     text = { Text("复制标题") },
                                     onClick = {

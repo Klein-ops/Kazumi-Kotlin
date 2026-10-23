@@ -838,7 +838,8 @@ fun PlayerPage(
                             }
                             DropdownMenu(
                                 expanded = speedMenuOpen,
-                                onDismissRequest = { speedMenuOpen = false }
+                                onDismissRequest = { speedMenuOpen = false },
+                                containerColor = MaterialTheme.colorScheme.surface
                             ) {
                                 playSpeedList.forEach { s ->
                                     DropdownMenuItem(
@@ -859,7 +860,8 @@ fun PlayerPage(
                             }
                             DropdownMenu(
                                 expanded = aspectMenuOpen,
-                                onDismissRequest = { aspectMenuOpen = false }
+                                onDismissRequest = { aspectMenuOpen = false },
+                                containerColor = MaterialTheme.colorScheme.surface
                             ) {
                                 PlayerAspectRatio.entries.forEach { mode ->
                                     DropdownMenuItem(
@@ -882,7 +884,8 @@ fun PlayerPage(
                             }
                             DropdownMenu(
                                 expanded = moreMenuOpen,
-                                onDismissRequest = { moreMenuOpen = false }
+                                onDismissRequest = { moreMenuOpen = false },
+                                containerColor = MaterialTheme.colorScheme.surface
                             ) {
                                 if (roads.isNotEmpty()) {
                                     DropdownMenuItem(

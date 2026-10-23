@@ -268,7 +268,8 @@ fun PluginShopPage(navController: NavHostController) {
                                     Spacer(Modifier.width(4.dp))
                                     Text(if (sortByName) "名称排序" else "最近更新")
                                 }
-                                DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                                DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false },
+                                    containerColor = MaterialTheme.colorScheme.surface) {
                                     DropdownMenuItem(
                                         text = { Text("按更新时间排序") },
                                         onClick = { sortByName = false; showSortMenu = false }

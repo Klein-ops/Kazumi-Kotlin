@@ -447,7 +447,8 @@ private fun SortDropdown(value: String, onChanged: (String) -> Unit) {
             )
             Text("▾", style = MaterialTheme.typography.bodyMedium)
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
+            containerColor = MaterialTheme.colorScheme.surface) {
             searchSortLabels.forEach { (key, label) ->
                 DropdownMenuItem(
                     text = { Text("按${label}排序") },
@@ -487,7 +488,8 @@ private fun SeasonDropdown(
             )
             Text("▾", style = MaterialTheme.typography.bodyMedium)
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
+            containerColor = MaterialTheme.colorScheme.surface) {
             DropdownMenuItem(text = { Text("不限季度") }, onClick = {
                 onChanged("")
                 expanded = false
