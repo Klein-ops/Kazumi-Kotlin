@@ -245,8 +245,8 @@ class PlayerDanmakuController(
 
         // ---------- 源 1：弹弹play（官方主源；开关默认开，凭据=内置 BuildConfig 或用户手动填写） ----------
         val danDanOn = settings.getBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, true)
-        val builtinHasCred = com.kazumi.port.BuildConfig.DANDAN_APP_ID.isNotBlank() &&
-            com.kazumi.port.BuildConfig.DANDAN_APP_SECRET.isNotBlank()
+        val builtinHasCred = com.kazumi.port.network.BuiltinCredentials.appId.isNotBlank() &&
+            com.kazumi.port.network.BuiltinCredentials.appSecret.isNotBlank()
         val manualHasCred = settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_ID, "").isNotBlank() &&
             settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_SECRET, "").isNotBlank()
         val hasCred = builtinHasCred || manualHasCred

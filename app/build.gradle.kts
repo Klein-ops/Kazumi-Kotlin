@@ -21,23 +21,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-
-        // 弹弹play 凭据：从 local.properties 读取（git 排除，不进入代码仓库，仅本机构建注入）。
-        // local.properties: dandanAppId=xxx  dandanAppSecret=xxx
-        // 未配置时为空字符串，运行时用户可在「设置→弹幕→弹弹play 凭据」手动填写。
-        val localProps = Properties().apply {
-            val f = rootProject.file("local.properties")
-            if (f.exists()) {
-                f.inputStream().use { load(it) }
-            }
-        }
-        val dandanAppId = (localProps.getProperty("dandanAppId") ?: "").trim()
-        val dandanAppSecret = (localProps.getProperty("dandanAppSecret") ?: "").trim()
-        // 注意：此处不能用 "$dandanAppId" 字符串插值——CodeAssist 环境的 Gradle 会把
-        // "$dandanAppId" 当成字面量写进 BuildConfig（曾导致内置凭据变 "$dandanAppId" 报 403），
-        // 改用常量拼接，保证注入真实值。
-        buildConfigField("String", "DANDAN_APP_ID", "\"" + dandanAppId + "\"")
-        buildConfigField("String", "DANDAN_APP_SECRET", "\"" + dandanAppSecret + "\"")
+        // 弹弹play 凭据：内置在 DanmakuClient.kt 的 BuiltinCredentials（Base64 编码，避免 git 明文）。
+        // 不再通过 buildConfigField 注入——CodeAssist 环境的构建脚本解析多次生成坏 BuildConfig
+        // （插值变字面量 "$dandanAppId"、拼接变未闭合引号），导致编译失败或运行时 403。
     }
 
     buildTypes {
