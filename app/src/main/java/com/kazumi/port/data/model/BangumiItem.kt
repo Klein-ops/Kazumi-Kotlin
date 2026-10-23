@@ -160,7 +160,12 @@ data class BangumiItem(
          * 对应 Dart BangumiItem.fromJson
          */
         fun fromJson(json: JsonObject): BangumiItem {
+            // rating 可能是嵌套对象（API：rating.score/total/rank/count），
+            // 也可能是 toJson 扁平序列化（rating_score/votes/rank 顶层键）。两者都要兼容。
             val rating = json.getAsJsonObject("rating") ?: JsonObject()
+            val flatRatingScore = json.get("rating_score")?.takeIf { !it.isJsonNull }?.asDouble ?: 0.0
+            val flatVotes = json.get("votes")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+            val flatRank = json.get("rank")?.takeIf { !it.isJsonNull }?.asInt ?: 0
 
             val nameCn = (json.get("name_cn")?.takeIf { !it.isJsonNull }?.asString ?: "")
                     .ifEmpty { (json.get("nameCN")?.takeIf { !it.isJsonNull }?.asString ?: "").ifEmpty { json.get("name")?.takeIf { !it.isJsonNull }?.asString ?: "" } }
@@ -212,16 +217,20 @@ data class BangumiItem(
                 summary = json.get("summary")?.takeIf { !it.isJsonNull }?.asString ?: "",
                 airDate = airDateStr,
                 airWeekday = dateStringToWeekday(airDateStr.ifEmpty { "2000-11-11" }),
-                rank = if (rating.has("rank")) rating.get("rank")?.asInt ?: 0 else 0,
+                rank = if (rating.has("rank")) rating.get("rank")?.asInt ?: 0
+                else flatRank,
                 images = images,
                 tags = tagList,
                 alias = alias,
                 ratingScore = runCatching {
-                    val score = if (rating.has("score")) rating.get("score").asDouble else 0.0
+                    val score = if (rating.has("score")) rating.get("score").asDouble
+                    else if (flatRatingScore > 0.0) flatRatingScore
+                    else 0.0
                     Math.round(score * 10) / 10.0
-                }.getOrDefault(0.0),
-                votes = if (rating.has("total")) rating.get("total")?.asInt ?: 0 else 0,
-                votesCount = parseBangumiVoteCount(rating),
+                }.getOrDefault(if (flatRatingScore > 0.0) flatRatingScore else 0.0),
+                votes = if (rating.has("total")) rating.get("total")?.asInt ?: 0
+                else flatVotes,
+                votesCount = parseBangumiVoteCount(rating, json),
                 info = json.get("info")?.takeIf { !it.isJsonNull }?.asString ?: "",
                 metaTags = metaTags,
                 interest = interest
@@ -239,11 +248,13 @@ data class BangumiItem(
             if (airtime != null) {
                 nonEmpty(airtime.get("date"))?.let { return it }
             }
+            // 兼容 toJson 扁平序列化（air_date）
+            nonEmpty(json.get("air_date"))?.let { return it }
             return ""
         }
 
-        private fun parseBangumiVoteCount(rating: JsonObject): List<Int> {
-            val count = rating.get("count") ?: return emptyList()
+        private fun parseBangumiVoteCount(rating: JsonObject, json: JsonObject = rating): List<Int> {
+            val count = rating.get("count") ?: json.get("votes_count") ?: return emptyList()
             val result = mutableListOf<Int>()
             if (count.isJsonObject) {
                 val obj = count.asJsonObject
