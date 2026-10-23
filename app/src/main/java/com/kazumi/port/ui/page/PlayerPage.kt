@@ -69,6 +69,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -106,6 +114,7 @@ private val playSpeedList = listOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f,
  * 播放页（对应原版 player_item.dart / video_page.dart）
  * 第 7 步补强：弹幕 / 截图 / 倍速菜单 / 手势（左右 seek、上下亮度音量）/ 同步播放 / 视频比例 / 锁屏
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlayerPage(
     navController: NavHostController,
@@ -162,16 +171,16 @@ fun PlayerPage(
     var danmakuGeneration by remember { mutableIntStateOf(0) }
     var currentDanmakus by remember { mutableStateOf<List<DanmakuEntry>>(emptyList()) }
     var danmakuDurationSec by remember { mutableDoubleStateOf(8.0) }
-    var danmakuArea by remember { mutableFloatStateOf(0.5f) }
-    var danmakuFontSize by remember { mutableIntStateOf(24) }
+    var danmakuArea by remember { mutableFloatStateOf(1.0f) }
+    var danmakuFontSize by remember { mutableIntStateOf(25) }
     var danmakuFontWeight by remember { mutableIntStateOf(4) }
     var danmakuBorder by remember { mutableStateOf(true) }
-    var danmakuBorderSize by remember { mutableFloatStateOf(1.0f) }
-    var danmakuOpacity by remember { mutableFloatStateOf(0.8f) }
-    var danmakuLineHeight by remember { mutableFloatStateOf(1.0f) }
+    var danmakuBorderSize by remember { mutableFloatStateOf(1.5f) }
+    var danmakuOpacity by remember { mutableFloatStateOf(1.0f) }
+    var danmakuLineHeight by remember { mutableFloatStateOf(1.6f) }
     var danmakuShowScroll by remember { mutableStateOf(true) }
     var danmakuShowTop by remember { mutableStateOf(true) }
-    var danmakuShowBottom by remember { mutableStateOf(true) }
+    var danmakuShowBottom by remember { mutableStateOf(false) }
     var danmakuMassive by remember { mutableStateOf(false) }
 
     // 弹幕批次：每次取到"新弹幕"就自增，渲染层据此消费，避免同秒重复/漏秒
@@ -246,6 +255,62 @@ fun PlayerPage(
     // 面板
     var controlsVisible by remember { mutableStateOf(true) }
     var locked by remember { mutableStateOf(false) }
+    // 长按临时倍速前的原速度（null 表示当前不在长按倍速中）
+    var speedBeforeLongPress by remember { mutableStateOf<Float?>(null) }
+    // 快进/快退按钮的跳转秒数（原版 buttonSkipTime，默认 80）
+    var buttonSkipTime by remember { mutableIntStateOf(80) }
+    var showSkipTimeDialog by remember { mutableStateOf(false) }
+    var skipTimeInput by remember { mutableStateOf("80") }
+    LaunchedEffect(Unit) {
+        buttonSkipTime = app.settings.getInt(
+            com.kazumi.port.data.repository.SettingsManager.Player.BUTTON_SKIP_TIME, 80
+        )
+        skipTimeInput = buttonSkipTime.toString()
+    }
+
+    // 长按快进/快退按钮：修改跳转秒数（对应原版 _showForwardChange）
+    if (showSkipTimeDialog) {
+        AlertDialog(
+            onDismissRequest = { showSkipTimeDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text("快进/快退时长") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = skipTimeInput,
+                        onValueChange = { skipTimeInput = it.filter { ch -> ch.isDigit() }.take(3) },
+                        singleLine = true,
+                        label = { Text("秒") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.Number
+                        )
+                    )
+                    Text(
+                        text = "点击前进/后退按钮时跳转的秒数。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val value = skipTimeInput.toIntOrNull()?.coerceIn(5, 600) ?: buttonSkipTime
+                    buttonSkipTime = value
+                    showSkipTimeDialog = false
+                    scope.launch {
+                        app.settings.setInt(
+                            com.kazumi.port.data.repository.SettingsManager.Player.BUTTON_SKIP_TIME,
+                            value
+                        )
+                    }
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSkipTimeDialog = false }) { Text("取消") }
+            }
+        )
+    }
     var speedMenuOpen by remember { mutableStateOf(false) }
     var moreMenuOpen by remember { mutableStateOf(false) }
     var aspectMenuOpen by remember { mutableStateOf(false) }
@@ -442,16 +507,16 @@ fun PlayerPage(
     // 读取弹幕设置
     LaunchedEffect(Unit) {
         val s = app.settings
-        danmakuArea = s.getDouble(SettingsManager.Danmaku.AREA, 0.5).toFloat()
-        danmakuFontSize = s.getInt(SettingsManager.Danmaku.FONT_SIZE, 24)
+        danmakuArea = s.getDouble(SettingsManager.Danmaku.AREA, 1.0).toFloat()
+        danmakuFontSize = s.getDouble(SettingsManager.Danmaku.FONT_SIZE, 16.0).toInt()
         danmakuFontWeight = s.getInt(SettingsManager.Danmaku.FONT_WEIGHT, 4)
         danmakuBorder = s.getBoolean(SettingsManager.Danmaku.BORDER, true)
-        danmakuBorderSize = s.getDouble(SettingsManager.Danmaku.BORDER_SIZE, 1.0).toFloat()
-        danmakuOpacity = s.getDouble(SettingsManager.Danmaku.OPACITY, 0.8).toFloat()
-        danmakuLineHeight = s.getDouble(SettingsManager.Danmaku.LINE_HEIGHT, 1.0).toFloat()
+        danmakuBorderSize = s.getDouble(SettingsManager.Danmaku.BORDER_SIZE, 1.5).toFloat()
+        danmakuOpacity = s.getDouble(SettingsManager.Danmaku.OPACITY, 1.0).toFloat()
+        danmakuLineHeight = s.getDouble(SettingsManager.Danmaku.LINE_HEIGHT, 1.6).toFloat()
         danmakuShowScroll = s.getBoolean(SettingsManager.Danmaku.SCROLL, true)
         danmakuShowTop = s.getBoolean(SettingsManager.Danmaku.TOP, true)
-        danmakuShowBottom = s.getBoolean(SettingsManager.Danmaku.BOTTOM, true)
+        danmakuShowBottom = s.getBoolean(SettingsManager.Danmaku.BOTTOM, false)
         danmakuMassive = s.getBoolean(SettingsManager.Danmaku.MASSIVE, false)
         brightnessVolumeGesture = s.getBoolean(SettingsManager.Player.BRIGHTNESS_VOLUME_GESTURE, true)
     }
@@ -649,6 +714,7 @@ fun PlayerPage(
                 currentDanmakus = currentDanmakus,
                 batch = danmakuBatch,
                 playing = uiState.isPlaying,
+                playbackSpeed = uiState.playbackSpeed,
                 generation = danmakuGeneration,
                 durationSeconds = danmakuDurationSec,
                 area = danmakuArea,
@@ -673,6 +739,22 @@ fun PlayerPage(
                 },
                 onDoubleTap = {
                     playerController.playOrPause()
+                },
+                // 长按画面临时倍速（原版 onLongPressStart/End）：按住用 defaultShortcutForwardPlaySpeed，松开恢复
+                onLongPressSpeedStart = {
+                    speedBeforeLongPress = uiState.playbackSpeed
+                    scope.launch {
+                        val speed = app.settings.getDouble(
+                            com.kazumi.port.data.repository.SettingsManager.Player.DEFAULT_SHORTCUT_FORWARD_SPEED,
+                            2.0
+                        ).toFloat()
+                        playerController.setPlaybackSpeed(speed)
+                    }
+                },
+                onLongPressSpeedEnd = {
+                    val restore = speedBeforeLongPress
+                    speedBeforeLongPress = null
+                    if (restore != null) playerController.setPlaybackSpeed(restore)
                 },
                 onHorizontalDragStart = {
                     if (!locked) {
@@ -845,6 +927,49 @@ fun PlayerPage(
                         style = MaterialTheme.typography.labelSmall
                     )
                     Row {
+                        // 快退 / 快进（原版播放条：点击跳 buttonSkipTime 秒，长按改秒数）
+                        val skipBack = {
+                            val target = (uiState.currentPositionMs - buttonSkipTime * 1000L).coerceAtLeast(0L)
+                            playerController.seekTo(target, enableSync = false)
+                        }
+                        val skipForward = {
+                            val max = uiState.durationMs
+                            var target = uiState.currentPositionMs + buttonSkipTime * 1000L
+                            if (max > 0 && target > max) target = max
+                            playerController.seekTo(target, enableSync = false)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .combinedClickable(
+                                    onClick = { skipBack() },
+                                    onLongClick = { showSkipTimeDialog = true }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Filled.FastRewind,
+                                contentDescription = "快退 ${buttonSkipTime} 秒",
+                                tint = Color.White
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .combinedClickable(
+                                    onClick = { skipForward() },
+                                    onLongClick = { showSkipTimeDialog = true }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Filled.FastForward,
+                                contentDescription = "快进 ${buttonSkipTime} 秒",
+                                tint = Color.White
+                            )
+                        }
                         IconButton(onClick = { playerController.playOrPause() }) {
                             Icon(
                                 if (uiState.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -1216,15 +1341,30 @@ private fun PlayerGestureLayer(
     onHorizontalDrag: (deltaPx: Float, viewportWidth: Float) -> Unit,
     onHorizontalDragEnd: (cancelled: Boolean) -> Unit,
     onVerticalDrag: (deltaPx: Float, viewportHeight: Float, startX: Float, viewportWidth: Float) -> Unit,
-    onVerticalDragEnd: () -> Unit
+    onVerticalDragEnd: () -> Unit,
+    /** 长按画面临时倍速（原版 onLongPressStart/End） */
+    onLongPressSpeedStart: () -> Unit = {},
+    onLongPressSpeedEnd: () -> Unit = {}
 ) {
     var dragStartX by remember { mutableFloatStateOf(0f) }
     var dragStartY by remember { mutableFloatStateOf(0f) }
-
+    var longPressSpeedActive by remember { mutableStateOf(false) }
     Box(
         modifier = modifier.pointerInput(locked) {
             if (locked) return@pointerInput
             detectTapGestures(
+                onPress = {
+                    longPressSpeedActive = false
+                    tryAwaitRelease()
+                    if (longPressSpeedActive) {
+                        longPressSpeedActive = false
+                        onLongPressSpeedEnd()
+                    }
+                },
+                onLongPress = {
+                    longPressSpeedActive = true
+                    onLongPressSpeedStart()
+                },
                 onTap = { onTap() },
                 onDoubleTap = { onDoubleTap() }
             )

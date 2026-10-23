@@ -129,7 +129,8 @@ class BangumiClient(
     }
 
     private suspend fun readAcceleration(): String = try {
-        settings.getString(SettingsManager.Proxy.BANGUMI_ACCELERATION, "mirror")
+        // 对齐原版 BangumiAcceleration.current：未设置时回落到 enableBangumiProxy（默认镜像）
+        settings.bangumiAcceleration()
     } catch (e: Exception) {
         "mirror"
     }

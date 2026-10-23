@@ -64,6 +64,7 @@ import kotlinx.coroutines.launch
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SearchPage(navController: NavHostController) {
+    val showRating = com.kazumi.port.ui.components.rememberShowRating()
     var keyword by rememberSaveable { mutableStateOf("") }
     // 搜索结果必须在导航到详情页后保留（rememberSaveable），否则从详情页返回时
     // SearchPage 重组后状态全丢 → 回到初始搜索框而非搜索结果（原版 Flutter 页面栈状态是保留的）
@@ -273,9 +274,9 @@ fun SearchPage(navController: NavHostController) {
                 ) {
                     items(bangumiResults, key = { it.id }) { item ->
                         BangumiCard(
+                            showRating = showRating,
                             item = item,
-                            onClick = { navController.navigate(Routes.detail(item.id)) },
-                            showRating = true
+                            onClick = { navController.navigate(Routes.detail(item.id)) }
                         )
                     }
                 }

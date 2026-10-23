@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -39,24 +42,25 @@ fun DanmakuSettingsSheet(
     onChanged: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var fontSize by remember { mutableFloatStateOf(24f) }
-    var opacity by remember { mutableFloatStateOf(0.8f) }
-    var area by remember { mutableFloatStateOf(0.5f) }
+    var fontSize by remember { mutableFloatStateOf(25f) }
+    var opacity by remember { mutableFloatStateOf(1.0f) }
+    var area by remember { mutableFloatStateOf(1.0f) }
+    var lineHeight by remember { mutableFloatStateOf(1.6f) }
     var duration by remember { mutableFloatStateOf(8f) }
-    var followSpeed by remember { mutableStateOf(false) }
+    var followSpeed by remember { mutableStateOf(true) }
     var showTop by remember { mutableStateOf(true) }
-    var showBottom by remember { mutableStateOf(true) }
+    var showBottom by remember { mutableStateOf(false) }
     var showScroll by remember { mutableStateOf(true) }
-
     // 从 DataStore 加载当前值（suspend 必须在协程里）
     LaunchedEffect(Unit) {
-        fontSize = settings.getDouble(SettingsManager.Danmaku.FONT_SIZE, 24.0).toFloat()
-        opacity = settings.getDouble(SettingsManager.Danmaku.OPACITY, 0.8).toFloat()
-        area = settings.getDouble(SettingsManager.Danmaku.AREA, 0.5).toFloat()
+        fontSize = settings.getDouble(SettingsManager.Danmaku.FONT_SIZE, 25.0).toFloat()
+        opacity = settings.getDouble(SettingsManager.Danmaku.OPACITY, 1.0).toFloat()
+        area = settings.getDouble(SettingsManager.Danmaku.AREA, 1.0).toFloat()
+        lineHeight = settings.getDouble(SettingsManager.Danmaku.LINE_HEIGHT, 1.6).toFloat()
         duration = settings.getDouble(SettingsManager.Danmaku.DURATION, 8.0).toFloat()
-        followSpeed = settings.getBoolean(SettingsManager.Danmaku.FOLLOW_SPEED, false)
+        followSpeed = settings.getBoolean(SettingsManager.Danmaku.FOLLOW_SPEED, true)
         showTop = settings.getBoolean(SettingsManager.Danmaku.TOP, true)
-        showBottom = settings.getBoolean(SettingsManager.Danmaku.BOTTOM, true)
+        showBottom = settings.getBoolean(SettingsManager.Danmaku.BOTTOM, false)
         showScroll = settings.getBoolean(SettingsManager.Danmaku.SCROLL, true)
     }
 
@@ -68,7 +72,13 @@ fun DanmakuSettingsSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+        ) {
             Text(
                 text = "弹幕设置",
                 style = MaterialTheme.typography.titleLarge,
@@ -86,9 +96,13 @@ fun DanmakuSettingsSheet(
                 opacity = it
                 scope.launch { settings.setDouble(SettingsManager.Danmaku.OPACITY, it.toDouble()) }; save()
             }
-            SliderRow("显示区域", "${(area * 100).toInt()}%", area, 0.2f..1f) {
+            SliderRow("显示区域", "${(area * 100).toInt()}%", area, 0f..1f) {
                 area = it
                 scope.launch { settings.setDouble(SettingsManager.Danmaku.AREA, it.toDouble()) }; save()
+            }
+            SliderRow("行间距", String.format("%.1f", lineHeight), lineHeight, 0f..3f) {
+                lineHeight = it
+                scope.launch { settings.setDouble(SettingsManager.Danmaku.LINE_HEIGHT, it.toDouble()) }; save()
             }
 
             // 播放

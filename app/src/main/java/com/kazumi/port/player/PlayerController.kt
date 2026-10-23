@@ -128,7 +128,11 @@ class PlayerController(
     val danmaku: PlayerDanmakuController = PlayerDanmakuController(
         danmakuApi = DanmakuApi(settings = settings),
         settings = settings,
-        downloadRepository = downloadRepository
+        downloadRepository = downloadRepository,
+        // 屏蔽词来自本地 danmaku_shield 表（对应原版 shieldList），每次装载弹幕时读取，改完即时生效
+        shieldRulesProvider = {
+            com.kazumi.port.KazumiApp.get().database.shieldDao().getAll().map { it.content }
+        }
     )
 
     /** 截图控制器 */

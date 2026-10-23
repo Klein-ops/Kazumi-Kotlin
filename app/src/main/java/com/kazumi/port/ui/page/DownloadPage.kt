@@ -15,12 +15,14 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -99,6 +101,9 @@ private fun DownloadRecordCard(
     onPlay: (DownloadEpisode) -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    // 删除确认（原版删除下载/删除全部下载都有确认弹窗）
+    var pendingEpisode by remember { mutableStateOf<DownloadEpisode?>(null) }
+    var showDeleteAll by remember { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -120,11 +125,7 @@ private fun DownloadRecordCard(
                     Icon(Icons.Filled.PlayArrow, contentDescription = "全部恢复")
                 }
                 IconButton(
-                    onClick = {
-                        scope.launch {
-                            controller.deleteRecord(record.bangumiId, record.pluginName)
-                        }
-                    }
+                    onClick = { showDeleteAll = true }
                 ) {
                     Icon(Icons.Filled.Delete, contentDescription = "删除全部")
                 }
@@ -145,15 +146,57 @@ private fun DownloadRecordCard(
                             controller.retryDownload(record.bangumiId, record.pluginName, episode.episodeNumber)
                         }
                     },
-                    onDelete = {
-                        scope.launch {
-                            controller.deleteEpisode(record.bangumiId, record.pluginName, episode.episodeNumber)
-                        }
-                    },
+                    onDelete = { pendingEpisode = episode },
                     onPlay = { onPlay(episode) }
                 )
             }
         }
+    }
+
+    // 删除单集确认
+    pendingEpisode?.let { episode ->
+        AlertDialog(
+            onDismissRequest = { pendingEpisode = null },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text("删除下载") },
+            text = {
+                val name = if (episode.episodeName.isNotEmpty()) episode.episodeName
+                else "第${episode.episodeNumber}集"
+                Text("确定要删除「$name」的下载文件吗？")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingEpisode = null
+                    scope.launch {
+                        controller.deleteEpisode(record.bangumiId, record.pluginName, episode.episodeNumber)
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingEpisode = null }) { Text("取消") }
+            }
+        )
+    }
+
+    // 删除整部确认
+    if (showDeleteAll) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAll = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text("删除全部下载") },
+            text = { Text("确定要删除「${record.bangumiName}」的所有下载文件吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteAll = false
+                    scope.launch {
+                        controller.deleteRecord(record.bangumiId, record.pluginName)
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAll = false }) { Text("取消") }
+            }
+        )
     }
 }
 

@@ -292,8 +292,8 @@ fun PluginSettingsPage(navController: NavHostController) {
                                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreHoriz, contentDescription = "更多操作") }
                                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false },
                                         containerColor = MaterialTheme.colorScheme.surface) {
-                                        DropdownMenuItem(text = { Text("编辑规则") }, onClick = { menuOpen = false; toast("规则编辑页待接入") })
-                                        DropdownMenuItem(text = { Text("测试规则") }, onClick = { menuOpen = false; toast("规则测试页待接入") })
+                                        DropdownMenuItem(text = { Text("编辑规则") }, onClick = { menuOpen = false; navController.navigate(Routes.pluginEdit(plugin.name)) })
+                                        DropdownMenuItem(text = { Text("测试规则") }, onClick = { menuOpen = false; navController.navigate(Routes.pluginTest(plugin.name)) })
                                         DropdownMenuItem(text = { Text("检查更新") }, enabled = !updating, onClick = { menuOpen = false; updateOne(plugin) })
                                         DropdownMenuItem(text = { Text("分享规则") }, onClick = { menuOpen = false; sharePlugin = plugin })
                                         HorizontalDivider()

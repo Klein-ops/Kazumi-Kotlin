@@ -23,9 +23,15 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.runtime.rememberCoroutineScope
+import com.kazumi.port.data.repository.CollectType
+import com.kazumi.port.data.repository.SettingsManager
+import kotlinx.coroutines.launch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,8 +65,11 @@ private val weekdayNames = listOf("一", "二", "三", "四", "五", "六", "日
  * 时间表页（对应原版 timeline_page.dart）
  * 周选择器对齐 _TimelineWeekSelector：胶囊容器 + 选中高亮 + 今天/周X + 当日计数
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimelinePage(navController: NavHostController) {
+    val showRating = com.kazumi.port.ui.components.rememberShowRating()
+    val scope = rememberCoroutineScope()
     var calendar by remember { mutableStateOf<List<List<BangumiItem>>>(List(7) { emptyList() }) }
     var selectedDay by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
@@ -69,6 +78,30 @@ fun TimelinePage(navController: NavHostController) {
     var selectedQuarter by remember { mutableIntStateOf(((java.time.LocalDate.now().monthValue - 1) / 3) * 3 + 1) }
     var sortMode by remember { mutableIntStateOf(0) }
     var showOptionsSheet by remember { mutableStateOf(false) }
+    // 显示范围筛选（原版 timeline_options：隐藏看过的 / 隐藏抛弃的 / 只看正在追的）
+    var notShowWatched by remember { mutableStateOf(false) }
+    var notShowAbandoned by remember { mutableStateOf(false) }
+    var onlyWatching by remember { mutableStateOf(false) }
+    var watchedIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var droppedIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var watchingIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    val app = remember { KazumiApp.get() }
+    suspend fun reloadFilters() {
+        notShowWatched = app.settings.getBoolean(
+            com.kazumi.port.data.repository.SettingsManager.Collect.TIMELINE_NOT_SHOW_WATCHED, false
+        )
+        notShowAbandoned = app.settings.getBoolean(
+            com.kazumi.port.data.repository.SettingsManager.Collect.TIMELINE_NOT_SHOW_ABANDONED, false
+        )
+        onlyWatching = app.settings.getBoolean(
+            com.kazumi.port.data.repository.SettingsManager.Collect.TIMELINE_ONLY_SHOW_WATCHING, false
+        )
+        val all = app.collectRepository.getAll()
+        watchedIds = all.filter { it.type == CollectType.COMPLETED }.map { it.bangumiItem.id }.toSet()
+        droppedIds = all.filter { it.type == CollectType.DROPPED }.map { it.bangumiItem.id }.toSet()
+        watchingIds = all.filter { it.type == CollectType.WATCHING }.map { it.bangumiItem.id }.toSet()
+    }
+    LaunchedEffect(Unit) { reloadFilters() }
 
     val bangumiApi = remember { BangumiApi(BangumiClient(KazumiApp.get().settings)) }
 
@@ -98,6 +131,14 @@ fun TimelinePage(navController: NavHostController) {
     }
 
     MainScaffold(navController) {
+        // 按显示范围筛选（对应原版 filterCalendar）
+        fun visible(list: List<BangumiItem>): List<BangumiItem> = list.filter { item ->
+            if (notShowWatched && watchedIds.contains(item.id)) return@filter false
+            if (notShowAbandoned && droppedIds.contains(item.id)) return@filter false
+            if (onlyWatching && !watchingIds.contains(item.id)) return@filter false
+            true
+        }
+        val dayItems = sorted(visible(calendar[selectedDay]), sortMode)
         Column(modifier = Modifier.fillMaxSize()) {
             PageHeader(title = "时间表")
             Row(
@@ -114,7 +155,7 @@ fun TimelinePage(navController: NavHostController) {
             }
 
             // 星期选择器（对齐原版 _TimelineWeekSelector）
-            val counts = calendar.map { it.size }
+            val counts = calendar.map { visible(it).size }
             TimelineWeekSelector(
                 counts = counts,
                 selectedDay = selectedDay,
@@ -126,7 +167,7 @@ fun TimelinePage(navController: NavHostController) {
 
             when {
                 isLoading -> LoadingState(modifier = Modifier.padding(top = 32.dp))
-                calendar[selectedDay].isEmpty() -> EmptyState("当天暂无放送")
+                dayItems.isEmpty() -> EmptyState("当天暂无放送")
                 else -> LazyVerticalGrid(
                     columns = GridCells.Fixed(
                         when {
@@ -139,11 +180,92 @@ fun TimelinePage(navController: NavHostController) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(sorted(calendar[selectedDay], sortMode), key = { it.id }) { item ->
+                    items(dayItems, key = { it.id }) { item ->
                         BangumiCard(
+                            showRating = showRating,
                             item = item,
                             onClick = { navController.navigate(Routes.detail(item.id)) }
                         )
+                    }
+                }
+            }
+        }
+
+        // 排序与筛选面板（对应原版 _TimelineOptionsButton + timeline_options）
+        if (showOptionsSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showOptionsSheet = false },
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 24.dp)
+                ) {
+                    Text(
+                        text = "排序与筛选",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    val sortLabels = listOf("热度优先", "评分优先", "默认顺序")
+                    sortLabels.forEachIndexed { index, label ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { sortMode = index }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (sortMode == index) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (sortMode == index) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Text(
+                        text = "显示范围",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    listOf(
+                        Triple("隐藏看过的番剧", notShowWatched, SettingsManager.Collect.TIMELINE_NOT_SHOW_WATCHED),
+                        Triple("隐藏抛弃的番剧", notShowAbandoned, SettingsManager.Collect.TIMELINE_NOT_SHOW_ABANDONED),
+                        Triple("只看正在追的番剧", onlyWatching, SettingsManager.Collect.TIMELINE_ONLY_SHOW_WATCHING)
+                    ).forEach { (label, checked, key) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(
+                                checked = checked,
+                                onCheckedChange = { value ->
+                                    when (key) {
+                                        SettingsManager.Collect.TIMELINE_NOT_SHOW_WATCHED -> notShowWatched = value
+                                        SettingsManager.Collect.TIMELINE_NOT_SHOW_ABANDONED -> notShowAbandoned = value
+                                        else -> onlyWatching = value
+                                    }
+                                    scope.launch { app.settings.setBoolean(key, value) }
+                                }
+                            )
+                        }
                     }
                 }
             }

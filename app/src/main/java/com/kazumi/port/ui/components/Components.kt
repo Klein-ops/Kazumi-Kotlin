@@ -20,6 +20,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +38,23 @@ import com.kazumi.port.data.model.BangumiItem
  * 对齐原版 BangumiCardV：圆角 12、封面 0.65、标题最多 2 行
  * showRating=true 时在标题下方显示 ★评分 + 年份（对齐原版搜索卡片）
  */
+/**
+ * 读取「显示评分」设置（原版 SettingsKeys.showRating，默认 true）。
+ * 卡片列表统一用它决定是否在标题下显示评分。
+ */
+@Composable
+fun rememberShowRating(): Boolean {
+    val app = remember { com.kazumi.port.KazumiApp.get() }
+    var show by remember { androidx.compose.runtime.mutableStateOf(true) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        show = app.settings.getBoolean(
+            com.kazumi.port.data.repository.SettingsManager.Interface.SHOW_RATING,
+            true
+        )
+    }
+    return show
+}
+
 @Composable
 fun BangumiCard(
     item: BangumiItem,

@@ -26,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -57,7 +58,9 @@ import kotlinx.coroutines.withTimeout
 private data class SourceGroup(
     val name: String,
     var status: PluginSearchStatus = PluginSearchStatus.PENDING,
-    val results: MutableList<SearchItem> = mutableStateListOf()
+    val results: MutableList<SearchItem> = mutableStateListOf(),
+    /** 失败原因（如验证码挑战），null 时用默认文案 */
+    var message: String? = null
 )
 
 /**
@@ -71,7 +74,9 @@ private data class SourceGroup(
 fun SourceSheet(
     keyword: String,
     onPlay: (pluginName: String, src: String, title: String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** 番剧别名（原版「使用别名」用它换检索词） */
+    aliases: List<String> = emptyList()
 ) {
     val app = remember { KazumiApp.get() }
     val scope = rememberCoroutineScope()
@@ -81,13 +86,21 @@ fun SourceSheet(
     val total = groups.size
     var pendingCount by remember { mutableStateOf(total) }
     var resultCount by remember { mutableStateOf(0) }
-
+    // 当前检索词（原版「使用别名」会把检索词换成番剧别名后重新检索）
+    var query by remember { mutableStateOf(keyword) }
+    var showAliasDialog by remember { mutableStateOf(false) }
     fun updateCount() {
         pendingCount = groups.count { it.status == PluginSearchStatus.PENDING }
         resultCount = groups.sumOf { it.results.size }
     }
-
-    LaunchedEffect(keyword) {
+    LaunchedEffect(query) {
+        // 换检索词时先清空上一轮结果
+        groups.forEach {
+            it.status = PluginSearchStatus.PENDING
+            it.results.clear()
+        }
+        pendingCount = total
+        resultCount = 0
         // 并发检索所有插件（对齐原版 queryAllSource：Future.wait 全并发，无信号量限流）
         plugins.forEach { plugin ->
             scope.launch {
@@ -95,7 +108,7 @@ fun SourceSheet(
                 try {
                     // 无 per-plugin 硬超时（对齐原版）：依赖 OkHttp 12s 超时兜底，
                     // 信号量 + 超时叠加会让慢插件拖慢整批（原版 2-3s 出结果）
-                    val resp = app.pluginRepository.searchBangumi(plugin.name, keyword)
+                    val resp = app.pluginRepository.searchBangumi(plugin.name, query)
                     if (resp.data.isEmpty()) {
                         group.status = PluginSearchStatus.NO_RESULT
                     } else {
@@ -105,6 +118,9 @@ fun SourceSheet(
                     }
                 } catch (e: Exception) {
                     group.status = PluginSearchStatus.ERROR
+                    group.message = if (e is com.kazumi.port.data.model.CaptchaRequiredException) {
+                        "需要验证码验证：请在浏览器打开该站点完成验证后重试"
+                    } else null
                 }
                 withContext(Dispatchers.Main.immediate) { updateCount() }
             }
@@ -156,11 +172,44 @@ fun SourceSheet(
                         group = group,
                         onPlayItem = { item ->
                             onPlay(group.name, item.src, item.name)
-                        }
+                        },
+                        onUseAlias = { showAliasDialog = true }
                     )
                     Spacer(Modifier.height(8.dp))
                 }
                 item { Spacer(Modifier.height(24.dp)) }
+            }
+            // 使用别名重新检索（对应原版 _showAliasPickerDialog）
+            if (showAliasDialog) {
+                AlertDialog(
+                    onDismissRequest = { showAliasDialog = false },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    title = { Text("选择别名") },
+                    text = {
+                        if (aliases.isEmpty()) {
+                            Text("这部番没有别名，可以换个关键词再试。")
+                        } else {
+                            Column {
+                                aliases.forEach { alias ->
+                                    Text(
+                                        text = alias,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                query = alias
+                                                showAliasDialog = false
+                                            }
+                                            .padding(vertical = 12.dp)
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showAliasDialog = false }) { Text("取消") }
+                    }
+                )
             }
         }
     }
@@ -170,7 +219,9 @@ fun SourceSheet(
 @Composable
 private fun SourceGroupRow(
     group: SourceGroup,
-    onPlayItem: (SearchItem) -> Unit
+    onPlayItem: (SearchItem) -> Unit,
+    /** 「使用别名」由外层持有状态，这里只上抛事件 */
+    onUseAlias: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         // 组头：插件名 + 状态 + 展开箭头（对齐原版 _buildSourceGroup 头部）
@@ -256,12 +307,12 @@ private fun SourceGroupRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = {}) { Text("使用别名") }
+                    TextButton(onClick = onUseAlias) { Text("使用别名") }
                 }
             }
             group.status == PluginSearchStatus.ERROR -> {
                 Text(
-                    "检索失败，请重试或打开网站检查是否可用",
+                    group.message ?: "检索失败，请重试或打开网站检查是否可用",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
@@ -296,4 +347,5 @@ private fun SourceGroupRow(
             }
         }
     }
+
 }

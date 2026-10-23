@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.kazumi.port.KazumiApp
 import com.kazumi.port.data.repository.SettingsManager
+import com.kazumi.port.ui.navigation.Routes
 import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
 import com.kazumi.port.ui.components.SettingSwitchRow
@@ -73,44 +74,73 @@ fun DanmakuSettingsPage(navController: NavHostController) {
     var showCredDialog by remember { mutableStateOf(false) }
     var editAppId by remember { mutableStateOf("") }
     var editAppSecret by remember { mutableStateOf("") }
-    var followSpeed by remember { mutableStateOf(false) }
+    var followSpeed by remember { mutableStateOf(true) }
     var danmakuTop by remember { mutableStateOf(true) }
-    var danmakuBottom by remember { mutableStateOf(true) }
+    var danmakuBottom by remember { mutableStateOf(false) }
     var danmakuScroll by remember { mutableStateOf(true) }
     var danmakuMassive by remember { mutableStateOf(false) }
     var danmakuDeduplication by remember { mutableStateOf(false) }
     var danmakuBorder by remember { mutableStateOf(true) }
     var danmakuColor by remember { mutableStateOf(true) }
-    var danmakuArea by remember { mutableDoubleStateOf(0.5) }
+    var danmakuArea by remember { mutableDoubleStateOf(1.0) }
     var danmakuDuration by remember { mutableDoubleStateOf(8.0) }
-    var danmakuLineHeight by remember { mutableDoubleStateOf(1.0) }
-    var danmakuBorderSize by remember { mutableDoubleStateOf(1.0) }
-    var danmakuFontSize by remember { mutableDoubleStateOf(24.0) }
+    var danmakuLineHeight by remember { mutableDoubleStateOf(1.6) }
+    var danmakuBorderSize by remember { mutableDoubleStateOf(1.5) }
+    var danmakuFontSize by remember { mutableDoubleStateOf(25.0) }
     var danmakuFontWeight by remember { mutableIntStateOf(4) }
-    var danmakuOpacity by remember { mutableDoubleStateOf(0.8) }
+    var danmakuOpacity by remember { mutableDoubleStateOf(1.0) }
 
-    LaunchedEffect(Unit) {
+    // 弹幕分组全部键（用于"恢复默认设置"：原版 GStorage.resetDanmakuSettings 是删键回落到默认值）
+    val danmakuKeys = listOf(
+        SettingsManager.Danmaku.ENHANCE,
+        SettingsManager.Danmaku.BORDER,
+        SettingsManager.Danmaku.BORDER_SIZE,
+        SettingsManager.Danmaku.OPACITY,
+        SettingsManager.Danmaku.FONT_SIZE,
+        SettingsManager.Danmaku.FONT_WEIGHT,
+        SettingsManager.Danmaku.TOP,
+        SettingsManager.Danmaku.SCROLL,
+        SettingsManager.Danmaku.BOTTOM,
+        SettingsManager.Danmaku.MASSIVE,
+        SettingsManager.Danmaku.DEDUPLICATION,
+        SettingsManager.Danmaku.CH_CONVERT,
+        SettingsManager.Danmaku.AREA,
+        SettingsManager.Danmaku.COLOR,
+        SettingsManager.Danmaku.DURATION,
+        SettingsManager.Danmaku.LINE_HEIGHT,
+        SettingsManager.Danmaku.TIME_OFFSET,
+        SettingsManager.Danmaku.ENABLED_BY_DEFAULT,
+        SettingsManager.Danmaku.BILI_SOURCE,
+        SettingsManager.Danmaku.GAMER_SOURCE,
+        SettingsManager.Danmaku.DAN_DAN_SOURCE,
+        SettingsManager.Danmaku.FOLLOW_SPEED,
+        SettingsManager.Danmaku.PAUSE_ON_EDIT
+    )
+
+    suspend fun reload() {
         biliSource = settings.getBoolean(SettingsManager.Danmaku.BILI_SOURCE, true)
-        gamerSource = settings.getBoolean(SettingsManager.Danmaku.GAMER_SOURCE, false)
+        gamerSource = settings.getBoolean(SettingsManager.Danmaku.GAMER_SOURCE, true)
         danDanSource = settings.getBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, true)
         danDanAppId = settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_ID, "")
         danDanAppSecret = settings.getString(SettingsManager.Danmaku.DAN_DAN_APP_SECRET, "")
-        followSpeed = settings.getBoolean(SettingsManager.Danmaku.FOLLOW_SPEED, false)
+        followSpeed = settings.getBoolean(SettingsManager.Danmaku.FOLLOW_SPEED, true)
         danmakuTop = settings.getBoolean(SettingsManager.Danmaku.TOP, true)
-        danmakuBottom = settings.getBoolean(SettingsManager.Danmaku.BOTTOM, true)
+        danmakuBottom = settings.getBoolean(SettingsManager.Danmaku.BOTTOM, false)
         danmakuScroll = settings.getBoolean(SettingsManager.Danmaku.SCROLL, true)
         danmakuMassive = settings.getBoolean(SettingsManager.Danmaku.MASSIVE, false)
         danmakuDeduplication = settings.getBoolean(SettingsManager.Danmaku.DEDUPLICATION, false)
         danmakuBorder = settings.getBoolean(SettingsManager.Danmaku.BORDER, true)
         danmakuColor = settings.getBoolean(SettingsManager.Danmaku.COLOR, true)
-        danmakuArea = settings.getDouble(SettingsManager.Danmaku.AREA, 0.5)
+        danmakuArea = settings.getDouble(SettingsManager.Danmaku.AREA, 1.0)
         danmakuDuration = settings.getDouble(SettingsManager.Danmaku.DURATION, 8.0)
-        danmakuLineHeight = settings.getDouble(SettingsManager.Danmaku.LINE_HEIGHT, 1.0)
-        danmakuBorderSize = settings.getDouble(SettingsManager.Danmaku.BORDER_SIZE, 1.0)
-        danmakuFontSize = settings.getDouble(SettingsManager.Danmaku.FONT_SIZE, 24.0)
+        danmakuLineHeight = settings.getDouble(SettingsManager.Danmaku.LINE_HEIGHT, 1.6)
+        danmakuBorderSize = settings.getDouble(SettingsManager.Danmaku.BORDER_SIZE, 1.5)
+        danmakuFontSize = settings.getDouble(SettingsManager.Danmaku.FONT_SIZE, 16.0)
         danmakuFontWeight = settings.getInt(SettingsManager.Danmaku.FONT_WEIGHT, 4)
-        danmakuOpacity = settings.getDouble(SettingsManager.Danmaku.OPACITY, 0.8)
+        danmakuOpacity = settings.getDouble(SettingsManager.Danmaku.OPACITY, 1.0)
     }
+
+    LaunchedEffect(Unit) { reload() }
 
     fun saveBoolean(key: String, value: Boolean) {
         scope.launch { settings.setBoolean(key, value) }
@@ -168,7 +198,7 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     title = "关键词屏蔽",
                     subtitle = "屏蔽含指定关键词的弹幕",
                     leading = Icons.Filled.Block,
-                    onClick = { showToast("关键词屏蔽开发中，敬请期待") }
+                    onClick = { navController.navigate(Routes.SETTINGS_DANMAKU_SHIELD) }
                 )
             }
 
@@ -327,19 +357,9 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     leading = Icons.Filled.Restore,
                     onClick = {
                         scope.launch {
-                            settings.setBoolean(SettingsManager.Danmaku.BILI_SOURCE, true)
-                            settings.setBoolean(SettingsManager.Danmaku.GAMER_SOURCE, false)
-                            settings.setBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, false)
-                            settings.setBoolean(SettingsManager.Danmaku.TOP, true)
-                            settings.setBoolean(SettingsManager.Danmaku.BOTTOM, true)
-                            settings.setBoolean(SettingsManager.Danmaku.SCROLL, true)
-                            settings.setBoolean(SettingsManager.Danmaku.BORDER, true)
-                            settings.setBoolean(SettingsManager.Danmaku.COLOR, true)
-                            settings.setDouble(SettingsManager.Danmaku.AREA, 0.5)
-                            settings.setDouble(SettingsManager.Danmaku.DURATION, 8.0)
-                            settings.setDouble(SettingsManager.Danmaku.LINE_HEIGHT, 1.0)
-                            settings.setDouble(SettingsManager.Danmaku.FONT_SIZE, 24.0)
-                            settings.setDouble(SettingsManager.Danmaku.OPACITY, 0.8)
+                            // 与原版一致：删键回落到默认值（含 compact 布局下字号 16）
+                            settings.resetKeys(danmakuKeys)
+                            reload()
                         }
                     }
                 )

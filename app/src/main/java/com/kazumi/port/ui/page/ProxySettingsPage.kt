@@ -54,7 +54,7 @@ fun ProxySettingsPage(navController: NavHostController) {
     var proxyUrl by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        bangumiAcceleration = settings.getString(SettingsManager.Proxy.BANGUMI_ACCELERATION, "mirror")
+        bangumiAcceleration = settings.bangumiAcceleration()
         imageAcceleration = settings.getString(SettingsManager.Proxy.IMAGE_ACCELERATION, "ech")
         enableGitProxy = settings.getBoolean(SettingsManager.Proxy.ENABLE_GIT_PROXY, true)
         proxyEnable = settings.getBoolean(SettingsManager.Proxy.PROXY_ENABLE, false)

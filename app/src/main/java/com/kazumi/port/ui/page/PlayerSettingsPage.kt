@@ -78,18 +78,18 @@ fun PlayerSettingsPage(navController: NavHostController) {
     var playerDisableAnimations by remember { mutableStateOf(false) }
     var forceAdBlocker by remember { mutableStateOf(false) }
     var brightnessVolumeGesture by remember { mutableStateOf(true) }
-    var playerLogLevel by remember { mutableIntStateOf(0) }
+    var playerLogLevel by remember { mutableIntStateOf(2) }
     var defaultPlaySpeed by remember { mutableDoubleStateOf(1.0) }
     var defaultShortcutForwardPlaySpeed by remember { mutableDoubleStateOf(2.0) }
-    var playerArrowKeySkipTime by remember { mutableIntStateOf(5) }
-    var playerButtonSkipTime by remember { mutableIntStateOf(30) }
-    var playerControllerLayerDisappearTime by remember { mutableIntStateOf(3000) }
+    var playerArrowKeySkipTime by remember { mutableIntStateOf(10) }
+    var playerButtonSkipTime by remember { mutableIntStateOf(80) }
+    var playerControllerLayerDisappearTime by remember { mutableIntStateOf(4000) }
     var aspectRatioType by remember { mutableIntStateOf(1) }
     var showAspectDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        hAenable = settings.getBoolean(SettingsManager.Player.HA_ENABLE, false)
-        androidEnableOpenSLES = settings.getBoolean(SettingsManager.Player.ANDROID_ENABLE_OPENSLES, false)
+        hAenable = settings.getBoolean(SettingsManager.Player.HA_ENABLE, true)
+        androidEnableOpenSLES = settings.getBoolean(SettingsManager.Player.ANDROID_ENABLE_OPENSLES, true)
         androidAutoEnterPIP = settings.getBoolean(SettingsManager.Player.ANDROID_AUTO_ENTER_PIP, false)
         playResume = settings.getBoolean(SettingsManager.Player.PLAY_RESUME, true)
         privateMode = settings.getBoolean(SettingsManager.Player.PRIVATE_MODE, false)
@@ -100,12 +100,12 @@ fun PlayerSettingsPage(navController: NavHostController) {
         playerDisableAnimations = settings.getBoolean(SettingsManager.Player.PLAYER_DISABLE_ANIMATIONS, false)
         forceAdBlocker = settings.getBoolean(SettingsManager.Player.FORCE_AD_BLOCKER, false)
         brightnessVolumeGesture = settings.getBoolean(SettingsManager.Player.BRIGHTNESS_VOLUME_GESTURE, true)
-        playerLogLevel = settings.getInt(SettingsManager.Player.PLAYER_LOG_LEVEL, 0)
+        playerLogLevel = settings.getInt(SettingsManager.Player.PLAYER_LOG_LEVEL, 2)
         defaultPlaySpeed = settings.getDouble(SettingsManager.Player.DEFAULT_PLAY_SPEED, 1.0)
         defaultShortcutForwardPlaySpeed = settings.getDouble(SettingsManager.Player.DEFAULT_SHORTCUT_FORWARD_SPEED, 2.0)
-        playerArrowKeySkipTime = settings.getInt(SettingsManager.Player.ARROW_KEY_SKIP_TIME, 5)
-        playerButtonSkipTime = settings.getInt(SettingsManager.Player.BUTTON_SKIP_TIME, 30)
-        playerControllerLayerDisappearTime = settings.getInt(SettingsManager.Player.PLAYER_CONTROLLER_LAYER_DISAPPEAR_TIME, 3000)
+        playerArrowKeySkipTime = settings.getInt(SettingsManager.Player.ARROW_KEY_SKIP_TIME, 10)
+        playerButtonSkipTime = settings.getInt(SettingsManager.Player.BUTTON_SKIP_TIME, 80)
+        playerControllerLayerDisappearTime = settings.getInt(SettingsManager.Player.PLAYER_CONTROLLER_LAYER_DISAPPEAR_TIME, 4000)
         aspectRatioType = settings.getInt(SettingsManager.Player.DEFAULT_ASPECT_RATIO_TYPE, 1)
     }
 
@@ -303,7 +303,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
                     onClick = {
                         scope.launch {
                             settings.setBoolean(SettingsManager.Player.HA_ENABLE, false)
-                            settings.setBoolean(SettingsManager.Player.ANDROID_ENABLE_OPENSLES, false)
+                            settings.setBoolean(SettingsManager.Player.ANDROID_ENABLE_OPENSLES, true)
                             settings.setBoolean(SettingsManager.Player.ANDROID_AUTO_ENTER_PIP, false)
                             settings.setBoolean(SettingsManager.Player.PLAY_RESUME, true)
                             settings.setBoolean(SettingsManager.Player.PRIVATE_MODE, false)

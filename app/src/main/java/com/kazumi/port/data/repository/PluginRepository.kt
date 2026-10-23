@@ -57,11 +57,11 @@ class PluginRepository(
         get() = catalogRefreshedAt > 0 &&
             System.currentTimeMillis() - catalogRefreshedAt < catalogMaxAge
 
-    /** 内置默认插件 */
-    private val defaultPlugins = listOf(
-        "7sefun",
-        "DM84"
-    )
+    /**
+     * 内置默认插件：原版 2.4.1 **不预装任何规则**（2.3.x 曾随包带 7sefun/DM84，2.4 起移除，
+     * 引导页改为从规则仓库在线挑选）。这里保持空列表以免与用户在原版里的规则数量不一致。
+     */
+    private val defaultPlugins = emptyList<String>()
 
     private val pluginsDir: File
         get() = File(context.filesDir, "plugins").apply { mkdirs() }
@@ -80,16 +80,41 @@ class PluginRepository(
     @Synchronized
     fun ensureBundledPluginsInstalled(): Boolean {
         if (plugins.isEmpty()) {
-            importDefaultPlugins()
+            importDefaultPlugins(onlyMissing = false)
         }
         return plugins.isNotEmpty()
     }
 
     /**
+     * 补齐内置规则（原版安装后规则与仓库一致；移植版早期只预装 2 条，需要为老用户补一次）
+     * @param onlyMissing true 时只补缺失的，不动用户已有/改过的规则
+     * @return 本次新导入的条数
+     */
+    @Synchronized
+    fun importBundledPlugins(onlyMissing: Boolean = true): Int {
+        var added = 0
+        defaultPlugins.forEach { name ->
+            if (onlyMissing && plugins.containsKey(name.lowercase())) return@forEach
+            try {
+                val json = context.assets.open("plugins/$name.json")
+                    .bufferedReader().use { it.readText() }
+                val plugin = parsePluginJson(json) ?: return@forEach
+                plugins[plugin.name.lowercase()] = plugin
+                savePlugin(plugin)
+                added++
+            } catch (e: Exception) {
+                // 内置规则缺失时忽略
+            }
+        }
+        return added
+    }
+
+    /**
      * 从 assets 导入内置插件
      */
-    private fun importDefaultPlugins() {
+    private fun importDefaultPlugins(onlyMissing: Boolean = true) {
         defaultPlugins.forEach { name ->
+            if (onlyMissing && plugins.containsKey(name.lowercase())) return@forEach
             try {
                 val json = context.assets.open("plugins/$name.json")
                     .bufferedReader().use { it.readText() }
@@ -253,6 +278,25 @@ class PluginRepository(
 
     /** 规则仓库条目列表（缓存） */
     fun catalogItems(): List<PluginHTTPItem> = catalogList
+
+    /** 读取规则的原始 JSON 文本（供「编辑规则」页直接改 JSON） */
+    fun readPluginJson(name: String): String? = runCatching {
+        val file = File(pluginsDir, "${name.lowercase()}.json")
+        if (file.exists()) file.readText() else null
+    }.getOrNull()
+
+    /**
+     * 用 JSON 文本替换一条规则：解析成功才写入，失败返回 false（原版编辑页保存前的校验语义）。
+     */
+    fun savePluginJsonText(name: String, json: String): Boolean = runCatching {
+        val plugin = parsePluginJson(json) ?: return false
+        // 允许改内容但保持原文件名，避免出现重复规则
+        val key = name.lowercase()
+        plugins[key] = plugin
+        val target = File(pluginsDir, "$key.json")
+        target.writeText(json)
+        true
+    }.getOrDefault(false)
 
     /** 规则仓库是否已刷新 */
     fun isCatalogFresh(): Boolean = catalogFresh

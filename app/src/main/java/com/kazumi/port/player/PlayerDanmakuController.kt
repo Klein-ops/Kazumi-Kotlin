@@ -26,7 +26,12 @@ class PlayerDanmakuController(
     private val settings: SettingsManager,
     private val downloadRepository: com.kazumi.port.data.repository.DownloadRepository? = null,
     /** B 站弹幕源（免鉴权）。弹弹play 已强制 AppId 鉴权，B 站是当前默认源 */
-    private val bilibiliApi: BilibiliDanmakuApi = BilibiliDanmakuApi()
+    private val bilibiliApi: BilibiliDanmakuApi = BilibiliDanmakuApi(),
+    /**
+     * 屏蔽词来源（对应原版 shieldList）：由上层注入，默认空。
+     * 每次装载弹幕时读取一次，用户在屏蔽规则页改完立刻生效。
+     */
+    private val shieldRulesProvider: suspend () -> List<String> = { emptyList() }
 ) {
 
     /** 弹幕加载结果状态 */
@@ -416,16 +421,51 @@ class PlayerDanmakuController(
     suspend fun addDanmakus(danmakus: List<DanmakuEntry>) {
         val dedup = settings.getBoolean(SettingsManager.Danmaku.DEDUPLICATION, false)
         val listToAdd = if (dedup) DanmakuUtils.mergeDuplicateDanmakus(danmakus, 5.0) else danmakus
-        for (element in listToAdd) {
+        // 关键词/正则屏蔽（对应原版 shieldList 过滤）
+        val rules = runCatching { shieldRulesProvider() }.getOrDefault(emptyList())
+        val visible = if (rules.isEmpty()) listToAdd else listToAdd.filter { !isShielded(it.message, rules) }
+        for (element in visible) {
             val second = element.time.toInt()
             (danDanmakus.getOrPut(second) { mutableListOf() }).add(element)
         }
     }
 
-    /** 弹幕倍速跟随（原版 updateDanmakuSpeed）：由渲染层读设置实现，这里提供计算 */
+    /**
+     * 判断一条弹幕是否被屏蔽词命中：
+     * - `/正则表达式/` 形式按正则匹配（非法正则按普通关键词处理，避免一条坏规则让整批弹幕消失）
+     * - 其余按「包含关键词」匹配（原版文案：包含关键词的弹幕会被隐藏）
+     */
+    private fun isShielded(message: String, rules: List<String>): Boolean {
+        for (rule in rules) {
+            val trimmed = rule.trim()
+            if (trimmed.isEmpty()) continue
+            if (trimmed.length > 2 && trimmed.startsWith("/") && trimmed.endsWith("/")) {
+                val pattern = trimmed.substring(1, trimmed.length - 1)
+                val hit = runCatching { Regex(pattern).containsMatchIn(message) }.getOrNull()
+                if (hit == true) return true
+                if (hit == null && message.contains(pattern)) return true
+            } else if (message.contains(trimmed)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * 弹幕速率（原版 updateDanmakuSpeed 的等价语义）。
+     *
+     * 渲染层的弹幕时间轴按媒体时间推进（clock 每帧 += 真实帧时长 * playbackSpeed），
+     * 所以这里的返回值含义是"滚动弹幕在屏幕上停留多久"：
+     * - 跟随倍速（默认 true）：时长保持 base → 2x 时弹幕视觉速度也是 2x；
+     * - 不跟随倍速：时长 = base * speed → 2x 时视觉速度仍是 1x。
+     *
+     * 注意不要写成 base / speed：那会让时间轴乘了倍速后又把时长减半，
+     * 实际视觉速度变成 speed^2，且倍速切回时在場弹幕会突然回弹。
+     */
     suspend fun danmakuDurationForSpeed(playerSpeed: Float): Double {
         val base = settings.getDouble(SettingsManager.Danmaku.DURATION, 8.0)
-        val follow = settings.getBoolean(SettingsManager.Danmaku.FOLLOW_SPEED, false)
-        return if (follow) base / playerSpeed else base
+        val follow = settings.getBoolean(SettingsManager.Danmaku.FOLLOW_SPEED, true)
+        val speed = playerSpeed.coerceAtLeast(0.01f)
+        return if (follow) base else base * speed
     }
 }

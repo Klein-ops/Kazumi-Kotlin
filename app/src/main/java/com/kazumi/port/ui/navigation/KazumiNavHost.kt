@@ -38,6 +38,9 @@ import com.kazumi.port.ui.page.UpdateSettingsPage
 import com.kazumi.port.ui.page.StorageSettingsPage
 import com.kazumi.port.ui.page.LogsSettingsPage
 import com.kazumi.port.ui.page.AboutSettingsPage
+import com.kazumi.port.ui.page.DanmakuShieldPage
+import com.kazumi.port.ui.page.RuleEditPage
+import com.kazumi.port.ui.page.RuleTestPage
 
 object Routes {
     const val POPULAR = "popular"
@@ -56,9 +59,16 @@ object Routes {
     // 设置子页（对应原版 /settings/xxx 路由）
     const val SETTINGS_PLAYER = "settings/player"
     const val SETTINGS_DANMAKU = "settings/danmaku"
+    const val SETTINGS_DANMAKU_SHIELD = "settings/danmaku/shield"
     const val SETTINGS_KEYBOARD = "settings/keyboard"
     const val SETTINGS_PLUGIN = "settings/plugin"
     const val SETTINGS_PLUGIN_SHOP = "settings/plugin/shop"
+    const val SETTINGS_PLUGIN_TEST = "settings/plugin/test/{pluginName}"
+    const val SETTINGS_PLUGIN_EDIT = "settings/plugin/edit/{pluginName}"
+
+    /** 规则测试/编辑页路由 */
+    fun pluginTest(name: String): String = "settings/plugin/test/${android.net.Uri.encode(name)}"
+    fun pluginEdit(name: String): String = "settings/plugin/edit/${android.net.Uri.encode(name)}"
     const val SETTINGS_DOWNLOAD = "settings/download-settings"
     const val SETTINGS_THEME = "settings/theme"
     const val SETTINGS_INTERFACE = "settings/interface"
@@ -126,9 +136,16 @@ fun KazumiNavHost(
         composable(Routes.HISTORY) { HistoryPage(navController) }
         composable(Routes.SETTINGS_PLAYER) { PlayerSettingsPage(navController) }
         composable(Routes.SETTINGS_DANMAKU) { DanmakuSettingsPage(navController) }
+        composable(Routes.SETTINGS_DANMAKU_SHIELD) { DanmakuShieldPage(navController) }
         composable(Routes.SETTINGS_KEYBOARD) { KeyboardSettingsPage(navController) }
         composable(Routes.SETTINGS_PLUGIN) { PluginSettingsPage(navController) }
         composable(Routes.SETTINGS_PLUGIN_SHOP) { PluginShopPage(navController) }
+        composable(Routes.SETTINGS_PLUGIN_TEST) { entry ->
+            RuleTestPage(navController, entry.arguments?.getString("pluginName").orEmpty())
+        }
+        composable(Routes.SETTINGS_PLUGIN_EDIT) { entry ->
+            RuleEditPage(navController, entry.arguments?.getString("pluginName").orEmpty())
+        }
         composable(Routes.SETTINGS_DOWNLOAD) { DownloadSettingsPage(navController) }
         composable(Routes.SETTINGS_THEME) { ThemeSettingsPage(navController) }
         composable(Routes.SETTINGS_INTERFACE) { InterfaceSettingsPage(navController) }

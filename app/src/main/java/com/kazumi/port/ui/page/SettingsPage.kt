@@ -41,6 +41,12 @@ import com.kazumi.port.ui.navigation.Routes
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsPage(navController: NavHostController) {
+    val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    // 平板/横屏宽屏：左侧分类栏 + 右侧内容（对应原版 settings_page 的 280dp Rail）
+    if (screenWidthDp >= 840) {
+        WideSettingsLayout(navController)
+        return
+    }
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("设置", style = MaterialTheme.typography.titleLarge) },

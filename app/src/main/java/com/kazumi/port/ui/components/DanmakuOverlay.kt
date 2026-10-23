@@ -8,33 +8,38 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.kazumi.port.data.model.DanmakuEntry
 import com.kazumi.port.data.model.DanmakuUtils
 import kotlinx.coroutines.delay
-import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.abs
+import kotlin.math.floor
+import kotlin.random.Random
 
 /**
- * 弹幕渲染层（对应原版 canvas_danmaku 画布弹幕）
+ * 弹幕渲染层（对齐原版 canvas_danmaku 0.3.3 的绘制/轨道语义）
  *
- * 能力：
- * - 滚动弹幕（右→左）/ 顶部弹幕 / 底部弹幕
- * - 海量弹幕叠加（massive）
- * - 弹幕描边（border）与颜色
- * - 弹幕区域（area 0..1，从顶部开始占用比例）
- * - 字体大小 / 行高 / 不透明度 / 字体字重
- * - 倍速跟随（followSpeed 时加快滚动）
- * - 时间轴偏移由 DanmakuController 负责（resolveDanmakuSecond）
- * - seek/切集时由外部调用 clearAndInvalidate 丢弃旧弹幕
+ * 关键行为（与原版一致）：
+ * - 轨道数 = floor(画面高度 * area / 轨道高度)，即 area 直接决定可用的弹幕行数，
+ *   滚动/顶部弹幕都被约束在 area 区域内（原版 _calcTracks）。
+ * - area 占满时顶部留一轨给字幕（原版 safeArea 行为）。
+ * - 滚动弹幕从右边缘出发、向左完全移出画面（两端都会短暂处于画面外，这是滚动弹幕的正常表现）。
+ * - 顶部弹幕从顶部向下排，底部弹幕从画面底部向上排。
+ * - 轨道高度 = 字号 * 行间距，滚动轨道做“不重叠 + 不追尾”检测，避免同一行弹幕压在一起。
+ * - 文本宽度用真实测量（Paint.measureText），不再用 字数*0.9 粗略近似。
+ * - 静态弹幕（顶部/底部）存活 5s，滚动弹幕存活 durationSeconds。
+ * - 整层裁剪到自身画布，绝不越出播放器画面。
  */
 @Composable
 fun DanmakuOverlay(
@@ -51,188 +56,289 @@ fun DanmakuOverlay(
     batch: Int = 0,
     /** 是否正在播放（平滑时钟只在播放中推进） */
     playing: Boolean = true,
+    /** 当前播放倍速（弹幕时间轴按媒体时间推进，必须乘上这个倍速） */
+    playbackSpeed: Float = 1f,
     /** 渲染代数：变化时清空所有活跃弹幕（seek/切集） */
     generation: Int = 0,
-    /** 弹幕持续时间（秒），由 DanmakuController.danmakuDurationForSpeed 提供 */
+    /** 滚动弹幕持续时间（秒），由 DanmakuController.danmakuDurationForSpeed 提供 */
     durationSeconds: Double = 8.0,
-    /** 弹幕区域比例（0..1） */
-    area: Float = 0.5f,
-    /** 字体大小（sp） */
-    fontSize: Int = 24,
+    /** 静态弹幕（顶部/底部）持续时间（秒），对齐原版 staticDuration 默认 5s */
+    staticDurationSeconds: Double = 5.0,
+    /** 弹幕区域比例（0..1），对齐原版 danmakuArea 默认 1.0 */
+    area: Float = 1.0f,
+    /** 字体大小（sp），对齐原版默认 25 */
+    fontSize: Int = 25,
     /** 字体字重（1..9） */
     fontWeight: Int = 4,
     /** 是否描边 */
     border: Boolean = true,
-    /** 描边粗细 */
-    borderSize: Float = 1.0f,
-    /** 不透明度（0.1..1） */
-    opacity: Float = 0.8f,
-    /** 行高倍率 */
-    lineHeight: Float = 1.0f,
+    /** 描边粗细，对齐原版默认 1.5 */
+    borderSize: Float = 1.5f,
+    /** 不透明度（0.1..1），对齐原版默认 1.0 */
+    opacity: Float = 1.0f,
+    /** 行高倍率，对齐原版默认 1.6 */
+    lineHeight: Float = 1.6f,
     /** 是否显示滚动弹幕 */
     showScroll: Boolean = true,
     /** 是否显示顶部弹幕 */
     showTop: Boolean = true,
-    /** 是否显示底部弹幕 */
-    showBottom: Boolean = true,
-    /** 是否海量模式（叠加绘制） */
-    massive: Boolean = false
+    /** 是否显示底部弹幕（原版默认关闭） */
+    showBottom: Boolean = false,
+    /** 是否海量模式（轨道占满时叠加绘制） */
+    massive: Boolean = false,
+    /** 为字幕留出余量：原版 DanmakuOption.safeArea 默认 true，Kazumi 未覆盖 */
+    safeArea: Boolean = true
 ) {
     val density = LocalDensity.current
-    val textSizePx = with(density) { fontSize.dp.toPx() }
+    val fontSizePx = with(density) { fontSize.dp.toPx() }
 
-    // 活跃弹幕：每条含开始时间/类型/颜色/速度/轨道等
-    data class ActiveDanmaku(
-        val entry: DanmakuEntry,
-        val startMs: Long,
-        val lane: Int
-    )
+    // 复用 Paint，避免每帧每条弹幕都 new 两个 Paint
+    val textPaint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
+    val strokePaint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
 
     val active = remember { mutableStateListOf<ActiveDanmaku>() }
     var lastGeneration by remember { mutableStateOf(-1) }
     var lastBatch by remember { mutableStateOf(-1) }
+    var canvasSize by remember { mutableStateOf(Size.Zero) }
 
-    // 轨道占用表：lane -> 当前占用该轨道的弹幕结束时间（ms）
-    val laneBusyUntil = remember { ConcurrentHashMap<Int, Long>() }
+    val lifeMsTotal = (durationSeconds * 1000).toLong().coerceAtLeast(1000L)
+    val staticLifeMs = (staticDurationSeconds * 1000).toLong().coerceAtLeast(1000L)
 
-    val lifeMsTotal = (durationSeconds * 1000).toLong()
+    // 轨道高度：字号 * 行间距（原版用 TextPainter.height，Flutter 下即 fontSize*height）
+    val trackHeight = (fontSizePx * lineHeight.coerceAtLeast(0.5f)).coerceAtLeast(1f)
 
     // 平滑时钟（弹幕时间轴，ms）。
-    // 播放位置是 200ms 轮询刷新的，直接拿它算位移，滚动就是 5fps 的跳变；
-    // 这里用真实帧时钟推进，再用播放位置做周期性对齐。
+    // 关键：弹幕时间轴是"媒体时间"，必须按 playbackSpeed 推进。
+    // 之前只按真实毫秒推进，倍速下时钟持续落后于播放位置，只能靠 400ms 硬对齐去追，
+    // 表现为弹幕一跳一跳往前；倍速切回时位置读数与时长变化又会让弹幕整体回弹。
     var clockMs by remember { mutableLongStateOf(playbackPositionMs) }
-
-    // 帧循环推进时钟（仅在播放中、可见、弹幕开启时运行）
+    val speedState = rememberUpdatedState(playbackSpeed)
+    val positionState = rememberUpdatedState(playbackPositionMs)
     LaunchedEffect(playing, danmakuOn, visible) {
         if (!playing || !danmakuOn || !visible) return@LaunchedEffect
         var lastFrameNs = 0L
+        var carry = 0.0
         while (true) {
             withFrameNanos { frameNs ->
                 if (lastFrameNs != 0L) {
-                    val deltaMs = (frameNs - lastFrameNs) / 1_000_000L
+                    val deltaMs = (frameNs - lastFrameNs) / 1_000_000.0
                     // 过滤丢帧/切后台回来的巨大跳变，避免弹幕瞬移
-                    if (deltaMs in 0L..200L) clockMs += deltaMs
+                    if (deltaMs in 0.0..250.0) {
+                        carry += deltaMs * speedState.value.toDouble()
+                        val step = carry.toLong()
+                        if (step != 0L) {
+                            clockMs += step
+                            carry -= step
+                        }
+                        // 与播放位置温和对齐：只追"落后"，不主动往回拉。
+                        // playbackPositionMs 是 200ms 采样值，正常情况下 clockMs 会略微领先它，
+                        // 此时若把 clock 拉回去，弹幕就会一顿一顿甚至回弹。
+                        val drift = positionState.value - clockMs
+                        when {
+                            drift > 700L -> {
+                                clockMs = positionState.value
+                                carry = 0.0
+                            }
+                            drift < -1500L -> {
+                                // 真正的大幅后退（seek）：直接跟随，避免与播放位置脱节
+                                clockMs = positionState.value
+                                carry = 0.0
+                            }
+                            drift > 250L -> clockMs += (drift * 0.1).toLong()
+                        }
+                    }
                 }
                 lastFrameNs = frameNs
             }
         }
     }
-
-    // 与真实播放位置对齐（播放中每 200ms 会有一次位置更新）
-    LaunchedEffect(playbackPositionMs) {
-        if (abs(playbackPositionMs - clockMs) > 400L) clockMs = playbackPositionMs
+    // 暂停/不可见期间平滑时钟不推进：仅在位置明显跳变（seek）时直接跟随（通常伴随 generation 变化）
+    LaunchedEffect(playbackPositionMs, playing) {
+        val drift = playbackPositionMs - clockMs
+        if (drift > 700L || drift < -1500L) clockMs = playbackPositionMs
     }
-
     // 代数变化（seek / 切集 / 换源）：丢弃所有已排期弹幕
     LaunchedEffect(generation) {
         if (lastGeneration != generation) {
             active.clear()
-            laneBusyUntil.clear()
             clockMs = playbackPositionMs
             lastGeneration = generation
         }
     }
 
-    // 消费批次：currentDanmakus 现在是"新增弹幕"（增量），不再是"当前秒快照"。
-    // 渲染层自己维护活跃列表的生命周期：进来就排期，到期由下面的淘汰循环清理。
-    LaunchedEffect(batch) {
+    /** 按当前画布高度与 area 计算轨道高度和轨道数（原版 _calcTracks） */
+    fun calcTracks(height: Float): Pair<Float, Int> {
+        if (height <= 0f) return trackHeight to 1
+        val usableArea = area.coerceIn(0.1f, 1f)
+        var count = floor(height * usableArea / trackHeight).toInt()
+        // 原版 safeArea：area 占满时为字幕留一条轨（去掉最下面那条）
+        if (safeArea && usableArea >= 0.999f) count -= 1
+        return trackHeight to count.coerceAtLeast(1)
+    }
+
+    // 消费批次：currentDanmakus 是"新增弹幕"（增量），渲染层维护生命周期
+    LaunchedEffect(batch, trackHeight, area, massive, safeArea, showScroll, showTop, showBottom) {
         if (batch == lastBatch) return@LaunchedEffect
+        if (!visible || !danmakuOn) {
+            lastBatch = batch
+            return@LaunchedEffect
+        }
+        val w = canvasSize.width
+        // 画布还没测量完：不消费本批次，等 onSizeChanged 后重试（否则进入播放器/seek 后的第一批弹幕会被吞掉）
+        if (w <= 0f) return@LaunchedEffect
         lastBatch = batch
-        if (!visible || !danmakuOn) return@LaunchedEffect
         val now = clockMs
-        active.removeAll { it.startMs + lifeMsTotal < now }
-        currentDanmakus.forEachIndexed { index, entry ->
-            if (!shouldShowType(entry, showScroll, showTop, showBottom)) return@forEachIndexed
-            // 轨道分配：滚动用多轨道，顶部/底部固定一条
-            val lane = when (entry.type) {
-                4, 5 -> 0
-                else -> assignScrollLane(laneBusyUntil, now, massive)
+        active.removeAll { item -> item.startMs + item.lifeMs < now }
+        // 文本测量准备
+        textPaint.textSize = fontSizePx
+        textPaint.typeface = typefaceFor(fontWeight)
+
+        val (_, trackCount) = calcTracks(canvasSize.height)
+
+        currentDanmakus.forEach { entry ->
+            if (!shouldShowType(entry, showScroll, showTop, showBottom)) return@forEach
+            val widthPx = textPaint.measureText(entry.message).toFloat() + borderSize.coerceAtLeast(0f)
+            val type = entry.type
+            // 存活时长在创建时冻结：倍速切换会改变 durationSeconds，
+            // 若让在場弹幕跟着重算，progress 会突变导致整屏回弹。
+            val lifeMs = if (isStaticType(type)) staticLifeMs else lifeMsTotal
+            var lane = -1
+            if (isStaticType(type)) {
+                // 顶部/底部：找一条该类型空闲轨道（原版 _top/_bottomCanAddToTrack）
+                // 底部弹幕额外遵守 safeArea：最下面那条轨留给字幕（原版 yPosition <= danmakuHeight 时不可用）
+                val firstLane = if (type == 4 && safeArea) 1 else 0
+                for (i in firstLane until trackCount) {
+                    val busy = active.any {
+                        it.entry.type == type && it.lane == i && it.startMs + it.lifeMs > now
+                    }
+                    if (!busy) {
+                        lane = i
+                        break
+                    }
+                }
+                // 原版：静态弹幕轨道占满就直接丢弃，海量模式也不会叠加
+                if (lane < 0) return@forEach
+            } else {
+                // 滚动：不重叠 + 不追尾（原版 _scrollCanAddToTrack）
+                for (i in 0 until trackCount) {
+                    if (scrollLaneFree(i, active, now, w, widthPx)) {
+                        lane = i
+                        break
+                    }
+                }
+                // 原版：滚动弹幕轨道占满时，海量模式随机挑一条轨叠加，否则丢弃
+                if (lane < 0) {
+                    if (!massive) return@forEach
+                    lane = Random.nextInt(trackCount)
+                }
             }
             active.add(
                 ActiveDanmaku(
                     entry = entry,
-                    startMs = now + stagger(index),
-                    lane = lane
+                    startMs = now,
+                    lane = lane,
+                    widthPx = widthPx,
+                    lifeMs = lifeMs
                 )
             )
         }
         // 缓冲上限：异常情况（如长时间暂停后恢复）不至于无限堆积
-        if (active.size > 400) {
-            repeat(active.size - 400) { active.removeAt(0) }
+        if (active.size > 600) {
+            repeat(active.size - 600) { active.removeAt(0) }
         }
     }
 
-    // 每秒淘汰过期弹幕；关闭弹幕或不可见时清空
+    // 周期淘汰过期弹幕；关闭弹幕或不可见时清空
     LaunchedEffect(danmakuOn, visible) {
         while (true) {
             delay(1000)
             if (!visible || !danmakuOn) {
                 if (active.isNotEmpty()) active.clear()
-                laneBusyUntil.clear()
             } else {
                 val now = clockMs
-                active.removeAll { it.startMs + lifeMsTotal < now }
+                active.removeAll { item -> item.startMs + item.lifeMs < now }
             }
         }
     }
 
-    Canvas(modifier = modifier) {
+    Canvas(modifier = modifier.onSizeChanged {
+        canvasSize = Size(it.width.toFloat(), it.height.toFloat())
+    }) {
         if (!visible || !danmakuOn || active.isEmpty()) return@Canvas
         val w = size.width
         val h = size.height
-        val areaHeight = h * area.coerceIn(0.1f, 1f)
-
-        // 计算滚动速度：视口宽度 / 持续时间
-        val scrollSpeed = w / (durationSeconds * 1000).toFloat()
-
+        if (w <= 0f || h <= 0f) return@Canvas
+        val (track, trackCount) = calcTracks(h)
         val now = clockMs
-        active.forEach { item ->
-            val entry = item.entry
-            val elapsed = now - item.startMs
-            if (elapsed < 0) return@forEach
-            val lifeMs = (durationSeconds * 1000).toLong()
-            if (elapsed > lifeMs) return@forEach
-
-            val type = entry.type
-            val y = when (type) {
-                4 -> { // 底部
-                    areaHeight + item.lane * textSizePx * lineHeight + textSizePx * 0.5f
+        // 整层裁剪到播放器画面内，绝不画到画面外
+        clipRect(0f, 0f, w, h) {
+            active.forEach { item ->
+                val entry = item.entry
+                val life = item.lifeMs
+                val elapsed = now - item.startMs
+                if (elapsed < 0L || elapsed > life) return@forEach
+                if (item.lane >= trackCount) return@forEach
+                val topY: Float
+                val x: Float
+                when (entry.type) {
+                    5 -> { // 顶部：从顶部向下
+                        topY = item.lane * track
+                        x = (w - item.widthPx) / 2f
+                    }
+                    4 -> { // 底部：从画面底部向上
+                        topY = h - (item.lane + 1) * track
+                        x = (w - item.widthPx) / 2f
+                    }
+                    else -> { // 滚动：右 -> 左
+                        val progress = elapsed.toFloat() / life.toFloat()
+                        topY = item.lane * track
+                        x = w - progress * (w + item.widthPx)
+                    }
                 }
-                5 -> { // 顶部
-                    item.lane * textSizePx * lineHeight + textSizePx * 0.5f
-                }
-                else -> { // 滚动
-                    item.lane * textSizePx * lineHeight + textSizePx * 0.5f
-                }
+                val color = if (entry.color != 0xFFFFFFL && entry.color != 0L) {
+                    Color(DanmakuUtils.generateDanmakuColor(entry.color))
+                } else {
+                    Color.White
+                }.copy(alpha = opacity.coerceIn(0.05f, 1f))
+                drawDanmakuText(
+                    text = entry.message,
+                    x = x,
+                    topY = topY,
+                    color = color,
+                    textSizePx = fontSizePx,
+                    fontWeight = fontWeight,
+                    border = border,
+                    borderSize = borderSize,
+                    textPaint = textPaint,
+                    strokePaint = strokePaint
+                )
             }
-            val x = when (type) {
-                4 -> w / 2f - textSizePx * entry.message.length * 0.5f
-                5 -> w / 2f - textSizePx * entry.message.length * 0.5f
-                else -> {
-                    val progress = elapsed.toFloat() / lifeMs.toFloat()
-                    w - progress * (w + textSizePx * entry.message.length)
-                }
-            }
-
-            val color = if (entry.color != 0xFFFFFFL && entry.color != 0L) {
-                Color(DanmakuUtils.generateDanmakuColor(entry.color))
-            } else {
-                Color.White
-            }.copy(alpha = opacity)
-
-            drawDanmakuText(
-                text = entry.message,
-                x = x,
-                y = y,
-                color = color,
-                textSizePx = textSizePx,
-                fontWeight = fontWeight,
-                border = border,
-                borderSize = borderSize
-            )
         }
     }
 }
+
+/** 滚动弹幕存活期内的 x 坐标（原版：起点 = 画面宽度，终点 = -文本宽度） */
+private fun scrollX(item: ActiveDanmaku, now: Long, viewWidth: Float): Float {
+    val progress = ((now - item.startMs).toFloat() / item.lifeMs.toFloat()).coerceIn(0f, 1f)
+    return viewWidth - progress * (viewWidth + item.widthPx)
+}
+
+private fun isStaticType(type: Int): Boolean = type == 4 || type == 5
+
+private fun typefaceFor(fontWeight: Int): android.graphics.Typeface =
+    android.graphics.Typeface.create(
+        android.graphics.Typeface.DEFAULT,
+        if (fontWeight >= 6) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+    )
+
+/** 活跃弹幕（已排期） */
+private data class ActiveDanmaku(
+    val entry: DanmakuEntry,
+    val startMs: Long,
+    val lane: Int,
+    val widthPx: Float,
+    val lifeMs: Long
+)
 
 private fun shouldShowType(entry: DanmakuEntry, scroll: Boolean, top: Boolean, bottom: Boolean): Boolean =
     when (entry.type) {
@@ -241,72 +347,66 @@ private fun shouldShowType(entry: DanmakuEntry, scroll: Boolean, top: Boolean, b
         else -> scroll
     }
 
-/** 滚动轨道分配：在已占用轨道中找空闲，或开新轨（非海量时复用最空闲轨） */
-private fun assignScrollLane(
-    laneBusyUntil: ConcurrentHashMap<Int, Long>,
+/**
+ * 某条滚动轨道能否放入新弹幕（原版 canvas_danmaku _scrollCanAddToTrack 的等价实现）
+ *
+ * 原版规则：
+ * 1) 轨道上已有弹幕只要还有一部分露在画面右边缘（viewWidth - (x + width) < 0），该轨直接不可用；
+ * 2) 若已有弹幕比新弹幕窄（速度快），还要保证新弹幕在它完全移出前追不上它。
+ */
+private fun scrollLaneFree(
+    lane: Int,
+    active: List<ActiveDanmaku>,
     now: Long,
-    massive: Boolean
-): Int {
-    val maxLanes = 20
-    // 找完全空闲
-    for (lane in 0 until maxLanes) {
-        val busy = laneBusyUntil[lane] ?: 0L
-        if (busy <= now) {
-            laneBusyUntil[lane] = now + 8_000L
-            return lane
+    viewWidth: Float,
+    newWidth: Float
+): Boolean {
+    for (item in active) {
+        if (isStaticType(item.entry.type) || item.lane != lane) continue
+        val existingX = scrollX(item, now, viewWidth)
+        val existingEnd = existingX + item.widthPx
+        if (viewWidth - existingEnd < 0f) return false
+        if (item.widthPx < newWidth) {
+            val existingProgress = 1f - ((viewWidth - existingX) / (item.widthPx + viewWidth))
+            if (existingProgress > viewWidth / (viewWidth + newWidth)) return false
         }
     }
-    // 海量模式：直接叠加在最短占用轨
-    if (massive) {
-        val lane = laneBusyUntil.entries.minByOrNull { it.value }?.key ?: 0
-        laneBusyUntil[lane] = now + 8_000L
-        return lane
-    }
-    // 非海量：占用最短的轨道
-    val lane = laneBusyUntil.entries.minByOrNull { it.value }?.key ?: 0
-    laneBusyUntil[lane] = now + 8_000L
-    return lane
+    return true
 }
-
-/** 弹幕错峰（同秒多条时按序号错开 0-1000ms） */
-private fun stagger(index: Int): Long = (index % 10) * 80L
 
 /**
  * 绘制单条弹幕文本（含描边）
+ * @param topY 文本行顶部（不是 baseline）
  */
 private fun DrawScope.drawDanmakuText(
     text: String,
     x: Float,
-    y: Float,
+    topY: Float,
     color: Color,
     textSizePx: Float,
     fontWeight: Int,
     border: Boolean,
-    borderSize: Float
+    borderSize: Float,
+    textPaint: android.graphics.Paint,
+    strokePaint: android.graphics.Paint
 ) {
-    // 绘制单条弹幕文本（含描边）：统一用 android.graphics.Paint + nativeCanvas 绘制
-    val androidPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+    val typeface = typefaceFor(fontWeight)
+    textPaint.apply {
         this.color = color.toArgb()
         textSize = textSizePx
-        typeface = android.graphics.Typeface.create(
-            android.graphics.Typeface.DEFAULT,
-            if (fontWeight >= 6) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
-        )
+        this.typeface = typeface
     }
+    val baseline = topY - textPaint.fontMetrics.ascent
     val native = drawContext.canvas.nativeCanvas
-    if (border) {
-        val strokePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+    if (border && borderSize > 0f) {
+        strokePaint.apply {
             style = android.graphics.Paint.Style.STROKE
             strokeWidth = borderSize * 2f
             this.color = android.graphics.Color.BLACK
             textSize = textSizePx
-            typeface = androidPaint.typeface
+            this.typeface = typeface
         }
-        native.drawText(text, x, y, strokePaint)
+        native.drawText(text, x, baseline, strokePaint)
     }
-    native.drawText(text, x, y, androidPaint)
+    native.drawText(text, x, baseline, textPaint)
 }
-
-/** 弹幕文本近似宽度（供轨道/进度计算） */
-internal fun danmakuTextWidth(text: String, textSizePx: Float): Float =
-    text.length * textSizePx * 0.9f

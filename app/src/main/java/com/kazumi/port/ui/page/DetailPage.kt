@@ -65,6 +65,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -93,6 +94,7 @@ import com.kazumi.port.ui.components.RelatedBangumiCard
 import com.kazumi.port.ui.components.StaffCard
 import com.kazumi.port.ui.components.rememberToast
 import com.kazumi.port.ui.navigation.Routes
+import com.kazumi.port.util.CoverSaver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -415,6 +417,8 @@ fun DetailPage(
                         }
                         // 更多操作（对齐原版 InfoActionsMenu：保存封面/复制标题/外部打开）
                         var menuExpanded by remember { mutableStateOf(false) }
+                        var savingCover by remember { mutableStateOf(false) }
+                        val context = LocalContext.current
                         Box {
                             IconButton(onClick = { menuExpanded = true }) {
                                 Icon(Icons.Filled.MoreHoriz, contentDescription = "更多操作")
@@ -422,17 +426,54 @@ fun DetailPage(
                             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false },
                                 containerColor = MaterialTheme.colorScheme.surface) {
                                 DropdownMenuItem(
+                                    text = { Text(if (savingCover) "保存中…" else "保存封面") },
+                                    enabled = !savingCover,
+                                    onClick = {
+                                        menuExpanded = false
+                                        savingCover = true
+                                        scope.launch {
+                                            val url = bangumi.coverUrl()
+                                            if (url.isBlank()) {
+                                                showToast("暂无封面")
+                                            } else {
+                                                val ok = CoverSaver.saveCoverFromUrl(
+                                                    context,
+                                                    url,
+                                                    CoverSaver.fileName(bangumi.displayName(), bangumi.id)
+                                                )
+                                                showToast(if (ok) "已保存到相册" else "封面保存失败，请重试")
+                                            }
+                                            savingCover = false
+                                        }
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("复制标题") },
                                     onClick = {
                                         menuExpanded = false
-                                        showToast("标题已复制")
+                                        val title = bangumi.displayName()
+                                        if (title.isBlank()) {
+                                            showToast("复制失败，请重试")
+                                        } else {
+                                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                                as? android.content.ClipboardManager
+                                            cm?.setPrimaryClip(
+                                                android.content.ClipData.newPlainText("title", title)
+                                            )
+                                            showToast("标题已复制")
+                                        }
                                     }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("外部打开") },
                                     onClick = {
                                         menuExpanded = false
-                                        showToast("外部打开")
+                                        val intent = android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse("https://bangumi.tv/subject/${bangumi.id}")
+                                        )
+                                        val ok = runCatching { context.startActivity(intent) }.isSuccess
+                                        if (!ok) showToast("无法打开浏览器")
                                     }
                                 )
                             }
@@ -559,6 +600,7 @@ fun DetailPage(
     if (showSourceSheet && bangumi != null) {
         SourceSheet(
             keyword = bangumi!!.displayName(),
+            aliases = bangumi!!.alias,
             onPlay = { pluginName, src, title ->
                 showSourceSheet = false
                 scope.launch {

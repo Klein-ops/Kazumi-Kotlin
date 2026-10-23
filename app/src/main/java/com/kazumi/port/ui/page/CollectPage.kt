@@ -1,6 +1,9 @@
 package com.kazumi.port.ui.page
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,6 +31,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -67,14 +72,24 @@ private val collectTabs = listOf(
  */
 @Composable
 fun CollectPage(navController: NavHostController) {
+    val showRating = com.kazumi.port.ui.components.rememberShowRating()
     val app = remember { KazumiApp.get() }
     var selectedType by remember { mutableIntStateOf(0) }
     var allItems by remember { mutableStateOf<List<CollectedBangumi>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var listLayout by remember { mutableStateOf(false) } // false=卡片  true=列表
+    var sort by remember { mutableIntStateOf(0) }
     var syncing by remember { mutableStateOf(false) }
     var syncTrigger by remember { mutableIntStateOf(0) }
     val toast = com.kazumi.port.ui.components.rememberToast()
+    // 布局默认值取设置 defaultCollectLayout（原版默认 'list'）
+    LaunchedEffect(Unit) {
+        val layout = app.settings.getString(
+            com.kazumi.port.data.repository.SettingsManager.Interface.DEFAULT_COLLECT_LAYOUT,
+            "list"
+        )
+        listLayout = layout == "list"
+    }
 
     LaunchedEffect(Unit) {
         isLoading = true
@@ -130,7 +145,20 @@ fun CollectPage(navController: NavHostController) {
         }
     }
 
-    val filtered = if (selectedType == 0) allItems else allItems.filter { it.type == selectedType }
+    // 类型数量（原版标签形如「全部，12 部」）
+    fun countOf(type: Int): Int =
+        if (type == 0) allItems.size else allItems.count { it.type == type }
+
+    // 排序（原版 CollectSort：最近变更/番剧名称/评分最高/开播时间，默认最近变更）
+    val sorted = allItems.sortedWith { a, b ->
+        when (sort) {
+            1 -> a.bangumiItem.displayName().compareTo(b.bangumiItem.displayName())
+            2 -> b.bangumiItem.ratingScore.compareTo(a.bangumiItem.ratingScore)
+            3 -> b.bangumiItem.airDate.compareTo(a.bangumiItem.airDate)
+            else -> b.time.compareTo(a.time)
+        }
+    }
+    val filtered = if (selectedType == 0) sorted else sorted.filter { it.type == selectedType }
 
     MainScaffold(navController) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -154,6 +182,30 @@ fun CollectPage(navController: NavHostController) {
                         Spacer(Modifier.width(4.dp))
                         Text("同步")
                     }
+                    // 排序（对齐原版 CollectSort 菜单）
+                    var sortMenu by remember { mutableStateOf(false) }
+                    val sortLabels = listOf("最近变更", "番剧名称", "评分最高", "开播时间")
+                    Box {
+                        TextButton(onClick = { sortMenu = true }) {
+                            Text(sortLabels[sort])
+                        }
+                        DropdownMenu(
+                            expanded = sortMenu,
+                            onDismissRequest = { sortMenu = false },
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ) {
+                            sortLabels.forEachIndexed { index, label ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        sort = index
+                                        sortMenu = false
+                                        toast("排序：$label")
+                                    }
+                                )
+                            }
+                        }
+                    }
                     IconButton(onClick = { listLayout = !listLayout }) {
                         Icon(
                             imageVector = if (listLayout) Icons.Filled.GridView else Icons.Filled.ViewList,
@@ -164,19 +216,25 @@ fun CollectPage(navController: NavHostController) {
             )
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 collectTabs.forEach { (label, type) ->
                     val selected = type == selectedType
+                    // 原版标签形如「全部，12 部」
+                    val text = "$label，${countOf(type)} 部"
                     Text(
-                        text = label,
-                        style = if (selected) MaterialTheme.typography.titleMedium
-                        else MaterialTheme.typography.bodyMedium,
+                        text = text,
+                        style = if (selected) MaterialTheme.typography.titleSmall
+                        else MaterialTheme.typography.bodySmall,
                         color = if (selected) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
                         modifier = Modifier
-                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                            .padding(horizontal = 8.dp, vertical = 10.dp)
                             .clickable { selectedType = type }
                     )
                 }
@@ -195,6 +253,7 @@ fun CollectPage(navController: NavHostController) {
                     ) {
                         items(filtered, key = { it.bangumiItem.id }) { collected ->
                             BangumiCard(
+                                showRating = showRating,
                                 item = collected.bangumiItem,
                                 onClick = {
                                     navController.navigate(Routes.detail(collected.bangumiItem.id))
@@ -234,7 +293,7 @@ fun CollectPage(navController: NavHostController) {
                                         maxLines = 1,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
-                                    if (item.ratingScore > 0) {
+                                    if (showRating && item.ratingScore > 0) {
                                         Text(
                                             text = "评分 ${String.format("%.1f", item.ratingScore)}",
                                             style = MaterialTheme.typography.bodySmall,

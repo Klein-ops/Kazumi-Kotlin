@@ -45,7 +45,7 @@ fun InterfaceSettingsPage(navController: NavHostController) {
     LaunchedEffect(Unit) {
         showRating = settings.getBoolean(SettingsManager.Interface.SHOW_RATING, true)
         defaultPage = settings.getString(SettingsManager.Interface.DEFAULT_STARTUP_PAGE, "/tab/popular/")
-        collectLayout = settings.getString(SettingsManager.Interface.DEFAULT_COLLECT_LAYOUT, "grid")
+        collectLayout = settings.getString(SettingsManager.Interface.DEFAULT_COLLECT_LAYOUT, "list")
     }
 
     val pageLabels = mapOf(

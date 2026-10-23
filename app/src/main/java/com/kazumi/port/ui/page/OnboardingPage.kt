@@ -62,7 +62,7 @@ private val stepLabels = listOf("使用约定", "访问加速", "添加规则")
 /**
  * 首次引导页（对应原版 onboarding_page.dart）
  * 3 步：使用约定（免责声明）→ 访问加速（网络镜像）→ 添加规则
- * 完成时写入 onboardingDone=true 并跳转默认启动页
+ * 完成时写入 onboardingCompleted=true（与原版键名一致）并跳转默认启动页
  */
 @Composable
 fun OnboardingPage(navController: NavHostController) {
@@ -81,13 +81,13 @@ fun OnboardingPage(navController: NavHostController) {
     var enableGitProxy by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        bangumiAcceleration = settings.getString(SettingsManager.Proxy.BANGUMI_ACCELERATION, "mirror")
+        bangumiAcceleration = settings.bangumiAcceleration()
         imageAcceleration = settings.getString(SettingsManager.Proxy.IMAGE_ACCELERATION, "ech")
         enableGitProxy = settings.getBoolean(SettingsManager.Proxy.ENABLE_GIT_PROXY, true)
     }
 
     suspend fun finishOnboarding() {
-        settings.setBoolean(SettingsManager.Interface.ONBOARDING_DONE, true)
+        settings.setBoolean(SettingsManager.Interface.ONBOARDING_COMPLETED, true)
         val defaultPage = settings.getString(
             SettingsManager.Interface.DEFAULT_STARTUP_PAGE,
             SettingsManager.DEFAULT_STARTUP_PAGE
@@ -111,8 +111,8 @@ fun OnboardingPage(navController: NavHostController) {
                 }
             }
             pagerState.currentPage == 2 -> {
-                // 最后一步：检查是否安装过额外规则（对齐原版《暂不添加规则？》对话框）
-                if (app.pluginRepository.allPlugins().size <= 2) {
+                // 最后一步：检查是否已安装规则（原版：没有规则时提示“暂不添加规则？”）
+                if (app.pluginRepository.allPlugins().isEmpty()) {
                     showSkipDialog = true
                 } else {
                     scope.launch { finishOnboarding() }
@@ -159,7 +159,7 @@ fun OnboardingPage(navController: NavHostController) {
                             }
                         }
                     )
-                    else -> PluginShopStepContent(onOpenShop = {
+                    else -> OnboardingCatalogStep(onOpenShop = {
                         navController.navigate(Routes.SETTINGS_PLUGIN_SHOP)
                     })
                 }
@@ -206,7 +206,7 @@ fun OnboardingPage(navController: NavHostController) {
             containerColor = MaterialTheme.colorScheme.surface,
             icon = { Icon(Icons.Filled.WarningAmber, contentDescription = null) },
             title = { Text("暂不添加规则？") },
-            text = { Text("你还没有安装额外规则。仅使用内置规则可能导致部分番剧无法搜索或播放，影响观看体验。\n\n确定仍要继续吗？") },
+            text = { Text("没有规则时无法搜索和播放番剧。之后也可以在规则管理中添加。") },
             confirmButton = {
                 TextButton(onClick = {
                     showSkipDialog = false
@@ -214,7 +214,8 @@ fun OnboardingPage(navController: NavHostController) {
                 }) { Text("仍然继续") }
             },
             dismissButton = {
-                Button(onClick = { showSkipDialog = false }) { Text("返回安装") }
+                // 原版：返回添加为主按钮
+                Button(onClick = { showSkipDialog = false }) { Text("返回添加") }
             }
         )
     }

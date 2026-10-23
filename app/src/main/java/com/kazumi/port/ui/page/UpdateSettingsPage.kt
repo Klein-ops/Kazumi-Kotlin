@@ -32,10 +32,9 @@ fun UpdateSettingsPage(navController: NavHostController) {
     val settings = app.settings
     val scope = rememberCoroutineScope()
 
-    var checkPluginUpdate by remember { mutableStateOf(false) }
-
+var checkPluginUpdate by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
-        checkPluginUpdate = settings.getBoolean(SettingsManager.Update.CHECK_PLUGIN_UPDATE_ON_STARTUP, false)
+        checkPluginUpdate = settings.getBoolean(SettingsManager.Update.CHECK_PLUGIN_UPDATE_ON_STARTUP, true)
     }
 
     SettingsSubPageScaffold(

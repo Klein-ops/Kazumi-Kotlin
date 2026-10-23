@@ -79,9 +79,9 @@ fun DownloadSettingsPage(navController: NavHostController) {
     }
 
     LaunchedEffect(Unit) {
-        parallelEpisodes = settings.getInt(SettingsManager.Download.PARALLEL_EPISODES, 1)
-        parallelSegments = settings.getInt(SettingsManager.Download.PARALLEL_SEGMENTS, 5)
-        downloadDanmaku = settings.getBoolean(SettingsManager.Download.DANMAKU, false)
+        parallelEpisodes = settings.getInt(SettingsManager.Download.PARALLEL_EPISODES, 2)
+        parallelSegments = settings.getInt(SettingsManager.Download.PARALLEL_SEGMENTS, 3)
+        downloadDanmaku = settings.getBoolean(SettingsManager.Download.DANMAKU, true)
         downloadDirectory = settings.getString(SettingsManager.Download.DIRECTORY, "")
     }
 
@@ -160,9 +160,9 @@ fun DownloadSettingsPage(navController: NavHostController) {
                     leading = Icons.Filled.Restore,
                     onClick = {
                         scope.launch {
-                            settings.setInt(SettingsManager.Download.PARALLEL_EPISODES, 1)
-                            settings.setInt(SettingsManager.Download.PARALLEL_SEGMENTS, 5)
-                            settings.setBoolean(SettingsManager.Download.DANMAKU, false)
+                            settings.setInt(SettingsManager.Download.PARALLEL_EPISODES, 2)
+                            settings.setInt(SettingsManager.Download.PARALLEL_SEGMENTS, 3)
+                            settings.setBoolean(SettingsManager.Download.DANMAKU, true)
                         }
                         parallelEpisodes = 1
                         parallelSegments = 5

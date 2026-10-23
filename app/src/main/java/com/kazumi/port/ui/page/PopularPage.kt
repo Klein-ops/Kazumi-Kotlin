@@ -68,6 +68,7 @@ private fun tagLabel(tag: String) = if (tag.isEmpty()) "热门番组" else tag
  */
 @Composable
 fun PopularPage(navController: NavHostController) {
+    val showRating = com.kazumi.port.ui.components.rememberShowRating()
     var bangumiList by remember { mutableStateOf<List<BangumiItem>>(emptyList()) }
     var currentTag by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
@@ -81,12 +82,9 @@ fun PopularPage(navController: NavHostController) {
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
 
-    /** 读取 Bangumi 加速模式（与 BangumiClient 同源，默认 mirror） */
+    /** 读取 Bangumi 加速模式（与 BangumiClient 同源：未设置时回落到 enableBangumiProxy → 镜像） */
     suspend fun readAcceleration(): String = try {
-        KazumiApp.get().settings.getString(
-            com.kazumi.port.data.repository.SettingsManager.Proxy.BANGUMI_ACCELERATION,
-            "mirror"
-        )
+        KazumiApp.get().settings.bangumiAcceleration()
     } catch (e: Exception) {
         "mirror"
     }
@@ -234,6 +232,7 @@ fun PopularPage(navController: NavHostController) {
                     ) {
                         items(bangumiList, key = { it.id }) { item ->
                             BangumiCard(
+                                showRating = showRating,
                                 item = item,
                                 onClick = {
                                     navController.navigate(

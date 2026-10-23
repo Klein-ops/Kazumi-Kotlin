@@ -529,7 +529,7 @@ class DownloadController(
                 )
             )
 
-            if (settings.getBoolean(SettingsManager.Download.DANMAKU, false)) {
+            if (settings.getBoolean(SettingsManager.Download.DANMAKU, true)) {
                 fetchAndCacheDanmakuAsync(
                     request.recordKey,
                     request.bangumiId,

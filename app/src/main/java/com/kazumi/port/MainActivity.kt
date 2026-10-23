@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
         }
         scope.launch {
             try {
-                val enabled = app.settings.getBoolean(SettingsManager.Update.CHECK_PLUGIN_UPDATE_ON_STARTUP, false)
+                val enabled = app.settings.getBoolean(SettingsManager.Update.CHECK_PLUGIN_UPDATE_ON_STARTUP, true)
                 val count = app.pluginRepository.checkPluginUpdatesOnStartup(enabled)
                 if (count != 0) {
                     // 检测到可更新规则，可由规则管理页提示（此处静默）
@@ -103,7 +103,9 @@ class MainActivity : ComponentActivity() {
             var startReady by remember { mutableStateOf(false) }
             var startDest by remember { mutableStateOf(Routes.POPULAR) }
             LaunchedEffect(Unit) {
-                val done = settings.getBoolean(SettingsManager.Interface.ONBOARDING_DONE, false)
+                // 原版键名 onboardingCompleted；旧移植版写过 onboardingDone，一并兼容读取
+                val done = settings.getBoolean(SettingsManager.Interface.ONBOARDING_COMPLETED, false) ||
+                    settings.getBoolean(SettingsManager.Interface.LEGACY_ONBOARDING_DONE, false)
                 startDest = if (done) Routes.POPULAR else Routes.ONBOARDING
                 startReady = true
             }
