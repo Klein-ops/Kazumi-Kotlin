@@ -6,7 +6,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,7 +25,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.stickyHeader
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountTree
@@ -55,6 +54,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -113,7 +113,7 @@ private val INFO_TABS = listOf("概览", "吐槽", "角色", "关联", "制作�
  * 番剧详情页（对应原版 info_page.dart + info_tabview.dart）
  * 5 个 Tab：概览 / 吐槽（评论区）/ 角色 / 关联 / 制作人员
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailPage(
     navController: NavHostController,
@@ -510,85 +510,110 @@ fun DetailPage(
                 else -> {
                     val item = bangumi!!
                     val selectedTab = tabIndex
-                    // 统一滚动：头部作为普通 item 参与滚动，TabRow 用 stickyHeader 吸顶，
-                    // 5 个 Tab 的内容全部展开进同一个 LazyColumn（对齐原版 NestedScrollView + SliverAppBar）
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        item {
-                            DetailHeader(item)
-                        }
-                        stickyHeader(key = "tab_row") {
-                            TabRow(selectedTabIndex = selectedTab) {
-                                INFO_TABS.forEachIndexed { index, title ->
-                                    Tab(
-                                        selected = selectedTab == index,
-                                        onClick = { tabIndex = index },
-                                        text = { Text(title) }
-                                    )
+                    // 统一滚动：头部作为普通 item 参与滚动，TabRow 吸顶。
+                    // 手写吸顶（不依赖 stickyHeader）：header 是 index 0，tab 是 index 1，
+                    // 当 firstVisibleItemIndex >= 1 说明头部已滚出、tab 顶到顶部，就在上方盖一层固定 TabRow。
+                    val listState = rememberLazyListState()
+                    val showStickyTabs by remember {
+                        derivedStateOf { listState.firstVisibleItemIndex >= 1 }
+                    }
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                            item {
+                                DetailHeader(item)
+                            }
+                            item(key = "tab_row") {
+                                TabRow(selectedTabIndex = selectedTab) {
+                                    INFO_TABS.forEachIndexed { index, title ->
+                                        Tab(
+                                            selected = selectedTab == index,
+                                            onClick = { tabIndex = index },
+                                            text = { Text(title) }
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        when (selectedTab) {
-                            0 -> OverviewTabContent(item = item, onOpenReview = {
-                                if (collectType == 0) {
-                                    showToast("请先追番")
-                                } else {
-                                    showReviewSheet = true
-                                }
-                            }, onTagClick = { tagName ->
-                                navController.navigate(Routes.SEARCH)
-                                scope.launch {
-                                    kotlinx.coroutines.delay(150)
-                                    navController.currentBackStackEntry?.savedStateHandle
-                                        ?.set("image_search_keyword", tagName)
-                                }
-                            })
-                            1 -> CommentsTabContent(
-                                comments = comments,
-                                loading = commentsLoading,
-                                loaded = commentsLoaded,
-                                error = commentsError,
-                                hasReview = item.interest?.hasReviewContent == true,
-                                onReviewTap = {
+                            when (selectedTab) {
+                                0 -> OverviewTabContent(item = item, onOpenReview = {
                                     if (collectType == 0) {
                                         showToast("请先追番")
                                     } else {
                                         showReviewSheet = true
                                     }
-                                },
-                                onRetry = { loadComments() },
-                                onLoadMore = { loadComments(loadMore = true) }
-                            )
-                            2 -> CharactersTabContent(
-                                characters = characters,
-                                loading = charactersLoading,
-                                error = charactersError,
-                                empty = charactersEmpty,
-                                onRetry = { loadCharacters() },
-                                onCharacterClick = { character ->
-                                    selectedCharacter = character
-                                }
-                            )
-                            3 -> RelationsTabContent(
-                                relations = relations,
-                                loading = relationsLoading,
-                                error = relationsError,
-                                loaded = relationsLoaded,
-                                onRetry = { loadRelations() },
-                                onRelationClick = { relation ->
-                                    if (relation.bangumiItem.id > 0) {
-                                        navController.navigate(
-                                            Routes.detail(relation.bangumiItem.id)
+                                }, onTagClick = { tagName ->
+                                    navController.navigate(Routes.SEARCH)
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(150)
+                                        navController.currentBackStackEntry?.savedStateHandle
+                                            ?.set("image_search_keyword", tagName)
+                                    }
+                                })
+                                1 -> CommentsTabContent(
+                                    comments = comments,
+                                    loading = commentsLoading,
+                                    loaded = commentsLoaded,
+                                    error = commentsError,
+                                    hasReview = item.interest?.hasReviewContent == true,
+                                    onReviewTap = {
+                                        if (collectType == 0) {
+                                            showToast("请先追番")
+                                        } else {
+                                            showReviewSheet = true
+                                        }
+                                    },
+                                    onRetry = { loadComments() },
+                                    onLoadMore = { loadComments(loadMore = true) }
+                                )
+                                2 -> CharactersTabContent(
+                                    characters = characters,
+                                    loading = charactersLoading,
+                                    error = charactersError,
+                                    empty = charactersEmpty,
+                                    onRetry = { loadCharacters() },
+                                    onCharacterClick = { character ->
+                                        selectedCharacter = character
+                                    }
+                                )
+                                3 -> RelationsTabContent(
+                                    relations = relations,
+                                    loading = relationsLoading,
+                                    error = relationsError,
+                                    loaded = relationsLoaded,
+                                    onRetry = { loadRelations() },
+                                    onRelationClick = { relation ->
+                                        if (relation.bangumiItem.id > 0) {
+                                            navController.navigate(
+                                                Routes.detail(relation.bangumiItem.id)
+                                            )
+                                        }
+                                    }
+                                )
+                                4 -> StaffTabContent(
+                                    staffs = staffs,
+                                    loading = staffLoading,
+                                    error = staffError,
+                                    empty = staffEmpty,
+                                    onRetry = { loadStaff() }
+                                )
+                            }
+                        }
+                        // 吸顶层：头部滚出后固定 TabRow
+                        if (showStickyTabs) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surface)
+                            ) {
+                                TabRow(selectedTabIndex = selectedTab) {
+                                    INFO_TABS.forEachIndexed { index, title ->
+                                        Tab(
+                                            selected = selectedTab == index,
+                                            onClick = { tabIndex = index },
+                                            text = { Text(title) }
                                         )
                                     }
                                 }
-                            )
-                            4 -> StaffTabContent(
-                                staffs = staffs,
-                                loading = staffLoading,
-                                error = staffError,
-                                empty = staffEmpty,
-                                onRetry = { loadStaff() }
-                            )
+                            }
                         }
                     }
                 }
