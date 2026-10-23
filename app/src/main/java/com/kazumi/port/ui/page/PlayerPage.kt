@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AspectRatio
@@ -66,9 +68,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.foundation.layout.width
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalTextStyle
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -929,7 +929,7 @@ fun PlayerPage(
                                 androidx.compose.foundation.text.BasicTextField(
                                     value = danmakuInput,
                                     onValueChange = { danmakuInput = it.take(100) },
-                                    textStyle = LocalTextStyle.current.copy(color = Color.White, fontSize = 13.sp),
+                                    textStyle = MaterialTheme.typography.bodySmall.copy(color = Color.White, fontSize = 13.sp),
                                     singleLine = true,
                                     modifier = Modifier
                                         .fillMaxSize()
