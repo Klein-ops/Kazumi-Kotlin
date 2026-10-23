@@ -85,6 +85,7 @@ import androidx.media3.ui.PlayerView
 import com.kazumi.port.KazumiApp
 import com.kazumi.port.data.model.DanmakuEntry
 import com.kazumi.port.data.repository.BangumiApi
+import com.kazumi.port.data.repository.History
 import com.kazumi.port.data.repository.SettingsManager
 import com.kazumi.port.network.BangumiClient
 import com.kazumi.port.player.PlaybackInitParams
@@ -524,6 +525,11 @@ fun PlayerPage(
     // 定时刷新进度 + 弹幕调度
     LaunchedEffect(Unit) {
         var lastQueryMs = -1L
+        // 历史写入节流：播放中每 3 秒写一次（对齐原版每秒但降低写频），
+        // 首次进入播放页也会立即建历史条目（progressMs=0）。
+        var lastHistoryWriteMs = -1L
+        // 补名完成前先用 id 构造条目，补名后下次写入自动带名字
+        var lastHistoryName = ""
         while (true) {
             playerController.tickProgress()
             val pos = playerController.currentPosition()
@@ -548,6 +554,42 @@ fun PlayerPage(
                 danmakuDurationSec = playerController.danmaku.danmakuDurationForSpeed(
                     playerController.playbackSpeed
                 )
+            }
+            // 观看历史写入（对齐原版：播放中 + 非加载中 + 可记录才写）
+            val canRecordHistory = playerController.isPlaying() &&
+                !isResolving && uiState.isLoading.not()
+            if (canRecordHistory) {
+                val now = System.currentTimeMillis()
+                val nameChanged = bangumiTitle.isNotBlank() && bangumiTitle != lastHistoryName
+                if (lastHistoryWriteMs < 0 || now - lastHistoryWriteMs >= 3_000 || nameChanged) {
+                    lastHistoryWriteMs = now
+                    lastHistoryName = bangumiTitle
+                    val dur = uiState.durationMs
+                    val progress = if (dur > 0 && pos >= dur - 5_000) 0L else pos
+                    scope.launch {
+                        // 隐私模式跳过（对齐原版 getPrivateMode）
+                        if (app.settings.isPrivateMode()) return@launch
+                        val item = if (bangumiTitle.isNotBlank()) {
+                            com.kazumi.port.data.model.BangumiItem(
+                                id = bangumiId,
+                                name = bangumiTitle,
+                                nameCn = bangumiTitle
+                            )
+                        } else {
+                            com.kazumi.port.data.model.BangumiItem(id = bangumiId, name = "第${episode}集")
+                        }
+                        app.historyRepository.recordWatch(
+                            adapterName = pluginName,
+                            bangumiItem = item,
+                            episode = episode,
+                            episodeName = "第${episode}集",
+                            src = src,
+                            entryKind = if (isLocal) History.KIND_OFFLINE else History.KIND_ONLINE,
+                            progressMs = progress,
+                            road = road
+                        )
+                    }
+                }
             }
             delay(200)
         }

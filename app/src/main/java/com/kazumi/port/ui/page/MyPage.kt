@@ -33,9 +33,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,16 +56,16 @@ import com.kazumi.port.ui.navigation.Routes
 @Composable
 fun MyPage(navController: NavHostController) {
     val app = remember { KazumiApp.get() }
-    var bangumiCount by remember { mutableIntStateOf(0) }
-    var episodeCount by remember { mutableIntStateOf(0) }
-    var downloadCount by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(Unit) {
-        val histories = app.historyRepository.getAll()
-        bangumiCount = histories.size
-        episodeCount = histories.sumOf { it.progresses.size.coerceAtLeast(1) }
-        downloadCount = app.downloadRepository.getAllRecords().size
-    }
+    // 观看统计：用 observeAll 流感知数据变化（历史页删除/播放新增后返回，统计实时刷新）
+    val historyFlow by app.historyRepository.observeAll()
+        .collectAsState(initial = emptyList())
+    val downloadFlow by app.downloadRepository.observeRecords()
+        .collectAsState(initial = emptyList())
+
+    val bangumiCount = historyFlow.size
+    val episodeCount = historyFlow.sumOf { it.progresses.size.coerceAtLeast(1) }
+    val downloadCount = downloadFlow.size
 
     MainScaffold(navController) {
         Column(

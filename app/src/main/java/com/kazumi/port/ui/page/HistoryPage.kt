@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.MoreVert
@@ -49,7 +51,6 @@ import com.kazumi.port.KazumiApp
 import com.kazumi.port.data.repository.History
 import com.kazumi.port.ui.components.EmptyState
 import com.kazumi.port.ui.components.LoadingState
-import com.kazumi.port.ui.components.PageHeader
 import com.kazumi.port.ui.navigation.Routes
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -117,73 +118,88 @@ fun HistoryPage(navController: NavHostController) {
         )
     }
 
-    MainScaffold(navController) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            PageHeader(
-                title = "历史记录",
-                trailing = {
-                    if (histories.isNotEmpty()) {
-                        IconButton(onClick = { showClearDialog = true }) {
-                            Icon(Icons.Filled.DeleteSweep, contentDescription = "清空全部历史记录")
-                        }
+    // 独立页（不嵌 MainScaffold）：明确返回箭头 + 无底部导航，退出逻辑清晰
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        // 顶栏：返回按钮 + 标题 + 清空（对齐原版 SysAppBar）
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            }
+            Text(
+                text = "历史记录",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            if (histories.isNotEmpty()) {
+                IconButton(onClick = { showClearDialog = true }) {
+                    Icon(Icons.Filled.DeleteSweep, contentDescription = "清空全部历史记录")
+                }
+            }
+        }
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            singleLine = true,
+            placeholder = { Text("搜索历史记录") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }) {
+                        Icon(Icons.Filled.Close, contentDescription = "清除搜索")
                     }
                 }
-            )
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                singleLine = true,
-                placeholder = { Text("搜索历史记录") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Filled.Close, contentDescription = "清除搜索")
-                        }
+            }
+        )
+        HorizontalDivider()
+        when {
+            isLoading -> LoadingState(modifier = Modifier.padding(top = 32.dp))
+            matched.isEmpty() && keyword.isNotEmpty() -> EmptyState("没有匹配的记录")
+            matched.isEmpty() -> EmptyState("还没有观看记录")
+            else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                groups.forEach { (label, items) ->
+                    item(key = "group-$label") {
+                        Text(
+                            text = "$label · ${items.size}",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
+                        )
                     }
-                }
-            )
-            HorizontalDivider()
-            when {
-                isLoading -> LoadingState(modifier = Modifier.padding(top = 32.dp))
-                matched.isEmpty() && keyword.isNotEmpty() -> EmptyState("没有匹配的记录")
-                matched.isEmpty() -> EmptyState("还没有观看记录")
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    groups.forEach { (label, items) ->
-                        item(key = "group-$label") {
-                            Text(
-                                text = "$label · ${items.size}",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
-                            )
-                        }
-                        items(items, key = { it.key }) { history ->
-                            HistoryRow(
-                                history = history,
-                                onClick = { openPlayer(history) },
-                                onPlay = { openPlayer(history) },
-                                onDetail = {
-                                    navController.navigate(
-                                        Routes.detail(
-                                            bangumiId = history.bangumiItem.id,
-                                            pluginName = history.adapterName,
-                                            src = history.lastSrc
-                                        )
+                    items(items, key = { it.key }) { history ->
+                        HistoryRow(
+                            history = history,
+                            onClick = { openPlayer(history) },
+                            onPlay = { openPlayer(history) },
+                            onDetail = {
+                                navController.navigate(
+                                    Routes.detail(
+                                        bangumiId = history.bangumiItem.id,
+                                        pluginName = history.adapterName,
+                                        src = history.lastSrc
                                     )
-                                },
-                                onDelete = {
-                                    scope.launch {
-                                        app.historyRepository.delete(history.key)
-                                        refresh()
-                                    }
+                                )
+                            },
+                            onDelete = {
+                                scope.launch {
+                                    app.historyRepository.delete(history.key)
+                                    refresh()
                                 }
-                            )
-                            HorizontalDivider(modifier = Modifier.padding(start = 88.dp))
-                        }
+                            }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(start = 88.dp))
                     }
                 }
             }
