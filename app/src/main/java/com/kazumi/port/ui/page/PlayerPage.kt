@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,6 +66,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalTextStyle
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -80,6 +85,7 @@ import com.kazumi.port.player.PlayerController
 import com.kazumi.port.service.VideoSourceFormat
 import com.kazumi.port.service.WebViewVideoSourceService
 import com.kazumi.port.ui.components.DanmakuOverlay
+import com.kazumi.port.ui.components.DanmakuSettingsSheet
 import com.kazumi.port.ui.components.EpisodeSelectionSheet
 import com.kazumi.port.util.FileLogger
 import com.kazumi.port.util.DanmakuFeature
@@ -247,6 +253,32 @@ fun PlayerPage(
     // Sheet
     var showDanmakuSource by remember { mutableStateOf(false) }
     var showSyncPlay by remember { mutableStateOf(false) }
+    // 播放器内弹幕设置 Sheet（对齐原版 danmaku_settings_sheet）
+    var showDanmakuSettings by remember { mutableStateOf(false) }
+    // 发送弹幕输入框（对齐原版 _danmakuTextField）
+    var danmakuInput by remember { mutableStateOf("") }
+    var danmakuInputFocus by remember { mutableStateOf(false) }
+
+    // 发送弹幕：原版逻辑——输入非空、当前集有弹幕、长度<=100；本地回显（弹幕发送接口无官方支持）
+    fun sendDanmaku() {
+        val msg = danmakuInput.trim()
+        if (msg.isEmpty()) {
+            toast("弹幕内容为空")
+            return
+        }
+        if (playerController.danmaku.danDanmakus.isEmpty()) {
+            toast("当前剧集不支持弹幕发送")
+            return
+        }
+        if (msg.length > 100) {
+            toast("弹幕内容过长")
+            return
+        }
+        // 本地回显（对齐原版：无官方发送 API，本地加一条弹幕）
+        playerController.danmaku.addDanmakuLocal(msg)
+        danmakuInput = ""
+        toast("弹幕已发送（本地回显）")
+    }
 
     // 截图
     var screenshotCapturing by remember { mutableStateOf(false) }
@@ -827,6 +859,93 @@ fun PlayerPage(
                                 tint = Color.White
                             )
                         }
+                        // 弹幕开关（对齐原版 _buildDanmakuToggleButton：独立图标按钮，非文字菜单项）
+                        IconButton(
+                            onClick = {
+                                if (danmakuLoading) return@IconButton
+                                if (danmakuOn) {
+                                    playerController.danmaku.setDanmakuEnabled(false)
+                                } else if (playerController.danmaku.danDanmakus.isNotEmpty()) {
+                                    playerController.danmaku.setDanmakuEnabled(true)
+                                } else {
+                                    scope.launch {
+                                        toast("正在匹配弹幕…")
+                                        val result = playerController.fetchDanmaku()
+                                        toast(
+                                            when {
+                                                result.hasDanmakus -> "弹幕已装载"
+                                                result.isFailed -> {
+                                                    val msg = result.errorMessage.orEmpty()
+                                                    if (msg.contains("未配置弹弹play凭据"))
+                                                        "弹幕需要弹弹play凭据：设置 → 弹幕 → 弹弹play 凭据"
+                                                    else
+                                                        "弹幕匹配失败（$msg），请稍后再试"
+                                                }
+                                                else -> "没找到这一集的弹幕，可在「更多」里手动切换弹幕源"
+                                            }
+                                        )
+                                    }
+                                }
+                            },
+                            enabled = !danmakuLoading
+                        ) {
+                            if (danmakuLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Filled.Subtitles,
+                                    contentDescription = if (danmakuOn) "关闭弹幕" else "打开弹幕",
+                                    tint = if (danmakuOn) MaterialTheme.colorScheme.primary else Color.White
+                                )
+                            }
+                        }
+                        // 弹幕设置按钮（对齐原版 _danmakuSettingsButton：弹幕开启时显示）
+                        if (danmakuOn) {
+                            IconButton(onClick = { showDanmakuSettings = true }) {
+                                Icon(Icons.Filled.Tune, contentDescription = "弹幕设置", tint = Color.White)
+                            }
+                            // 发送弹幕输入框（对齐原版 _danmakuTextField）
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier
+                                    .width(120.dp)
+                                    .height(40.dp)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                                    .background(Color.White.copy(alpha = 0.15f))
+                            ) {
+                                if (!danmakuInputFocus && danmakuInput.isEmpty()) {
+                                    Text(
+                                        text = "发个友善的弹幕见证当下",
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier
+                                            .align(Alignment.CenterStart)
+                                            .padding(horizontal = 8.dp)
+                                    )
+                                }
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = danmakuInput,
+                                    onValueChange = { danmakuInput = it.take(100) },
+                                    textStyle = LocalTextStyle.current.copy(color = Color.White, fontSize = 13.sp),
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 8.dp, vertical = 10.dp)
+                                )
+                                // 发送按钮
+                                if (danmakuInput.isNotBlank()) {
+                                    TextButton(
+                                        onClick = { sendDanmaku() },
+                                        modifier = Modifier.align(Alignment.CenterEnd)
+                                    ) {
+                                        Text("发送", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+                        }
                         // 倍速菜单
                         Box {
                             IconButton(onClick = { speedMenuOpen = !speedMenuOpen }) {
@@ -896,13 +1015,14 @@ fun PlayerPage(
                                         }
                                     )
                                 }
-                                DropdownMenuItem(
-                                    text = { Text(if (danmakuOn) "关闭弹幕" else "打开弹幕") },
+                                                                DropdownMenuItem(
+                                    text = { Text(if (danmakuOn) "弹幕设置" else "打开弹幕") },
                                     onClick = {
                                         moreMenuOpen = false
-                                        if (danmakuLoading) return@DropdownMenuItem
                                         if (danmakuOn) {
-                                            playerController.danmaku.setDanmakuEnabled(false)
+                                            showDanmakuSettings = true
+                                        } else if (danmakuLoading) {
+                                            return@DropdownMenuItem
                                         } else if (playerController.danmaku.danDanmakus.isNotEmpty()) {
                                             playerController.danmaku.setDanmakuEnabled(true)
                                         } else {
@@ -1006,6 +1126,15 @@ fun PlayerPage(
                 settings = app.settings,
                 onDismiss = { showDanmakuSource = false },
                 toast = toast
+            )
+        }
+
+        // 播放器内弹幕设置 sheet（对齐原版 danmaku_settings_sheet）
+        if (showDanmakuSettings) {
+            DanmakuSettingsSheet(
+                settings = app.settings,
+                onDismiss = { showDanmakuSettings = false },
+                onChanged = { /* 设置变化后渲染层自动读取 */ }
             )
         }
 

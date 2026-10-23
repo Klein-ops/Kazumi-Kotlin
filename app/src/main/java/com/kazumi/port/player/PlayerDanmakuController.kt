@@ -116,6 +116,23 @@ class PlayerDanmakuController(
         _danmakuOn.value = value
     }
 
+    /** 本地回显一条弹幕（发送弹幕功能：原版无官方发送 API，本地加一条） */
+    fun addDanmakuLocal(message: String) {
+        val entry = DanmakuEntry(
+            message = message,
+            time = (System.currentTimeMillis() / 1000.0) % 600.0,
+            type = 1,
+            color = 0xFFFFFFL,
+            source = "Local"
+        )
+        val second = entry.time.toInt()
+        (danDanmakus.getOrPut(second) { mutableListOf() }).add(entry)
+        if (danmakuOn.value) {
+            // 通知渲染层有新增弹幕
+            _scheduledDanmakuGeneration++
+        }
+    }
+
     /** 清空并让已排期的弹幕失效（seek/切源时调用） */
     fun clearAndInvalidateScheduledDanmakus() {
         _scheduledDanmakuGeneration++
