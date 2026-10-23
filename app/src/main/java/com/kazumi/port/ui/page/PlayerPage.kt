@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -369,6 +370,48 @@ fun PlayerPage(
                 .getEpisodeEntity(bangumiId, pluginName, episode)
                 ?.let { app.downloadManager.getLocalVideoPath(it) }
         }
+    }
+
+    // 续播：进入播放页时查询历史里本集的观看进度，playResume 开启时注入 offset
+    // （对齐原版 video_page._initOnlineMode：lastWatching/findProgress 取进度 → historyOffset）
+    var resumeOffsetMs by remember(src, episode, road, isLocal) { mutableLongStateOf(0L) }
+    var resumeChecked by remember(src, episode, road, isLocal) { mutableStateOf(false) }
+    LaunchedEffect(src, episode, road, isLocal) {
+        resumeChecked = false
+        // playResume 关闭或隐私模式开启 → 不续播
+        if (!app.settings.playResume() || app.settings.isPrivateMode()) {
+            resumeChecked = true
+            return@LaunchedEffect
+        }
+        val progress = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                app.historyRepository.get(pluginName, bangumiId, if (isLocal) History.KIND_OFFLINE else History.KIND_ONLINE)
+                    ?.progresses?.get(episode)
+            }.getOrNull()
+        }
+        resumeOffsetMs = progress?.progressMs ?: 0L
+        resumeChecked = true
+        if (progress != null) {
+            FileLogger.d("PlayerResume", "续播: bgm=$bangumiId ep=$episode posMs=${progress.progressMs}")
+        }
+    }
+
+    // 续播 seek：等历史进度查询完成 + 播放器 init 就绪后，一次性 seek 到续播位置
+    // （不改 params，避免重建打断视频解析；只在真正播放起来后补一次 seek）
+    LaunchedEffect(resumeChecked, resumeOffsetMs, src, episode, road) {
+        if (!resumeChecked || resumeOffsetMs <= 0L) return@LaunchedEffect
+        // 等 init 完成（currentParams 就绪且开始播放），最多等 10 秒
+        var waited = 0
+        while ((playerController.currentParams == null || !playerController.isPlaying()) && waited < 100) {
+            delay(100)
+            waited++
+        }
+        if (playerController.currentParams == null) return@LaunchedEffect
+        val target = resumeOffsetMs
+        // 一次性续播：seek 后清零，避免后续重组重复 seek
+        resumeOffsetMs = 0L
+        playerController.seekTo(target, enableSync = false)
+        FileLogger.d("PlayerResume", "续播 seek 完成: $target ms")
     }
 
     // 组装播放参数
@@ -941,23 +984,54 @@ fun PlayerPage(
                     }
                     raw.coerceIn(0f, 1f)
                 } else 0f
-                Slider(
-                    value = barProgress,
-                    onValueChange = { v ->
-                        barDragging = true
-                        barValue = v
-                    },
-                    onValueChangeFinished = {
-                        barDragging = false
-                        if (uiState.durationMs > 0) {
-                            playerController.seekTo(
-                                (barValue * uiState.durationMs).toLong(),
-                                enableSync = false
+                // 拖动预览时间气泡（对齐原版 player_progress_bar._buildPreview：
+                // 拖动时在滑块上方显示黑色圆角时间气泡，不是视频帧图）
+                androidx.compose.foundation.layout.BoxWithConstraints(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (barDragging && uiState.durationMs > 0 && maxWidth > 0.dp) {
+                        val frac = barValue.coerceIn(0f, 1f)
+                        val bubbleText = formatMs((barValue * uiState.durationMs).toLong())
+                        val bubbleWidth = 68.dp
+                        val left = (maxWidth - bubbleWidth) * frac
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier
+                                .offset(x = left)
+                                .width(bubbleWidth)
+                                .align(Alignment.TopCenter)
+                        ) {
+                            Text(
+                                text = bubbleText,
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier
+                                    .background(
+                                        Color.Black.copy(alpha = 0.85f),
+                                        androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    .align(Alignment.Center)
                             )
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    }
+                    Slider(
+                        value = barProgress,
+                        onValueChange = { v ->
+                            barDragging = true
+                            barValue = v
+                        },
+                        onValueChangeFinished = {
+                            barDragging = false
+                            if (uiState.durationMs > 0) {
+                                playerController.seekTo(
+                                    (barValue * uiState.durationMs).toLong(),
+                                    enableSync = false
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
