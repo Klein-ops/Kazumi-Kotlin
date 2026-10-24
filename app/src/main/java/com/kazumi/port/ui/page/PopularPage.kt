@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -61,6 +62,21 @@ private val animeTags = listOf(
 
 private fun tagLabel(tag: String) = if (tag.isEmpty()) "热门番组" else tag
 
+/** 列表序列化（用 BangumiItem.toJson 的扁平格式，兼容 fromJson 反序列化） */
+private fun List<BangumiItem>.toJsonArrayString(): String {
+    val arr = com.google.gson.JsonArray()
+    forEach { arr.add(it.toJson()) }
+    return arr.toString()
+}
+
+private fun parseBangumiList(json: String): List<BangumiItem> = try {
+    com.google.gson.JsonParser.parseString(json).asJsonArray.mapNotNull { el ->
+        if (el.isJsonObject) BangumiItem.fromJson(el.asJsonObject) else null
+    }
+} catch (e: Exception) {
+    emptyList()
+}
+
 /**
  * 首页热门榜（对应原版 popular_page.dart）
  * 顶栏大标题 + 标签下拉菜单 + 搜索/历史按钮
@@ -69,12 +85,16 @@ private fun tagLabel(tag: String) = if (tag.isEmpty()) "热门番组" else tag
 @Composable
 fun PopularPage(navController: NavHostController) {
     val showRating = com.kazumi.port.ui.components.rememberShowRating()
-    var bangumiList by remember { mutableStateOf<List<BangumiItem>>(emptyList()) }
-    var currentTag by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(true) }
-    var isLoadingMore by remember { mutableStateOf(false) }
-    var isTimeout by remember { mutableStateOf(false) }
+    // 用 rememberSaveable 保存列表数据：主 tab 切走（推荐→设置→推荐）时，
+    // NavHost restoreState 恢复页面，数据/标签不丢，不再重新 fetch + 重载图片。
+    var bangumiListJson by rememberSaveable { mutableStateOf("") }
+    var currentTag by rememberSaveable { mutableStateOf("") }
+    var isLoading by rememberSaveable { mutableStateOf(true) }
+    var isLoadingMore by rememberSaveable { mutableStateOf(false) }
+    var isTimeout by rememberSaveable { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
+
+    val bangumiList = parseBangumiList(bangumiListJson)
 
     val bangumiApi = remember {
         BangumiApi(BangumiClient(KazumiApp.get().settings))
@@ -114,14 +134,18 @@ fun PopularPage(navController: NavHostController) {
     suspend fun fetchFirstPage(tag: String) {
         isLoading = true
         val result = fetchPage(offset = 0, tag = tag)
-        bangumiList = result
+        bangumiListJson = result.toJsonArrayString()
         isLoading = false
         isTimeout = result.isEmpty()
     }
 
-    // 首次加载
+    // 首次加载：仅当恢复状态里没有数据时才 fetch（切 tab 回来记住状态，不再重载）
     LaunchedEffect(Unit) {
-        fetchFirstPage(currentTag)
+        if (bangumiList.isEmpty() && isLoading) {
+            fetchFirstPage(currentTag)
+        } else {
+            isLoading = false
+        }
     }
 
     fun loadMore() {
@@ -132,7 +156,7 @@ fun PopularPage(navController: NavHostController) {
             val result = fetchPage(offset = nextOffset, tag = currentTag)
             if (result.isNotEmpty()) {
                 val existingIds = bangumiList.map { it.id }.toMutableSet()
-                bangumiList = bangumiList + result.filter { existingIds.add(it.id) }
+                bangumiListJson = (bangumiList + result.filter { existingIds.add(it.id) }).toJsonArrayString()
             }
             isLoadingMore = false
         }
