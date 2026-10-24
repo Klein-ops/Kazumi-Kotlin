@@ -10,7 +10,13 @@ object ApiEndpoints {
 
     /** 规则仓库 */
     const val PLUGIN_SHOP = "https://raw.githubusercontent.com/Predidit/KazumiRules/main/"
-    const val PLUGIN_SHOP_MIRROR = "https://raw.gitcode.com/gh_mirrors/ka/KazumiRules/raw/main/"
+    /**
+     * 规则仓库镜像（gh-proxy 代理前缀，拼接方式：镜像前缀 + 完整目标 URL）。
+     * 对齐原版 2.4.1 a2aeb1c4 fix(rules): switch rules repo mirror——
+     * 旧 gitcode 镜像（raw.gitcode.com）已失效，原版弃用并换成 gh-proxy；
+     * 实测 gh-proxy.org 可用（HTTP 200 ~2s），直连 raw.githubusercontent.com 在本网络被重置。
+     */
+    const val PLUGIN_SHOP_MIRROR = "https://gh-proxy.org/https://raw.githubusercontent.com/Predidit/KazumiRules/main/"
 
     /** Bangumi 镜像 */
     const val BANGUMI_MIRROR_DOMAIN = "https://api.kazumi.fyi"
