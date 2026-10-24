@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.History
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.Icon
@@ -29,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -82,6 +86,7 @@ private fun parseBangumiList(json: String): List<BangumiItem> = try {
  * 顶栏大标题 + 标签下拉菜单 + 搜索/历史按钮
  * 直连超时自动回退 Kazumi 镜像
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PopularPage(navController: NavHostController) {
     val showRating = com.kazumi.port.ui.components.rememberShowRating()
@@ -93,6 +98,8 @@ fun PopularPage(navController: NavHostController) {
     var isLoadingMore by rememberSaveable { mutableStateOf(false) }
     var isTimeout by rememberSaveable { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
+    // 下拉刷新中：与 isLoading 区分（刷新保留旧列表 + 顶部指示器，不整页白屏）
+    var isRefreshing by remember { mutableStateOf(false) }
 
     val bangumiList = parseBangumiList(bangumiListJson)
 
@@ -137,6 +144,16 @@ fun PopularPage(navController: NavHostController) {
         bangumiListJson = result.toJsonArrayString()
         isLoading = false
         isTimeout = result.isEmpty()
+    }
+
+    // 下拉刷新：重新拉第一页，保留旧列表直到新数据就绪（避免整页白屏）
+    suspend fun refresh() {
+        if (isRefreshing) return
+        isRefreshing = true
+        val result = fetchPage(offset = 0, tag = currentTag)
+        bangumiListJson = result.toJsonArrayString()
+        isTimeout = result.isEmpty()
+        isRefreshing = false
     }
 
     // 首次加载：仅当恢复状态里没有数据时才 fetch（切 tab 回来记住状态，不再重载）
@@ -237,10 +254,36 @@ fun PopularPage(navController: NavHostController) {
             ) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(4.dp))
             }
-            when {
-                isLoading -> LoadingState()
-                bangumiList.isEmpty() -> EmptyState(if (isTimeout) "加载超时，请检查网络或切换镜像" else "还没有数据")
-                else -> {
+            // 下拉刷新：对列表整体生效（空态/加载态包可滚动容器，保证手势可用）
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = { scope.launch { refresh() } },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                when {
+                    isLoading -> {
+                        // 可滚动容器：空内容也能触发下拉手势
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            LoadingState(modifier = Modifier.padding(top = 64.dp))
+                        }
+                    }
+                    bangumiList.isEmpty() -> {
+                        // 可滚动容器：空态/超时也能下拉重试
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            EmptyState(
+                                text = if (isTimeout) "加载超时，请检查网络或切换镜像" else "还没有数据"
+                            )
+                        }
+                    }
+                    else -> {
                     // 响应式列数（对齐原版 contentGrid：<紧凑 3 列，>compact 5 列，>medium 6 列）
                     val crossCount = when {
                         maxWidth >= 900.dp -> 6
@@ -275,6 +318,7 @@ fun PopularPage(navController: NavHostController) {
                                 }
                             }
                         }
+                    }
                     }
                 }
             }
