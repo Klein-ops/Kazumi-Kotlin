@@ -84,7 +84,9 @@ fun kazumiLightColorScheme(seed: Color): ColorScheme = M3SeedPalettes.light(seed
  */
 fun kazumiDarkColorScheme(seed: Color): ColorScheme = M3SeedPalettes.dark(seed)
 
-/** OLED 深色纯黑覆盖（对应原版 oledDarkTheme） */
+/**
+ * OLED 深色纯黑覆盖（对应原版 oledDarkTheme）
+ */
 private fun ColorScheme.oledDark(): ColorScheme = copy(
     background = Color.Black,
     onBackground = Color.White,
@@ -96,6 +98,62 @@ private fun ColorScheme.oledDark(): ColorScheme = copy(
     onSecondary = Color.Black,
     outline = Color(0xFF333333),
 )
+
+/**
+ * 补齐 M3SeedPalettes 显式色板中未设置的 surfaceContainer* 槽位。
+ *
+ * 背景：M3SeedPalettes 用 ColorScheme(...) 显式构造（构建环境 ColorScheme.fromSeed
+ * 不可用），但显式构造只给了旧字段；Material3 1.2+ 新增的 surfaceContainerLow/
+ * surfaceContainerHigh/surfaceContainerHighest 等槽位未赋值 → 默认 Color.Unspecified
+ * （透明）。这会导致引用这些槽位的 UI（下拉刷新指示器、PlayerHud 时间气泡、
+ * SearchBar 容器、Card 背景、RuleTag 等）渲染成透明/看不见。
+ *
+ * 这里的取值基于现有色板推导（对齐 Material3 LightColorScheme/DarkColorScheme 的
+ * 默认推导公式），视觉上与官方默认一致：
+ * - light:  surfaceContainerLowest=white, low=surface+2% blend, container=+4%, high=+8%, highest=+12%
+ * - dark:   surfaceContainerLowest=black, low=surface-8% blend, container=-10%, high=-14%, highest=-18%
+ * surfaceBright/surfaceDim 也一并补上（dark 模式 surface=surfaceDim）。
+ */
+private fun ColorScheme.completeSurfaces(): ColorScheme {
+    val s = surface
+    return copy(
+        surfaceContainerLowest = if (surfaceContainerLowest == Color.Unspecified) {
+            if (isLight()) Color.White else Color.Black
+        } else surfaceContainerLowest,
+        surfaceContainerLow = if (surfaceContainerLow == Color.Unspecified) {
+            if (isLight()) blend(s, Color.White, 0.02f) else blend(s, Color.Black, 0.08f)
+        } else surfaceContainerLow,
+        surfaceContainer = if (surfaceContainer == Color.Unspecified) {
+            if (isLight()) blend(s, Color.White, 0.04f) else blend(s, Color.Black, 0.10f)
+        } else surfaceContainer,
+        surfaceContainerHigh = if (surfaceContainerHigh == Color.Unspecified) {
+            if (isLight()) blend(s, Color.White, 0.08f) else blend(s, Color.Black, 0.14f)
+        } else surfaceContainerHigh,
+        surfaceContainerHighest = if (surfaceContainerHighest == Color.Unspecified) {
+            if (isLight()) blend(s, Color.White, 0.12f) else blend(s, Color.Black, 0.18f)
+        } else surfaceContainerHighest,
+        surfaceDim = if (surfaceDim == Color.Unspecified) {
+            if (isLight()) blend(s, Color.Black, 0.06f) else s
+        } else surfaceDim,
+        surfaceBright = if (surfaceBright == Color.Unspecified) {
+            if (isLight()) s else blend(s, Color.White, 0.06f)
+        } else surfaceBright,
+    )
+}
+
+/** 简单亮度判断：浅色方案 surface 亮度 > 深色方案 surface */
+private fun ColorScheme.isLight(): Boolean = surface.luminance() > 0.5f
+
+/** 两个颜色按 alpha 线性混合 */
+private fun blend(a: Color, b: Color, amount: Float): Color {
+    val inv = 1f - amount
+    return Color(
+        red = a.red * inv + b.red * amount,
+        green = a.green * inv + b.green * amount,
+        blue = a.blue * inv + b.blue * amount,
+        alpha = a.alpha * inv + b.alpha * amount
+    )
+}
 
 /**
  * Kazumi 主题入口
@@ -129,6 +187,9 @@ fun KazumiTheme(
     }
 
     val effectiveScheme = if (darkTheme && oledEnhance) colorScheme.oledDark() else colorScheme
+    // 补齐 M3SeedPalettes 显式色板缺失的 surfaceContainer*/surfaceBright/surfaceDim 槽位
+    // （默认 Unspecified 透明，会导致引用这些槽位的 UI 看不见）
+    val finalScheme = effectiveScheme.completeSurfaces()
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -139,7 +200,7 @@ fun KazumiTheme(
     }
 
     MaterialTheme(
-        colorScheme = effectiveScheme,
+        colorScheme = finalScheme,
         content = content,
     )
 }
