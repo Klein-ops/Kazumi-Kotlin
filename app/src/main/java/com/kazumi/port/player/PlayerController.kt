@@ -261,6 +261,8 @@ class PlayerController(
             setPlayWhenReady(true)
             repeatMode = Player.REPEAT_MODE_OFF
             playbackParameters = androidx.media3.common.PlaybackParameters(playbackSpeed)
+            // 音量完全交给系统媒体音量（STREAM_MUSIC）控制，ExoPlayer 内部固定 1.0
+            volume = 1.0f
         }
         exoPlayer = player
         _playerState.value = player
@@ -412,20 +414,60 @@ class PlayerController(
         }
     }
 
-    fun toggleMute() {
-        val player = exoPlayer ?: return
-        if (player.volume > 0f) {
-            player.volume = 0f
-        } else {
-            player.volume = 1f
-        }
+    // ---- 系统媒体音量（STREAM_MUSIC）----
+    // 用户要求：作为安卓原生应用应调系统接口调真正的媒体音量，而不是只调视频内音量。
+    // ExoPlayer volume 固定 1.0（不参与控制），音量完全由 AudioManager 的媒体音量决定。
+
+    private val audioManager: android.media.AudioManager? get() =
+        context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+
+    /** 系统媒体音量 0f..1f（STREAM_MUSIC） */
+    fun systemVolume(): Float {
+        val am = audioManager ?: return 0f
+        val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+        if (max <= 0) return 0f
+        return am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC).toFloat() / max.toFloat()
+    }
+
+    /** 设置系统媒体音量（0f..1f），STREAM_MUSIC */
+    fun setSystemVolume(volume: Float) {
+        val am = audioManager ?: return
+        val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+        if (max <= 0) return
+        val level = (volume.coerceIn(0f, 1f) * max).toInt()
+        am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, level, 0)
         _uiState.update {
             it.copy(
-                volume = player.volume,
-                isMuted = player.volume == 0f
+                volume = systemVolume(),
+                isMuted = systemVolume() == 0f
             )
         }
     }
+
+    /** 切换系统媒体音量静音（记忆原音量，取消静音时恢复） */
+    fun toggleSystemMute() {
+        val am = audioManager ?: return
+        val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+        if (max <= 0) return
+        val cur = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+        if (cur == 0) {
+            // 取消静音：恢复上次音量（memory 不存在时用 max/2）
+            val restore = if (memoryVolume > 0) memoryVolume else max / 2
+            am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, restore, 0)
+        } else {
+            memoryVolume = cur
+            am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, 0, 0)
+        }
+        _uiState.update {
+            it.copy(
+                volume = systemVolume(),
+                isMuted = systemVolume() == 0f
+            )
+        }
+    }
+
+    /** 静音前记住的音量（取消静音恢复用） */
+    private var memoryVolume: Int = 0
 
     /** 当前播放位置（ms），由 Compose 轮询或 Listener 驱动 */
     fun currentPosition(): Long = exoPlayer?.currentPosition ?: 0L

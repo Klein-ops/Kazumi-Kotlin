@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -253,6 +255,12 @@ fun PlayerPage(
     var hudVolume by remember { mutableFloatStateOf(80f) }
     var hudBrightness by remember { mutableFloatStateOf(0.5f) }
     var brightnessVolumeGesture by remember { mutableStateOf(true) }
+
+    // HUD 音量初始值 = 系统媒体音量（STREAM_MUSIC），音量完全由系统控制
+    LaunchedEffect(Unit) {
+        hudVolume = playerController.systemVolume() * 100f
+        hudBrightness = panelState.brightness.toFloat()
+    }
 
     // 面板
     var controlsVisible by remember { mutableStateOf(true) }
@@ -897,7 +905,8 @@ fun PlayerPage(
                             showBrightnessHud = false
                             val delta = -deltaPx / fullDrag * 100f
                             hudVolume = (hudVolume + delta).coerceIn(0f, 100f)
-                            playerController.setVolume(hudVolume / 100f)
+                            // 系统媒体音量（STREAM_MUSIC）：作为安卓原生应用直接调系统接口
+                            playerController.setSystemVolume(hudVolume / 100f)
                         }
                     }
                 },
@@ -994,11 +1003,16 @@ fun PlayerPage(
                         val bubbleText = formatMs((barValue * uiState.durationMs).toLong())
                         val bubbleWidth = 68.dp
                         val left = (maxWidth - bubbleWidth) * frac
+                        // 气泡必须限制自身高度（wrapContentHeight）+ zIndex 置于 Slider 上方：
+                        // 之前 Box 未限高，被 BoxWithConstraints 内 Slider 高度撑开，Text 的
+                        // align(Center) 让它垂直居中 → 气泡被拉成竖长条。
                         androidx.compose.foundation.layout.Box(
                             modifier = Modifier
                                 .offset(x = left)
                                 .width(bubbleWidth)
-                                .align(Alignment.TopCenter)
+                                .wrapContentHeight(Alignment.Top)
+                                .zIndex(1f),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = bubbleText,
@@ -1010,7 +1024,6 @@ fun PlayerPage(
                                         androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
                                     )
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    .align(Alignment.Center)
                             )
                         }
                     }
@@ -1093,7 +1106,7 @@ fun PlayerPage(
                                 tint = Color.White
                             )
                         }
-                        IconButton(onClick = { playerController.toggleMute() }) {
+                        IconButton(onClick = { playerController.toggleSystemMute() }) {
                             Icon(
                                 if (uiState.isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
                                 contentDescription = if (uiState.isMuted) "取消静音" else "静音",
