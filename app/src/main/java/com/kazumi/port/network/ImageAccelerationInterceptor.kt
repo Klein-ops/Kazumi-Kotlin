@@ -68,7 +68,7 @@ class ImageAccelerationInterceptor(
                     return chain.proceed(
                         chain.request.newBuilder()
                             .data(cached)
-                            .cacheKey(original)
+                            .memoryCacheKey(original)
                             .build()
                     )
                 }
@@ -84,12 +84,13 @@ class ImageAccelerationInterceptor(
                     if (bytes.isNotEmpty()) {
                         cachePut(original, bytes)
                         // 把下载好的字节重新作为 data 交给 Coil 解码链路（Coil 支持 ByteArray）。
-                        // 关键：必须显式 cacheKey(original)——否则 data 变成 ByteArray 后，
-                        // Coil 默认 cacheKey 是 ByteArray.toString()（对象地址），每次不同，
-                        // 磁盘/内存缓存全部失效，切页/重启后图片重新下载（表现为反复重载）。
+                        // 关键：必须显式 memoryCacheKey(original)——否则 data 变成 ByteArray 后，
+                        // Coil 内存缓存 key 会基于 ByteArray 内容哈希（字节稳定时本可命中），
+                        // 但显式钉到原始 URL 更稳：切换 ECH/direct 模式、不同字节哈希时
+                        // 也能命中同一张图，不重复下载。
                         val byteReq = chain.request.newBuilder()
                             .data(bytes)
-                            .cacheKey(original)
+                            .memoryCacheKey(original)
                             .build()
                         return chain.proceed(byteReq)
                     }
