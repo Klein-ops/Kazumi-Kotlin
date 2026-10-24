@@ -759,45 +759,6 @@ fun PlayerPage(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // 视频源解析状态层（在线播放 WebView 解析时显示）
-            if (isResolving) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.6f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = Color.White)
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = "正在解析视频源…",
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-            } else if (resolveError != null && !uiState.isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.7f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = resolveError ?: "",
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        TextButton(onClick = { resolveTick++ }) {
-                            Text("重试", color = Color.White)
-                        }
-                    }
-                }
-            }
-
             // 弹幕层
             DanmakuOverlay(
                 modifier = Modifier.fillMaxSize(),
@@ -904,8 +865,11 @@ fun PlayerPage(
                             showVolumeHud = true
                             showBrightnessHud = false
                             val delta = -deltaPx / fullDrag * 100f
-                            hudVolume = (hudVolume + delta).coerceIn(0f, 100f)
-                            // 系统媒体音量（STREAM_MUSIC）：作为安卓原生应用直接调系统接口
+                            // 音量基准 = 系统当前媒体音量（不是 hudVolume 记忆值）：
+                            // 用户手动调过系统音量（音量键/通知栏/其他 App）后，手势必须基于
+                            // 系统实时值调整，否则"系统 0、hudVolume 80 → 拖一下就跳 80"。
+                            val systemNow = playerController.systemVolume() * 100f
+                            hudVolume = (systemNow + delta).coerceIn(0f, 100f)
                             playerController.setSystemVolume(hudVolume / 100f)
                         }
                     }
@@ -915,6 +879,47 @@ fun PlayerPage(
                     showBrightnessHud = false
                 }
             )
+
+            // 视频源解析状态层（在线播放 WebView 解析时显示）
+            // 注意：必须放在手势层【之后】（最上层），否则被 PlayerGestureLayer 盖住，
+            // 错误页的"重试"按钮点了没反应（手势层全屏消费点击事件）。
+            if (isResolving) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.6f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Color.White)
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "正在解析视频源…",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            } else if (resolveError != null && !uiState.isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.7f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = resolveError ?: "",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        TextButton(onClick = { resolveTick++ }) {
+                            Text("重试", color = Color.White)
+                        }
+                    }
+                }
+            }
         }
 
         // 顶部控制条（对齐原版：只保留返回 + 标题 + 下一集；选集/弹幕/截图/锁屏进「更多」菜单）
@@ -1003,14 +1008,17 @@ fun PlayerPage(
                         val bubbleText = formatMs((barValue * uiState.durationMs).toLong())
                         val bubbleWidth = 68.dp
                         val left = (maxWidth - bubbleWidth) * frac
-                        // 气泡必须限制自身高度（wrapContentHeight）+ zIndex 置于 Slider 上方：
+                        // 气泡固定高度 36dp + zIndex 置于 Slider 上方：
                         // 之前 Box 未限高，被 BoxWithConstraints 内 Slider 高度撑开，Text 的
                         // align(Center) 让它垂直居中 → 气泡被拉成竖长条。
                         androidx.compose.foundation.layout.Box(
                             modifier = Modifier
                                 .offset(x = left)
                                 .width(bubbleWidth)
-                                .wrapContentHeight(Alignment.Top)
+                                // 显式固定高度：wrapContentHeight(Alignment.Top) 在 BoxWithConstraints
+                                // 的有界高度约束下不会 wrap，反而被撑满进度条高度 → 竖长条。
+                                // 固定 36dp + contentAlignment=Center 让文字始终居中、背景贴内容。
+                                .height(36.dp)
                                 .zIndex(1f),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1388,7 +1396,15 @@ fun PlayerPage(
             DanmakuSettingsSheet(
                 settings = app.settings,
                 onDismiss = { showDanmakuSettings = false },
-                onChanged = { /* 设置变化后渲染层自动读取 */ }
+                onChanged = { /* 设置变化后渲染层自动读取 */ },
+                // 仅简繁转换变更触发：重新拉弹幕（fetchDanmaku 内部已清空旧弹幕，
+                // 重新按新 chConvert 设置拉取，本地转换在 addDanmakus 统一做）
+                onChConvertChanged = {
+                    scope.launch {
+                        toast("已更新简繁转换，重新装载弹幕…")
+                        playerController.fetchDanmaku()
+                    }
+                }
             )
         }
 

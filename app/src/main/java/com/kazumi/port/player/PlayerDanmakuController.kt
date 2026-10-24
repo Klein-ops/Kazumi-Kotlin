@@ -417,16 +417,32 @@ class PlayerDanmakuController(
     /**
      * 添加弹幕（按秒分组；开启去重时合并重复弹幕）
      * 对应原版 addDanmakus()
+     *
+     * 简繁转换在此统一做（本地转换，覆盖所有来源）：
+     * - 弹弹play 源：服务端已按 chConvert 参数转好，本地再转一次无副作用（幂等）；
+     * - B 站兜底源：服务端不支持 chConvert，繁体弹幕必须本地转；
+     * - 本地下载缓存：可能是繁体原文，同样覆盖。
+     * 使用 android.icu.text.Transliterator（API 21+，系统自带，零依赖）。
      */
     suspend fun addDanmakus(danmakus: List<DanmakuEntry>) {
         val dedup = settings.getBoolean(SettingsManager.Danmaku.DEDUPLICATION, false)
         val listToAdd = if (dedup) DanmakuUtils.mergeDuplicateDanmakus(danmakus, 5.0) else danmakus
-        // 关键词/正则屏蔽（对应原版 shieldList 过滤）
+        // 简繁转换：0=不转换 1=转简体 2=转繁体
+        // Transliterator.getInstance 有实例缓存，但这里仍只取一次复用（避免每批弹幕重复查找）
+        val chConvert = settings.getInt(SettingsManager.Danmaku.CH_CONVERT, 0)
+        val transliterator = when (chConvert) {
+            1 -> runCatching { android.icu.text.Transliterator.getInstance("Traditional-Simplified") }.getOrNull()
+            2 -> runCatching { android.icu.text.Transliterator.getInstance("Simplified-Traditional") }.getOrNull()
+            else -> null
+        }
+        // 关键词/正则屏蔽（对应原版 shieldList 过滤）——转换后再屏蔽，屏蔽词按简体/繁体写都有效
         val rules = runCatching { shieldRulesProvider() }.getOrDefault(emptyList())
         val visible = if (rules.isEmpty()) listToAdd else listToAdd.filter { !isShielded(it.message, rules) }
         for (element in visible) {
             val second = element.time.toInt()
-            (danDanmakus.getOrPut(second) { mutableListOf() }).add(element)
+            val converted = if (transliterator == null) element
+            else element.copy(message = transliterator.transliterate(element.message))
+            (danDanmakus.getOrPut(second) { mutableListOf() }).add(converted)
         }
     }
 

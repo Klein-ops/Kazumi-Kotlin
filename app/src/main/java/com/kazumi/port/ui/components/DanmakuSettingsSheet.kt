@@ -48,7 +48,9 @@ import kotlinx.coroutines.launch
 fun DanmakuSettingsSheet(
     settings: SettingsManager,
     onDismiss: () -> Unit,
-    onChanged: () -> Unit
+    onChanged: () -> Unit,
+    /** 简繁转换变更回调：需要重新拉弹幕（服务端按 chConvert 转换，旧弹幕不会自动变） */
+    onChConvertChanged: () -> Unit = onChanged
 ) {
     val scope = rememberCoroutineScope()
     var fontSize by remember { mutableFloatStateOf(25f) }
@@ -179,7 +181,10 @@ fun DanmakuSettingsSheet(
                                 onClick = {
                                     chConvert = mode.value
                                     chConvertMenuOpen = false
-                                    scope.launch { settings.setInt(SettingsManager.Danmaku.CH_CONVERT, mode.value) }; save()
+                                    scope.launch { settings.setInt(SettingsManager.Danmaku.CH_CONVERT, mode.value) }
+                                    // 简繁转换变更后必须重新拉弹幕：弹弹play 服务端按 chConvert 转换，
+                                    // 已装载的旧弹幕不会自动变（B 站兜底源更不支持转换）。
+                                    onChConvertChanged()
                                 }
                             )
                         }

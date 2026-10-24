@@ -86,7 +86,7 @@ fun AboutSettingsPage(navController: NavHostController) {
                     title = "源代码",
                     subtitle = "GitHub 仓库",
                     leading = Icons.Filled.Code,
-                    onClick = { openUrl("https://github.com/Predidit/Kazumi") }
+                    onClick = { openUrl("https://github.com/Klein-ops/Kazumi-Kotlin") }
                 )
                 SettingClickRow(
                     title = "项目主页",
@@ -98,7 +98,7 @@ fun AboutSettingsPage(navController: NavHostController) {
                     title = "问题反馈",
                     subtitle = "在 GitHub 提交 Issue",
                     leading = Icons.Filled.BugReport,
-                    onClick = { openUrl("https://github.com/Predidit/Kazumi/issues") }
+                    onClick = { openUrl("https://github.com/Klein-ops/Kazumi-Kotlin/issues") }
                 )
             }
 
@@ -107,7 +107,7 @@ fun AboutSettingsPage(navController: NavHostController) {
                     title = "贡献指南",
                     subtitle = "参与 Kazumi 开发",
                     leading = Icons.Filled.Handshake,
-                    onClick = { openUrl("https://github.com/Predidit/Kazumi/blob/main/static/doc/CONTRIBUTING.md") }
+                    onClick = { openUrl("https://github.com/Klein-ops/Kazumi-Kotlin/blob/main/README.md") }
                 )
                 SettingClickRow(
                     title = "致谢",
@@ -119,13 +119,13 @@ fun AboutSettingsPage(navController: NavHostController) {
                     title = "GPL-3.0 许可证",
                     subtitle = "查看开源许可证",
                     leading = Icons.Filled.Balance,
-                    onClick = { openUrl("https://github.com/Predidit/Kazumi/blob/main/LICENSE") }
+                    onClick = { openUrl("https://github.com/Klein-ops/Kazumi-Kotlin/blob/main/LICENSE") }
                 )
                 SettingClickRow(
                     title = "更新日志",
                     subtitle = "查看版本发布记录",
                     leading = Icons.Filled.Update,
-                    onClick = { openUrl("https://github.com/Predidit/Kazumi/releases") }
+                    onClick = { openUrl("https://github.com/Klein-ops/Kazumi-Kotlin/releases") }
                 )
             }
         }
