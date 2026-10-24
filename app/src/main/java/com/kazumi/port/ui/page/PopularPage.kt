@@ -33,6 +33,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -255,10 +257,23 @@ fun PopularPage(navController: NavHostController) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(4.dp))
             }
             // 下拉刷新：对列表整体生效（空态/加载态包可滚动容器，保证手势可用）
+            // 显式指定 indicator（containerColor/color 用主题色而非默认透明），
+            // 避免 MD3 默认指示器在部分主题下透明不可见
+            val pullState = rememberPullToRefreshState()
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
                 onRefresh = { scope.launch { refresh() } },
-                modifier = Modifier.fillMaxSize()
+                state = pullState,
+                modifier = Modifier.fillMaxSize(),
+                indicator = {
+                    PullToRefreshDefaults.Indicator(
+                        state = pullState,
+                        isRefreshing = isRefreshing,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             ) {
                 when {
                     isLoading -> {
