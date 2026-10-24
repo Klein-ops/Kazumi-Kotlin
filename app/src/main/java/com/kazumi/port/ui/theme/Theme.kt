@@ -142,7 +142,21 @@ private fun ColorScheme.completeSurfaces(): ColorScheme {
 }
 
 /** 简单亮度判断：浅色方案 surface 亮度 > 深色方案 surface */
-private fun ColorScheme.isLight(): Boolean = surface.luminance() > 0.5f
+private fun ColorScheme.isLight(): Boolean = surfaceRelativeLuminance() > 0.5f
+
+/**
+ * 计算颜色的相对亮度（WCAG 公式，不依赖 androidx.compose.ui.graphics.luminance 扩展，
+ * 该扩展在 CodeAssist 环境无法解析）。
+ */
+private fun Color.relativeLuminance(): Double {
+    fun lin(c: Float): Double {
+        val v = c.toDouble()
+        return if (v <= 0.04045) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * lin(red) + 0.7152 * lin(green) + 0.0722 * lin(blue)
+}
+
+private fun ColorScheme.surfaceRelativeLuminance(): Double = surface.relativeLuminance()
 
 /** 两个颜色按 alpha 线性混合 */
 private fun blend(a: Color, b: Color, amount: Float): Color {
