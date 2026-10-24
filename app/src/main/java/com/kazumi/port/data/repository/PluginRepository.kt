@@ -37,6 +37,24 @@ class PluginRepository(
     /** 插件名(小写) -> 插件 */
     private val plugins = LinkedHashMap<String, Plugin>()
 
+    // ---- 搜索/线路内存缓存（TTL 10 分钟，对齐原版页内共享查询结果）----
+    // 原版从搜索/推荐等入口点进详情页时，搜索结果的 src 一路传下来直接查线路；
+    // 我们从详情页按番剧名反搜所有插件，每次进页都重新"搜索+查线路"两次网络请求，
+    // 无缓存 → 线路加载慢（10s+）。这里缓存 插件名+关键词 的搜索命中 和 src 的线路，
+    // 重复进入同一详情页秒出线路（TTL 内不重新请求）。
+    private data class CacheEntry<T>(val value: T, val expiredAt: Long)
+
+    @Volatile
+    private var searchCache: Map<String, CacheEntry<List<SearchItem>>> = emptyMap()
+
+    @Volatile
+    private var roadsCache: Map<String, CacheEntry<List<Road>>> = emptyMap()
+
+    private val cacheTtlMs = 10 * 60 * 1000L
+
+    private fun <T> isCacheFresh(entry: CacheEntry<T>?): Boolean =
+        entry != null && System.currentTimeMillis() < entry.expiredAt
+
     // ---- 规则仓库缓存（对应原版 _pluginCatalogByName / pluginHTTPList / _pluginCatalogRefreshedAt）----
     @Volatile
     private var catalogByName: Map<String, PluginHTTPItem> = emptyMap()
@@ -168,6 +186,7 @@ class PluginRepository(
     fun addPlugin(plugin: Plugin) {
         plugins[plugin.name.lowercase()] = plugin
         savePlugin(plugin)
+        invalidateQueryCaches()
     }
 
     @Synchronized
@@ -181,6 +200,7 @@ class PluginRepository(
         plugins.remove(key)
         File(pluginsDir, "$key.json").delete()
         PluginSiteClient.clearCookies(key)
+        invalidateQueryCaches()
     }
 
     @Synchronized
@@ -211,12 +231,14 @@ class PluginRepository(
         } catch (e: Exception) {
             FileLogger.e("RuleImport", "importPlugin savePlugin FAILED: ${e.javaClass.simpleName}: ${e.message} | name=${plugin.name}")
         }
+        invalidateQueryCaches()
         return plugin
     }
 
     /**
      * 搜索番剧
      * 对应 Plugin.queryBangumi
+     * 带 TTL 内存缓存：同一插件+关键词在 10 分钟内不重复请求网络
      */
     suspend fun searchBangumi(
         pluginName: String,
@@ -224,8 +246,15 @@ class PluginRepository(
     ): PluginSearchResponse {
         val plugin = getPlugin(pluginName)
             ?: return PluginSearchResponse(pluginName, emptyList())
+        val cacheKey = "${plugin.name.lowercase()}::${keyword.trim()}"
+        val cached = searchCache[cacheKey]
+        if (isCacheFresh(cached)) {
+            return PluginSearchResponse(pluginName, cached!!.value)
+        }
         return try {
             val trace = ruleEngine.search(plugin.executionConfig(), keyword)
+            val items = trace.response.data
+            searchCache = searchCache + (cacheKey to CacheEntry(items, System.currentTimeMillis() + cacheTtlMs))
             trace.response
         } catch (e: CaptchaRequiredException) {
             throw e
@@ -241,6 +270,7 @@ class PluginRepository(
     /**
      * 查询播放线路
      * 对应 Plugin.queryChapterRoads
+     * 带 TTL 内存缓存：同一 src 在 10 分钟内不重复请求网络
      */
     suspend fun queryChapterRoads(
         pluginName: String,
@@ -248,8 +278,22 @@ class PluginRepository(
     ): List<Road> {
         val plugin = getPlugin(pluginName)
             ?: return emptyList()
+        val cacheKey = "${plugin.name.lowercase()}::${source.trim()}"
+        val cached = roadsCache[cacheKey]
+        if (isCacheFresh(cached)) {
+            return cached!!.value
+        }
         val trace = ruleEngine.queryChapters(plugin.executionConfig(), source)
-        return trace.roads
+        val roads = trace.roads
+        roadsCache = roadsCache + (cacheKey to CacheEntry(roads, System.currentTimeMillis() + cacheTtlMs))
+        return roads
+    }
+
+    /** 清除搜索/线路缓存（插件改动后调用，避免旧数据残留） */
+    @Synchronized
+    fun invalidateQueryCaches() {
+        searchCache = emptyMap()
+        roadsCache = emptyMap()
     }
 
     /**
@@ -295,6 +339,7 @@ class PluginRepository(
         plugins[key] = plugin
         val target = File(pluginsDir, "$key.json")
         target.writeText(json)
+        invalidateQueryCaches()
         true
     }.getOrDefault(false)
 
