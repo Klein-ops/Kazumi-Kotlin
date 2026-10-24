@@ -55,13 +55,21 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeout
 
 /** 单个插件的检索状态 */
-private data class SourceGroup(
-    val name: String,
-    var status: PluginSearchStatus = PluginSearchStatus.PENDING,
-    val results: MutableList<SearchItem> = mutableStateListOf(),
+private class SourceGroup(
+    val name: String
+) {
+    /**
+     * 检索状态：必须用 Compose state（mutableStateOf），不能是普通 var！
+     * 否则协程里修改 status 不触发重组 → 界面一直显示"正在检索…"转圈，
+     * 尽管结果已进 results 列表（mutableStateListOf 会触发重组，但 when 第一个
+     * 匹配的 PENDING 分支永远优先），滑动一下重新组合后才显示正常。
+     */
+    var status by mutableStateOf(PluginSearchStatus.PENDING)
+    /** 结果列表（Compose state list，添加即触发重组） */
+    val results = mutableStateListOf<SearchItem>()
     /** 失败原因（如验证码挑战），null 时用默认文案 */
-    var message: String? = null
-)
+    var message by mutableStateOf<String?>(null)
+}
 
 /**
  * 播放来源弹窗（对齐原版 source_sheet.dart / source_sheet_view.dart）
