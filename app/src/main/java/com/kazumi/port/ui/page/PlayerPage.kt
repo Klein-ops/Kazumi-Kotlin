@@ -255,6 +255,11 @@ fun PlayerPage(
     var hudVolume by remember { mutableFloatStateOf(80f) }
     var hudBrightness by remember { mutableFloatStateOf(0.5f) }
     var brightnessVolumeGesture by remember { mutableStateOf(true) }
+    // 垂直手势的累积基准：onVerticalDragStart 时记录系统音量/亮度，之后每次 delta 累加。
+    // 不能用"系统当前值 + delta"（delta 是瞬时增量）：系统音量是离散级别，重读系统值会让
+    // 小数增量被 toInt 吃掉 → 永远抖在某个级别附近，拖不上去（反复横跳）。
+    var verticalDragBaseVolume by remember { mutableFloatStateOf(80f) }
+    var verticalDragBaseBrightness by remember { mutableFloatStateOf(0.5f) }
 
     // HUD 音量初始值 = 系统媒体音量（STREAM_MUSIC），音量完全由系统控制
     LaunchedEffect(Unit) {
@@ -849,6 +854,14 @@ fun PlayerPage(
                         controlsVisible = true
                     }
                 },
+                onVerticalDragStart = {
+                    // 手势起点：锁定本次手势的基准值（音量=系统当前音量，亮度=当前亮度）。
+                    // 之后所有 delta 基于这个基准累加，不再重读系统值。
+                    if (!locked && brightnessVolumeGesture) {
+                        verticalDragBaseVolume = playerController.systemVolume() * 100f
+                        verticalDragBaseBrightness = hudBrightness
+                    }
+                },
                 onVerticalDrag = { deltaPx, viewportHeight, startX, viewportWidth ->
                     if (!locked && brightnessVolumeGesture) {
                         // 左侧调亮度，右侧调音量
@@ -857,19 +870,19 @@ fun PlayerPage(
                         if (isLeft) {
                             showBrightnessHud = true
                             showVolumeHud = false
+                            // 累积式：基准 + 累计位移，小抖动不会大幅回退（比"当前值+瞬时delta"稳定）
                             val delta = -deltaPx / fullDrag
-                            hudBrightness = (hudBrightness + delta).coerceIn(0f, 1f)
+                            hudBrightness = (verticalDragBaseBrightness + delta).coerceIn(0f, 1f)
                             playerController.setBrightness(hudBrightness.toDouble())
                             setScreenBrightness(context, hudBrightness)
                         } else {
                             showVolumeHud = true
                             showBrightnessHud = false
+                            // 累积式：基准 + 累计位移。系统音量是离散级别（如15级），
+                            // 若每次用"系统当前值+瞬时delta"，小数增量被 toInt 吃掉 →
+                            // 音量永远抖在某个级别附近拖不上去（反复横跳）。累积就不会。
                             val delta = -deltaPx / fullDrag * 100f
-                            // 音量基准 = 系统当前媒体音量（不是 hudVolume 记忆值）：
-                            // 用户手动调过系统音量（音量键/通知栏/其他 App）后，手势必须基于
-                            // 系统实时值调整，否则"系统 0、hudVolume 80 → 拖一下就跳 80"。
-                            val systemNow = playerController.systemVolume() * 100f
-                            hudVolume = (systemNow + delta).coerceIn(0f, 100f)
+                            hudVolume = (verticalDragBaseVolume + delta).coerceIn(0f, 100f)
                             playerController.setSystemVolume(hudVolume / 100f)
                         }
                     }
@@ -1485,6 +1498,7 @@ private fun PlayerGestureLayer(
     onHorizontalDragStart: () -> Unit,
     onHorizontalDrag: (deltaPx: Float, viewportWidth: Float) -> Unit,
     onHorizontalDragEnd: (cancelled: Boolean) -> Unit,
+    onVerticalDragStart: () -> Unit = {},
     onVerticalDrag: (deltaPx: Float, viewportHeight: Float, startX: Float, viewportWidth: Float) -> Unit,
     onVerticalDragEnd: () -> Unit,
     /** 长按画面临时倍速（原版 onLongPressStart/End） */
@@ -1547,6 +1561,7 @@ private fun PlayerGestureLayer(
                     if (!horizontalDragActive) {
                         verticalStartX = offset.x
                         verticalDragActive = true
+                        onVerticalDragStart()
                     }
                 },
                 onDragEnd = {
