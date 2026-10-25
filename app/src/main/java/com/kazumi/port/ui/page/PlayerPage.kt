@@ -260,6 +260,10 @@ fun PlayerPage(
     // 小数增量被 toInt 吃掉 → 永远抖在某个级别附近，拖不上去（反复横跳）。
     var verticalDragBaseVolume by remember { mutableFloatStateOf(80f) }
     var verticalDragBaseBrightness by remember { mutableFloatStateOf(0.5f) }
+    // 垂直手势累计位移：onVerticalDragStart 重置，onVerticalDrag 累加。
+    // deltaPx 是单次事件的瞬时增量，若直接用"基准+瞬时增量"会在基准附近反复重置→拖不动；
+    // 必须累加总位移再换算，持续拖必然累积到位。
+    var verticalDragAccum by remember { mutableFloatStateOf(0f) }
 
     // HUD 音量初始值 = 系统媒体音量（STREAM_MUSIC），音量完全由系统控制
     LaunchedEffect(Unit) {
@@ -855,11 +859,11 @@ fun PlayerPage(
                     }
                 },
                 onVerticalDragStart = {
-                    // 手势起点：锁定本次手势的基准值（音量=系统当前音量，亮度=当前亮度）。
-                    // 之后所有 delta 基于这个基准累加，不再重读系统值。
+                    // 手势起点：锁定基准值（音量=系统当前音量，亮度=当前亮度）并重置累计位移
                     if (!locked && brightnessVolumeGesture) {
                         verticalDragBaseVolume = playerController.systemVolume() * 100f
                         verticalDragBaseBrightness = hudBrightness
+                        verticalDragAccum = 0f
                     }
                 },
                 onVerticalDrag = { deltaPx, viewportHeight, startX, viewportWidth ->
@@ -867,21 +871,20 @@ fun PlayerPage(
                         // 左侧调亮度，右侧调音量
                         val isLeft = startX < viewportWidth / 2
                         val fullDrag = viewportHeight * 0.6f
+                        // 累加总位移：deltaPx 是单次事件瞬时增量，必须累积后再换算，
+                        // 否则每次"基准+瞬时增量"会在基准附近反复重置 → 拖不动/原地抖
+                        verticalDragAccum += deltaPx
                         if (isLeft) {
                             showBrightnessHud = true
                             showVolumeHud = false
-                            // 累积式：基准 + 累计位移，小抖动不会大幅回退（比"当前值+瞬时delta"稳定）
-                            val delta = -deltaPx / fullDrag
+                            val delta = -verticalDragAccum / fullDrag
                             hudBrightness = (verticalDragBaseBrightness + delta).coerceIn(0f, 1f)
                             playerController.setBrightness(hudBrightness.toDouble())
                             setScreenBrightness(context, hudBrightness)
                         } else {
                             showVolumeHud = true
                             showBrightnessHud = false
-                            // 累积式：基准 + 累计位移。系统音量是离散级别（如15级），
-                            // 若每次用"系统当前值+瞬时delta"，小数增量被 toInt 吃掉 →
-                            // 音量永远抖在某个级别附近拖不上去（反复横跳）。累积就不会。
-                            val delta = -deltaPx / fullDrag * 100f
+                            val delta = -verticalDragAccum / fullDrag * 100f
                             hudVolume = (verticalDragBaseVolume + delta).coerceIn(0f, 100f)
                             playerController.setSystemVolume(hudVolume / 100f)
                         }
@@ -1012,7 +1015,10 @@ fun PlayerPage(
                     raw.coerceIn(0f, 1f)
                 } else 0f
                 // 拖动预览时间气泡（对齐原版 player_progress_bar._buildPreview：
-                // 拖动时在滑块上方显示黑色圆角时间气泡，不是视频帧图）
+                // 拖动时在滑块上方显示黑色圆角时间气泡，不是视频帧图。
+                // 黑色背景画在整块 Box 上（对齐原版 Container 的 decoration.color），
+                // 而不是画在 Text 上——Text 背景只包住文字，会造成黑块/错位。
+                // 气泡悬浮在 Slider 上方（.offset(y = -42.dp)），不盖住轨道。
                 androidx.compose.foundation.layout.BoxWithConstraints(
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1021,30 +1027,23 @@ fun PlayerPage(
                         val bubbleText = formatMs((barValue * uiState.durationMs).toLong())
                         val bubbleWidth = 68.dp
                         val left = (maxWidth - bubbleWidth) * frac
-                        // 气泡固定高度 36dp + zIndex 置于 Slider 上方：
-                        // 之前 Box 未限高，被 BoxWithConstraints 内 Slider 高度撑开，Text 的
-                        // align(Center) 让它垂直居中 → 气泡被拉成竖长条。
                         androidx.compose.foundation.layout.Box(
                             modifier = Modifier
-                                .offset(x = left)
+                                .offset(x = left, y = (-42).dp)
                                 .width(bubbleWidth)
-                                // 显式固定高度：wrapContentHeight(Alignment.Top) 在 BoxWithConstraints
-                                // 的有界高度约束下不会 wrap，反而被撑满进度条高度 → 竖长条。
-                                // 固定 36dp + contentAlignment=Center 让文字始终居中、背景贴内容。
-                                .height(36.dp)
-                                .zIndex(1f),
+                                .height(32.dp)
+                                .zIndex(1f)
+                                // 整块圆角黑底（对齐原版 Container(color: black 0.85, radius 8)）
+                                .background(
+                                    Color.Black.copy(alpha = 0.85f),
+                                    androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = bubbleText,
                                 color = Color.White,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier
-                                    .background(
-                                        Color.Black.copy(alpha = 0.85f),
-                                        androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-                                    )
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                style = MaterialTheme.typography.labelMedium
                             )
                         }
                     }
