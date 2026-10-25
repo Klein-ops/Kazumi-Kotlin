@@ -99,6 +99,9 @@ fun DanmakuOverlay(
     val active = remember { mutableStateListOf<ActiveDanmaku>() }
     var lastGeneration by remember { mutableStateOf(-1) }
     var lastBatch by remember { mutableStateOf(-1) }
+    // 外观参数快照：显示区域/字号/行间距/开关等变化时，即使 batch 未变也要清空重排，
+    // 让"播放器内弹幕设置"实时生效（否则只能靠跳转/重进触发 generation 变化才重排）
+    var lastAppearance by remember { mutableStateOf<String?>(null) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
 
     val lifeMsTotal = (durationSeconds * 1000).toLong().coerceAtLeast(1000L)
@@ -176,9 +179,57 @@ fun DanmakuOverlay(
         return trackHeight to count.coerceAtLeast(1)
     }
 
+    /**
+     * 外观参数变化（显示区域/字号/行间距/开关）时，把在場弹幕按新轨道参数重排 lane。
+     * 只重排 lane 不重建（弹幕内容、进度、存活期都保留），新弹幕会按新参数正常排布，
+     * 避免"必须跳转/重进才生效"。
+     */
+    fun relaneActive(now: Long, w: Float, h: Float) {
+        if (w <= 0f || h <= 0f) return
+        val (_, trackCount) = calcTracks(h)
+        // 每条弹幕按当前规则重新找一条可用 lane：滚动优先空轨、静态按类型找空轨
+        val reassigned = active
+            .filter { item -> item.startMs + item.lifeMs > now }
+            .map { item ->
+                val isStatic = isStaticType(item.entry.type)
+                var lane = -1
+                if (isStatic) {
+                    val firstLane = if (item.entry.type == 4 && safeArea) 1 else 0
+                    for (i in firstLane until trackCount) {
+                        val busy = active.any {
+                            it.entry.type == item.entry.type && it.lane == i &&
+                                it.startMs + it.lifeMs > now && it !== item
+                        }
+                        if (!busy) { lane = i; break }
+                    }
+                    if (lane < 0) lane = 0
+                } else {
+                    for (i in 0 until trackCount) {
+                        if (scrollLaneFree(i, active, now, w, item.widthPx)) { lane = i; break }
+                    }
+                    if (lane < 0) lane = if (massive) Random.nextInt(trackCount.coerceAtLeast(1)) else 0
+                }
+                item.copy(lane = lane.coerceAtLeast(0))
+            }
+        // 原地替换（保持 active 引用不变，避免破坏 Canvas 闭包引用）
+        active.clear()
+        active.addAll(reassigned)
+    }
+
     // 消费批次：currentDanmakus 是"新增弹幕"（增量），渲染层维护生命周期
     LaunchedEffect(batch, trackHeight, area, massive, safeArea, showScroll, showTop, showBottom) {
-        if (batch == lastBatch) return@LaunchedEffect
+        // 影响轨道布局的外观参数快照（字号/行间距变化会体现在 trackHeight 上）
+        val appearanceKey =
+            "$trackHeight|$area|$massive|$safeArea|$showScroll|$showTop|$showBottom"
+        if (batch == lastBatch) {
+            // 批次未变：只有外观参数变化才需要处理——在場弹幕按新轨道参数重排 lane，
+            // 立即生效（否则显示区域/字号改动要等跳转/重进才重排）
+            if (appearanceKey != lastAppearance && canvasSize.width > 0f && canvasSize.height > 0f) {
+                lastAppearance = appearanceKey
+                relaneActive(clockMs, canvasSize.width, canvasSize.height)
+            }
+            return@LaunchedEffect
+        }
         if (!visible || !danmakuOn) {
             lastBatch = batch
             return@LaunchedEffect
@@ -187,6 +238,7 @@ fun DanmakuOverlay(
         // 画布还没测量完：不消费本批次，等 onSizeChanged 后重试（否则进入播放器/seek 后的第一批弹幕会被吞掉）
         if (w <= 0f) return@LaunchedEffect
         lastBatch = batch
+        lastAppearance = appearanceKey
         val now = clockMs
         active.removeAll { item -> item.startMs + item.lifeMs < now }
         // 文本测量准备

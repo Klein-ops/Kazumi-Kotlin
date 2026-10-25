@@ -565,8 +565,9 @@ fun PlayerPage(
         }
     }
 
-    // 读取弹幕设置
-    LaunchedEffect(Unit) {
+    // 读取弹幕设置（进页面 + 播放器内弹幕设置 sheet 变更后共用，
+    // 保证显示区域/字号/不透明度等外观参数实时生效，无需跳转/重进）
+    suspend fun reloadDanmakuAppearance() {
         val s = app.settings
         danmakuArea = s.getDouble(SettingsManager.Danmaku.AREA, 1.0).toFloat()
         danmakuFontSize = s.getDouble(SettingsManager.Danmaku.FONT_SIZE, 16.0).toInt()
@@ -581,6 +582,7 @@ fun PlayerPage(
         danmakuMassive = s.getBoolean(SettingsManager.Danmaku.MASSIVE, false)
         brightnessVolumeGesture = s.getBoolean(SettingsManager.Player.BRIGHTNESS_VOLUME_GESTURE, true)
     }
+    LaunchedEffect(Unit) { reloadDanmakuAppearance() }
 
     // 定时刷新进度 + 弹幕调度
     LaunchedEffect(Unit) {
@@ -1410,7 +1412,7 @@ fun PlayerPage(
             DanmakuSettingsSheet(
                 settings = app.settings,
                 onDismiss = { showDanmakuSettings = false },
-                onChanged = { /* 设置变化后渲染层自动读取 */ },
+                onChanged = { scope.launch { reloadDanmakuAppearance() } },
                 // 仅简繁转换变更触发：重新拉弹幕（fetchDanmaku 内部已清空旧弹幕，
                 // 重新按新 chConvert 设置拉取，本地转换在 addDanmakus 统一做）
                 onChConvertChanged = {
