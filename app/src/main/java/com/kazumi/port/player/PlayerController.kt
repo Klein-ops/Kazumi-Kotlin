@@ -147,7 +147,7 @@ class PlayerController(
         playingProvider = { exoPlayer?.isPlaying ?: false },
         currentPositionMsProvider = { exoPlayer?.currentPosition ?: 0L },
         playerPositionMsProvider = { exoPlayer?.currentPosition ?: 0L },
-        durationMsProvider = { exoPlayer?.duration ?: 0L },
+        durationMsProvider = { exoPlayer?.duration?.takeIf { it > 0 } ?: 0L },
         pauseAction = { enableSync -> pause(enableSync = enableSync) },
         playAction = { enableSync -> play(enableSync = enableSync) },
         seekAction = { targetMs, enableSync -> seekTo(targetMs, enableSync = enableSync) },
@@ -202,7 +202,7 @@ class PlayerController(
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (mediaItem != null) {
-                _uiState.update { it.copy(durationMs = exoPlayer?.duration ?: 0L) }
+                _uiState.update { it.copy(durationMs = exoPlayer?.duration?.takeIf { d -> d > 0 } ?: 0L) }
             }
         }
     }
@@ -487,7 +487,9 @@ class PlayerController(
         _uiState.update {
             it.copy(
                 currentPositionMs = player.currentPosition,
-                durationMs = player.duration
+                // ExoPlayer 在时长未知/直播流时 duration 返回 C.TIME_UNSET（Long.MIN_VALUE），
+                // 直接写入会让底部进度与 HUD 显示成垃圾值，统一过滤为 0。
+                durationMs = player.duration.takeIf { d -> d > 0 } ?: 0L
             )
         }
     }

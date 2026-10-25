@@ -206,10 +206,12 @@ fun PlayerSeekHud(
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 .padding(vertical = 8.dp, horizontal = 10.dp)
         ) {
-            // 背景进度条
+            // 背景进度条（对齐原版 Positioned.fill：只填内容区域。
+            // 若用 fillMaxSize()，外层 Box 高度无约束时会透传 maxHeight，
+            // 背景矩形会被撑成 248dp x 屏幕高 的巨型色块）
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .matchParentSize()
                     .clip(RoundedCornerShape(30.dp))
                     .background(
                         if (progress > 0) {
@@ -253,6 +255,9 @@ fun PlayerSeekHud(
 }
 
 private fun formatMsShort(ms: Long): String {
+    // ExoPlayer 时长未知时 duration 返回 C.TIME_UNSET（Long.MIN_VALUE），
+    // 直接整除会溢出成 "-153722867280912:-55" 这类垃圾文本，这里统一兜底。
+    if (ms <= 0) return "00:00"
     val totalSec = ms / 1000
     val m = totalSec / 60
     val s = totalSec % 60
