@@ -859,10 +859,12 @@ fun PlayerPage(
                     }
                 },
                 onVerticalDragStart = {
-                    // 手势起点：锁定基准值（音量=系统当前音量，亮度=当前亮度）并重置累计位移
+                    // 手势起点：锁定基准值并重置累计位移。
+                    // 音量基准 = 系统当前媒体音量（实时）；亮度基准 = panelState.brightness
+                    // （实际亮度状态的唯一来源，不是 hudBrightness 本地记忆值）。
                     if (!locked && brightnessVolumeGesture) {
                         verticalDragBaseVolume = playerController.systemVolume() * 100f
-                        verticalDragBaseBrightness = hudBrightness
+                        verticalDragBaseBrightness = panelState.brightness.toFloat()
                         verticalDragAccum = 0f
                     }
                 },
