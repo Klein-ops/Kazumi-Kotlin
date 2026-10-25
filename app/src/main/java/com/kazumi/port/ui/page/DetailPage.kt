@@ -537,7 +537,7 @@ fun DetailPage(
                                 }
                             }
                             when (selectedTab) {
-                                0 -> OverviewTabContent(item = item, screenWidthDp = LocalConfiguration.current.screenWidthDp, onOpenReview = {
+                                0 -> OverviewTabContent(item = item, onOpenReview = {
                                     if (collectType == 0) {
                                         showToast("请先追番")
                                     } else {
@@ -723,6 +723,8 @@ fun DetailPage(
  */
 @Composable
 private fun DetailHeader(item: BangumiItem) {
+    // 屏宽（dp）：原版评分透视柱状图仅宽屏显示（>= LayoutBreakpoint.compact['width'] = 600dp）
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         // 大标题（对齐原版 info 页 headline 标题）
         Text(
@@ -877,7 +879,6 @@ private fun DetailHeader(item: BangumiItem) {
 @OptIn(ExperimentalLayoutApi::class)
 private fun LazyListScope.OverviewTabContent(
     item: BangumiItem,
-    screenWidthDp: Int,
     onOpenReview: () -> Unit,
     onTagClick: (String) -> Unit
 ) {
