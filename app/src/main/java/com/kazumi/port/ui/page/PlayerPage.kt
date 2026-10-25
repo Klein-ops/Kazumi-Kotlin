@@ -1491,8 +1491,10 @@ private fun PlayerGestureLayer(
     onLongPressSpeedStart: () -> Unit = {},
     onLongPressSpeedEnd: () -> Unit = {}
 ) {
-    var dragStartX by remember { mutableFloatStateOf(0f) }
-    var dragStartY by remember { mutableFloatStateOf(0f) }
+    var horizontalDragActive by remember { mutableStateOf(false) }
+    var verticalDragActive by remember { mutableStateOf(false) }
+    /** vertical 手势的起点 X（锁定左右半屏判定，horizontal 不碰它，避免滑音量途中被覆盖成亮度） */
+    var verticalStartX by remember { mutableFloatStateOf(0f) }
     var longPressSpeedActive by remember { mutableStateOf(false) }
     Box(
         modifier = modifier.pointerInput(locked) {
@@ -1517,33 +1519,49 @@ private fun PlayerGestureLayer(
             if (locked) return@pointerInput
             detectHorizontalDragGestures(
                 onDragStart = { offset ->
-                    dragStartX = offset.x
-                    dragStartY = offset.y
-                    onHorizontalDragStart()
+                    // 垂直手势进行中时忽略水平手势（一次手势只做一个动作，防止滑音量时误触发 seek/暂停）
+                    if (!verticalDragActive) {
+                        horizontalDragActive = true
+                        onHorizontalDragStart()
+                    }
                 },
                 onDragEnd = {
+                    horizontalDragActive = false
                     onHorizontalDragEnd(false)
                 },
                 onDragCancel = {
+                    horizontalDragActive = false
                     onHorizontalDragEnd(true)
                 },
                 onHorizontalDrag = { change, dragAmount ->
-                    change.consume()
-                    onHorizontalDrag(dragAmount, size.width.toFloat())
+                    if (horizontalDragActive) {
+                        change.consume()
+                        onHorizontalDrag(dragAmount, size.width.toFloat())
+                    }
                 }
             )
         }.pointerInput(locked) {
             if (locked) return@pointerInput
             detectVerticalDragGestures(
                 onDragStart = { offset ->
-                    dragStartX = offset.x
-                    dragStartY = offset.y
+                    if (!horizontalDragActive) {
+                        verticalStartX = offset.x
+                        verticalDragActive = true
+                    }
                 },
-                onDragEnd = { onVerticalDragEnd() },
-                onDragCancel = { onVerticalDragEnd() },
+                onDragEnd = {
+                    verticalDragActive = false
+                    onVerticalDragEnd()
+                },
+                onDragCancel = {
+                    verticalDragActive = false
+                    onVerticalDragEnd()
+                },
                 onVerticalDrag = { change, dragAmount ->
-                    change.consume()
-                    onVerticalDrag(dragAmount, size.height.toFloat(), dragStartX, size.width.toFloat())
+                    if (verticalDragActive) {
+                        change.consume()
+                        onVerticalDrag(dragAmount, size.height.toFloat(), verticalStartX, size.width.toFloat())
+                    }
                 }
             )
         }
