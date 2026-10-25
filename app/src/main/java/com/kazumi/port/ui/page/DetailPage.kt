@@ -826,7 +826,9 @@ private fun DetailHeader(item: BangumiItem) {
                     .height(90.dp)
                     .pointerInput(item.votesCount) {
                         detectTapGestures { offset ->
-                            val barWidth = size.width / item.votesCount.size
+                            // pointerInput 里 size 是 IntSize，转 Float 再除，避免整数截断导致
+                            // 命中边界与绘制时的浮点 barWidth（Canvas size.width 是 Float）不一致
+                            val barWidth = size.width.toFloat() / item.votesCount.size
                             val idx = (offset.x / barWidth).toInt().coerceIn(0, item.votesCount.size - 1)
                             touchedIndex = if (touchedIndex == idx) -1 else idx
                         }
