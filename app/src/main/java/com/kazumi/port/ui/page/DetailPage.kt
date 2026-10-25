@@ -1,10 +1,13 @@
 package com.kazumi.port.ui.page
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -534,7 +537,7 @@ fun DetailPage(
                                 }
                             }
                             when (selectedTab) {
-                                0 -> OverviewTabContent(item = item, onOpenReview = {
+                                0 -> OverviewTabContent(item = item, screenWidthDp = LocalConfiguration.current.screenWidthDp, onOpenReview = {
                                     if (collectType == 0) {
                                         showToast("请先追番")
                                     } else {
@@ -803,7 +806,8 @@ private fun DetailHeader(item: BangumiItem) {
             )
         }
         // 评分透视柱状图（对齐原版 fl_chart 10 档柱状，纯 Canvas 手绘零依赖）
-        if (item.votesCount.isNotEmpty() && item.votes > 0) {
+        // 原版显示条件：showRating && 屏宽 >= 600dp（LayoutBreakpoint.compact['width']）&& !isLoading
+        if (screenWidthDp >= 600 && item.votesCount.isNotEmpty() && item.votes > 0) {
             Spacer(Modifier.height(12.dp))
             Text(
                 text = "评分透视:",
@@ -815,21 +819,30 @@ private fun DetailHeader(item: BangumiItem) {
             // Canvas drawScope 内不能调 MaterialTheme（@Composable），提前缓存
             val barColor = MaterialTheme.colorScheme.primary
             val barColorFaint = barColor.copy(alpha = 0.35f)
+            var touchedIndex by remember { mutableIntStateOf(-1) }
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(90.dp)
+                    .pointerInput(item.votesCount) {
+                        detectTapGestures { offset ->
+                            val barWidth = size.width / item.votesCount.size
+                            val idx = (offset.x / barWidth).toInt().coerceIn(0, item.votesCount.size - 1)
+                            touchedIndex = if (touchedIndex == idx) -1 else idx
+                        }
+                    }
             ) {
                 val barWidth = size.width / item.votesCount.size
                 item.votesCount.forEachIndexed { index, count ->
                     val h = (count.toFloat() / maxVote) * size.height
                     val left = index * barWidth + barWidth * 0.2f
                     val right = (index + 1) * barWidth - barWidth * 0.2f
-                    drawRect(
-                        color = if (index == item.votesCount.indices.last) barColor else barColorFaint,
+                    val isTouched = index == touchedIndex
+                    drawRoundRect(
+                        color = if (isTouched) barColor else barColorFaint,
                         topLeft = Offset(left, size.height - h),
                         size = Size(right - left, h),
-                        style = Stroke(width = 4.dp.toPx())
+                        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
                     )
                 }
             }
@@ -841,6 +854,17 @@ private fun DetailHeader(item: BangumiItem) {
                 Text("5", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("10", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            // 点击某档柱后显示占比（对齐原版 BarTouchTooltipData：xx.xx% (n人)）
+            if (touchedIndex >= 0 && touchedIndex < item.votesCount.size) {
+                val count = item.votesCount[touchedIndex]
+                val pct = count.toFloat() / item.votes * 100f
+                Text(
+                    text = "${String.format("%.2f", pct)}% (${count}人)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         }
     }
 }
@@ -851,6 +875,7 @@ private fun DetailHeader(item: BangumiItem) {
 @OptIn(ExperimentalLayoutApi::class)
 private fun LazyListScope.OverviewTabContent(
     item: BangumiItem,
+    screenWidthDp: Int,
     onOpenReview: () -> Unit,
     onTagClick: (String) -> Unit
 ) {
