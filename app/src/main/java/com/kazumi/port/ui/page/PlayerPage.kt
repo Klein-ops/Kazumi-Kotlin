@@ -146,16 +146,33 @@ fun PlayerPage(
     val toast = rememberToast()
 
     // 选集切换：路由携带的线路 JSON（DetailPage 传来），解析出 Road 列表
-    val roads = remember(roadsJson) {
-        if (roadsJson.isEmpty()) emptyList()
-        else runCatching {
-            val arr = com.google.gson.JsonParser.parseString(roadsJson).asJsonArray
-            arr.mapNotNull { el ->
-                if (el.isJsonObject) com.kazumi.port.data.model.Road.fromJson(el.asJsonObject) else null
-            }
-        }.getOrDefault(emptyList())
+    // 从历史记录/快捷入口直达时 roadsJson 为空，此时按补名标题反搜当前插件补线路，
+    // 否则播放器内的选集/切线路不可用（历史记录页复现的"无法切换选集"）。
+    // 注意：补线路逻辑依赖补名结果 bangumiTitle，因此放在下方 bangumiTitle 声明之后。
+    var roads by remember(roadsJson) {
+        mutableStateOf(
+            if (roadsJson.isEmpty()) emptyList()
+            else runCatching {
+                val arr = com.google.gson.JsonParser.parseString(roadsJson).asJsonArray
+                arr.mapNotNull { el ->
+                    if (el.isJsonObject) com.kazumi.port.data.model.Road.fromJson(el.asJsonObject) else null
+                }
+            }.getOrDefault(emptyList())
+        )
     }
     var showEpisodeSheet by remember { mutableStateOf(false) }
+
+    // 路由携带的线路 JSON 优先；若从历史记录等入口进入（roadsJson 为空）且
+    // roads 已通过补线路逻辑填充，则把当前 roads 序列化带出，切集/换线路时不丢线路。
+    fun currentRoadsJson(): String {
+        if (roadsJson.isNotEmpty()) return roadsJson
+        if (roads.isEmpty()) return ""
+        return runCatching {
+            val arr = com.google.gson.JsonArray()
+            roads.forEach { arr.add(it.toJson()) }
+            arr.toString()
+        }.getOrDefault("")
+    }
 
     var resolvedLocalPath by remember { mutableStateOf<String?>(null) }
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
@@ -193,6 +210,9 @@ fun PlayerPage(
     // 番剧名：在线播放时路由只带 bangumiId，这里按 id 补名字，供弹幕自动匹配使用
     // 取名失败会静默导致 B 站弹幕匹配拿空关键词 → 永远匹配不到；这里带日志 + 最多 3 次重试
     var bangumiTitle by remember(bangumiId) { mutableStateOf("") }
+    // 补名成功后保存完整条目（含封面图），历史记录写入时带上 images，
+    // 否则历史页所有条目封面为空（BangumiItem 默认 images 为空 Map）。
+    var bangumiItem by remember(bangumiId) { mutableStateOf<com.kazumi.port.data.model.BangumiItem?>(null) }
     LaunchedEffect(bangumiId) {
         if (isLocal || bangumiId <= 0 || bangumiTitle.isNotEmpty()) return@LaunchedEffect
         FileLogger.i("Danmaku", "补名开始: bgm=$bangumiId")
@@ -204,12 +224,35 @@ fun PlayerPage(
                 }.getOrNull()
             }
             name = item?.displayName().orEmpty()
-            if (name.isNotBlank()) break
+            if (name.isNotBlank()) {
+                bangumiItem = item
+                break
+            }
             FileLogger.w("Danmaku", "补名尝试 $attempt/3 未取到名字: bgm=$bangumiId item=${item != null}")
             if (attempt < 3) delay(2_000)
         }
         FileLogger.i("Danmaku", "补名完成: bgm=$bangumiId name=\"$name\"")
         if (name.isNotBlank()) bangumiTitle = name
+    }
+
+    // 补线路：仅当 roadsJson 为空（无线路数据）且已补到番剧名时触发。
+    // 从历史记录/快捷入口直达时路由不带 roadsJson，播放器内无选集/切线路；
+    // 这里复用与详情页一致的路径：反搜当前插件命中 → 查线路。
+    // 搜索可能因标题不完全匹配失败，失败则维持现状（能播但无选集），不影响播放。
+    LaunchedEffect(roads.isEmpty(), bangumiTitle, pluginName) {
+        if (roads.isNotEmpty()) return@LaunchedEffect
+        if (isLocal || bangumiTitle.isBlank() || pluginName.isBlank()) return@LaunchedEffect
+        FileLogger.d("PlayerResolve", "roadsJson 为空，按标题反搜补线路: plugin=$pluginName title=$bangumiTitle")
+        val fetched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val hit = app.pluginRepository.searchBangumi(pluginName, bangumiTitle).data.firstOrNull()
+                if (hit != null) app.pluginRepository.queryChapterRoads(pluginName, hit.src) else emptyList()
+            }.getOrDefault(emptyList())
+        }
+        if (fetched.isNotEmpty()) {
+            roads = fetched
+            FileLogger.d("PlayerResolve", "补线路成功: roads=${fetched.size}")
+        }
     }
 
     // 切换上一集/下一集（对齐原版 handlePreNextEpisode：越界提示 toast，不走选集弹窗）
@@ -237,7 +280,7 @@ fun PlayerPage(
                 episode = target,
                 road = road,
                 isLocal = isLocal,
-                roadsJson = roadsJson
+                roadsJson = currentRoadsJson()
             )
         ) {
             popUpTo(com.kazumi.port.ui.navigation.Routes.PLAYER) { inclusive = true }
@@ -631,15 +674,17 @@ fun PlayerPage(
                     scope.launch {
                         // 隐私模式跳过（对齐原版 getPrivateMode）
                         if (app.settings.isPrivateMode()) return@launch
-                        val item = if (bangumiTitle.isNotBlank()) {
-                            com.kazumi.port.data.model.BangumiItem(
-                                id = bangumiId,
-                                name = bangumiTitle,
-                                nameCn = bangumiTitle
-                            )
-                        } else {
-                            com.kazumi.port.data.model.BangumiItem(id = bangumiId, name = "第${episode}集")
-                        }
+                        // 优先用补名拿到的完整条目（含封面 images），否则退回标题构造
+                        val item = bangumiItem
+                            ?: if (bangumiTitle.isNotBlank()) {
+                                com.kazumi.port.data.model.BangumiItem(
+                                    id = bangumiId,
+                                    name = bangumiTitle,
+                                    nameCn = bangumiTitle
+                                )
+                            } else {
+                                com.kazumi.port.data.model.BangumiItem(id = bangumiId, name = "第${episode}集")
+                            }
                         app.historyRepository.recordWatch(
                             adapterName = pluginName,
                             bangumiItem = item,
@@ -874,7 +919,11 @@ fun PlayerPage(
                     if (!locked && brightnessVolumeGesture) {
                         // 左侧调亮度，右侧调音量
                         val isLeft = startX < viewportWidth / 2
+                        // 亮度：拖 60% 屏高走满全量（保持原手感）
                         val fullDrag = viewportHeight * 0.6f
+                        // 音量：拖满约 3 个屏高才走到 100%，滑动更精细，
+                        // 避免随手一划（1/4 屏）就把音量拉满（旧值 0.6 屏=满音量，误触直接社死）
+                        val volumeFullDrag = viewportHeight * 3f
                         // 累加总位移：deltaPx 是单次事件瞬时增量，必须累积后再换算，
                         // 否则每次"基准+瞬时增量"会在基准附近反复重置 → 拖不动/原地抖
                         verticalDragAccum += deltaPx
@@ -888,7 +937,7 @@ fun PlayerPage(
                         } else {
                             showVolumeHud = true
                             showBrightnessHud = false
-                            val delta = -verticalDragAccum / fullDrag * 100f
+                            val delta = -verticalDragAccum / volumeFullDrag * 100f
                             hudVolume = (verticalDragBaseVolume + delta).coerceIn(0f, 100f)
                             playerController.setSystemVolume(hudVolume / 100f)
                         }
@@ -1454,7 +1503,7 @@ fun PlayerPage(
                                 episode = episodeIndex + 1,
                                 road = roadIndex,
                                 isLocal = isLocal,
-                                roadsJson = roadsJson
+                                roadsJson = currentRoadsJson()
                             )
                         ) {
                             popUpTo(com.kazumi.port.ui.navigation.Routes.PLAYER) { inclusive = true }

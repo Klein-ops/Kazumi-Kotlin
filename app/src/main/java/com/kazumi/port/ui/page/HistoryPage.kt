@@ -108,12 +108,15 @@ fun HistoryPage(navController: NavHostController) {
     }.filter { it.second.isNotEmpty() }
 
     fun openPlayer(h: History) {
+        // 从历史进度中取当前集的线路索引（旧数据可能没有，默认 0）
+        val roadIdx = h.progresses[h.lastWatchEpisode]?.road ?: 0
         navController.navigate(
             Routes.player(
                 bangumiId = h.bangumiItem.id,
                 pluginName = h.adapterName,
                 src = h.lastSrc,
-                episode = h.lastWatchEpisode
+                episode = h.lastWatchEpisode,
+                road = roadIdx
             )
         )
     }

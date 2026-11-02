@@ -82,7 +82,17 @@ fun EpisodeSelectionSheet(
                         val name = r.name.trim().ifEmpty { "播放线路 ${index + 1}" }
                         FilterChip(
                             selected = index == visibleRoad,
-                            onClick = { visibleRoad = index },
+                            onClick = {
+                                visibleRoad = index
+                                // 用户预期：点线路立即切到该线路的当前集播放，
+                                // 不需要"先点线路、再点一次当前集数"两步（旧逻辑只切展示不切播放）。
+                                if (index != selectedRoad) {
+                                    val target = roads.getOrNull(index)
+                                    val maxIdx = (target?.data?.size ?: 0) - 1
+                                    val epIdx = (selectedEpisode - 1).coerceIn(0, maxIdx.coerceAtLeast(0))
+                                    onSelect(epIdx, index)
+                                }
+                            },
                             label = { Text(name) }
                         )
                     }
