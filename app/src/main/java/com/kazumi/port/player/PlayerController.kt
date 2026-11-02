@@ -384,7 +384,10 @@ class PlayerController(
 
     fun playOrPause() {
         val player = exoPlayer ?: return
-        if (player.isPlaying) pause() else play()
+        // 用播放意图（playWhenReady）判断而不是 isPlaying()：
+        // 缓冲期 isPlaying()=false 但实际在缓冲，此时点暂停应真正暂停，
+        // 用 isPlaying() 判断会误调 play()（保持缓冲不断，用户以为按钮坏了）。
+        if (player.playWhenReady) pause() else play()
     }
 
     fun seekTo(positionMs: Long, enableSync: Boolean = true) {
@@ -475,6 +478,13 @@ class PlayerController(
     fun duration(): Long = exoPlayer?.duration ?: 0L
 
     fun isPlaying(): Boolean = exoPlayer?.isPlaying ?: false
+
+    /**
+     * 用户是否"想播放"（播放意图，对应 ExoPlayer.playWhenReady）。
+     * 与 isPlaying() 的区别：缓冲期（STATE_BUFFERING）playWhenReady=true 而 isPlaying=false。
+     * 手势 seek 恢复播放必须用意图判断，否则缓冲期轻轻一滑就被永久卡在暂停。
+     */
+    fun wantsToPlay(): Boolean = exoPlayer?.playWhenReady ?: false
 
     /** 暴露 ExoPlayer 给 Compose AndroidView（PlayerView.player 赋值用） */
     fun exoPlayerCompat(): ExoPlayer? = exoPlayer

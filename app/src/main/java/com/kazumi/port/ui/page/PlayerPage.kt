@@ -460,9 +460,11 @@ fun PlayerPage(
     // （不改 params，避免重建打断视频解析；只在真正播放起来后补一次 seek）
     LaunchedEffect(resumeChecked, resumeOffsetMs, src, episode, road) {
         if (!resumeChecked || resumeOffsetMs <= 0L) return@LaunchedEffect
-        // 等 init 完成（currentParams 就绪且开始播放），最多等 10 秒
+        // 等 init 完成（currentParams 就绪且播放意图就位），最多等 10 秒
+        // 用 wantsToPlay()（playWhenReady）而不是 isPlaying()：缓冲期 isPlaying()=false，
+        // 旧条件在弱网下可能 10 秒都等不到"实际在播"而丢掉续播位置
         var waited = 0
-        while ((playerController.currentParams == null || !playerController.isPlaying()) && waited < 100) {
+        while ((playerController.currentParams == null || !playerController.wantsToPlay()) && waited < 100) {
             delay(100)
             waited++
         }
@@ -867,15 +869,15 @@ fun PlayerPage(
                     if (restore != null) playerController.setPlaybackSpeed(restore)
                 },
                 onHorizontalDragStart = {
+                    // 只记录基准，不立即暂停。
+                    // 旧实现一过 touch slop（约 8dp）就 pause：横屏观看时手指轻微横向一动
+                    // 就触发暂停 → 体感"动不动就自动暂停"。现在等位移累计超过阈值（0.3 秒）才进入 seek。
                     if (!locked) {
-                        interactiveSeeking = true
                         seekStartPos = playerController.currentPosition()
                         seekDragAccum = 0L
-                        seekWasPlaying = playerController.isPlaying()
-                        playerController.pause(enableSync = false)
-                        showSeekHud = true
-                        seekHudPosition = seekStartPos
-                        seekHudDirection = 0
+                        // 用"播放意图"（playWhenReady）而不是 isPlaying()：缓冲期 isPlaying()=false，
+                        // 旧代码误判会导致 seek 后不恢复播放 → "加载出来了但不播，滑一下才动"。
+                        seekWasPlaying = playerController.wantsToPlay()
                         seekCancelPending = false
                     }
                 },
@@ -885,22 +887,39 @@ fun PlayerPage(
                         val seekPerFullDrag = 120_000L // 全宽 120 秒
                         // 累加而不是每次重新算：onHorizontalDrag 回调的是单次事件瞬时增量
                         seekDragAccum += (deltaPx / viewportWidth * seekPerFullDrag).toLong()
-                        var target = seekStartPos + seekDragAccum
-                        if (target < 0) target = 0
-                        if (duration > 0 && target > duration) target = duration
-                        seekHudPosition = target
-                        seekHudDirection = if (seekDragAccum >= 0) 1 else -1
+                        if (interactiveSeeking) {
+                            var target = seekStartPos + seekDragAccum
+                            if (target < 0) target = 0
+                            if (duration > 0 && target > duration) target = duration
+                            seekHudPosition = target
+                            seekHudDirection = if (seekDragAccum >= 0) 1 else -1
+                        } else if (kotlin.math.abs(seekDragAccum) >= 300L) {
+                            // 位移换算超过 0.3 秒才真正进入 seek（防误触：轻微横向抖动不改播放状态）
+                            interactiveSeeking = true
+                            playerController.pause(enableSync = false)
+                            showSeekHud = true
+                            var target = seekStartPos + seekDragAccum
+                            if (target < 0) target = 0
+                            if (duration > 0 && target > duration) target = duration
+                            seekHudPosition = target
+                            seekHudDirection = if (seekDragAccum >= 0) 1 else -1
+                        }
                     }
                 },
                 onHorizontalDragEnd = { cancelled ->
                     if (!locked) {
+                        val wasInteractive = interactiveSeeking
                         interactiveSeeking = false
                         showSeekHud = false
-                        if (!cancelled) {
-                            playerController.seekTo(seekHudPosition, enableSync = false)
-                        }
-                        if (seekWasPlaying) {
-                            playerController.play(enableSync = false)
+                        if (wasInteractive) {
+                            // 没达到阈值的手势从未暂停过，不 seek 也不恢复（保持原播放状态）
+                            if (!cancelled) {
+                                playerController.seekTo(seekHudPosition, enableSync = false)
+                            }
+                            // 恢复播放用播放意图：缓冲期 seek 完也要能接着播
+                            if (seekWasPlaying) {
+                                playerController.play(enableSync = false)
+                            }
                         }
                         controlsVisible = true
                     }
