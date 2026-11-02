@@ -10,6 +10,8 @@ import com.kazumi.port.util.FileLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * 弹幕加载与调度状态（对应原版 player_danmaku_controller.dart）
@@ -62,6 +64,23 @@ class PlayerDanmakuController(
 
     /** 弹幕按秒索引：second -> 弹幕列表 */
     val danDanmakus: MutableMap<Int, MutableList<DanmakuEntry>> = mutableMapOf()
+
+    /**
+     * 装载互斥锁。
+     *
+     * 为什么必须串行：播放页有两处独立调用 fetchDanmaku()——
+     *  1) LaunchedEffect(params, resolveTick)：视频源解析完成后的首轮装载；
+     *  2) LaunchedEffect(bangumiTitle)：番剧名异步补回后的补装载。
+     * 两者的防重判断（等 danmakuLoading=false 再看 danDanmakus 是否为空）存在竞态窗口：
+     * 若 B 在第一轮 beginDanmakuLoad() 之前就判断完，loading 仍是 false、danDanmakus 也还是空，
+     * 于是两路都往下走，出现 begin/clear → begin/clear → add → add 的交错，
+     * 同一秒的 bucket 被追加两遍 —— 屏幕上表现为「同一时段同一条弹幕出现两次」。
+     * 实测证据：2026-11-01 23:23:14 与 23:23:15 两秒内同一集被装载了两次（各 1197 条）。
+     */
+    private val loadMutex = Mutex()
+
+    /** 当前请求标识（番剧 + 集号），用于识别重复装载 */
+    private var currentRequestKey: String = ""
 
     private val _danmakuOn = MutableStateFlow(false)
     val danmakuOn: StateFlow<Boolean> = _danmakuOn.asStateFlow()
@@ -148,6 +167,10 @@ class PlayerDanmakuController(
     /**
      * 加载弹幕（本地播放走下载缓存，在线走 DanDanPlay）
      * 对应原版 fetchDanmaku()
+     *
+     * 注意：本函数只负责"取数据"，不负责写入 danDanmakus。
+     * 完整的装载流程（清空 → 取数 → 写入）必须走 [loadDanmakuAndApply]，
+     * 否则清空与写入会被其它装载流程插在中间，造成同一批弹幕被追加两遍。
      */
     suspend fun fetchDanmaku(
         bangumiId: Int,
@@ -155,16 +178,71 @@ class PlayerDanmakuController(
         episode: Int,
         isLocalPlayback: Boolean,
         bangumiName: String = ""
-    ): DanmakuLoadResult {
-        return if (isLocalPlayback) {
-            _fetchCachedDanmaku(bangumiId, pluginName, episode, bangumiName)
-        } else {
-            _fetchDanDanmakuByBgmBangumiID(bangumiId, episode, bangumiName)
+    ): DanmakuLoadResult = loadMutex.withLock {
+        fetchInternal(bangumiId, pluginName, episode, isLocalPlayback, bangumiName)
+    }
+
+    private suspend fun fetchInternal(
+        bangumiId: Int,
+        pluginName: String,
+        episode: Int,
+        isLocalPlayback: Boolean,
+        bangumiName: String
+    ): DanmakuLoadResult = if (isLocalPlayback) {
+        _fetchCachedDanmaku(bangumiId, pluginName, episode, bangumiName)
+    } else {
+        _fetchDanDanmakuByBgmBangumiID(bangumiId, episode, bangumiName)
+    }
+
+    /**
+     * 完整装载（幂等 + 串行）：清空、取数、写入三段在同一把锁内完成。
+     *
+     * 这是播放页唯一应该调用的装载入口。同一番剧同一集重复调用时直接复用已有结果，
+     * 不会再清空重装——重复装载正是"同一条弹幕在屏幕上填充两次"的根因：
+     * 两路 alloc 交错成 clear→clear→add→add，同一秒的 bucket 被追加两遍。
+     *
+     * @param forceReload true 时忽略幂等复用，强制清空重装
+     *   （简繁转换变更等场景：设置已改，必须重新拉取并按新设置转换）
+     * @return 本次（或复用的）装载结果
+     */
+    suspend fun loadDanmakuAndApply(
+        bangumiId: Int,
+        pluginName: String,
+        episode: Int,
+        isLocalPlayback: Boolean,
+        bangumiName: String = "",
+        forceReload: Boolean = false
+    ): DanmakuLoadResult = loadMutex.withLock {
+        val requestKey = "$bangumiId|$episode"
+        // 幂等复用：同一集且已有弹幕，直接返回，绝不再清空重装（除非明确要求强制重装）
+        if (!forceReload && danDanmakus.isNotEmpty() && currentRequestKey == requestKey) {
+            FileLogger.i(
+                "Danmaku",
+                "装载跳过（复用已有）: key=$requestKey count=${danDanmakus.values.sumOf { it.size }}"
+            )
+            _danmakuLoading.value = false
+            return@withLock DanmakuLoadResult.success(danDanmakus.values.flatten(), bangumiID)
         }
+        currentRequestKey = requestKey
+        beginDanmakuLoad()
+        val result = try {
+            fetchInternal(bangumiId, pluginName, episode, isLocalPlayback, bangumiName)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) {
+                _danmakuLoading.value = false
+                throw e
+            }
+            _danmakuLoading.value = false
+            FileLogger.w("Danmaku", "装载异常: ${e.javaClass.simpleName}: ${e.message}")
+            DanmakuLoadResult.failed(bangumiID, "${e.javaClass.simpleName}: ${e.message}")
+        }
+        applyDanmakuLoad(result, enableDanmaku = result.hasDanmakus)
+        result
     }
 
     fun beginDanmakuLoad() {
         danDanmakus.clear()
+        loadedKeys.clear()
         _danmakuLoading.value = true
     }
 
@@ -178,6 +256,7 @@ class PlayerDanmakuController(
     fun applyUnavailableDanmakuLoad(result: DanmakuLoadResult) {
         bangumiID = result.bangumiID
         danDanmakus.clear()
+        loadedKeys.clear()
         _danmakuOn.value = false
         _danmakuLoading.value = false
     }
@@ -185,6 +264,7 @@ class PlayerDanmakuController(
     fun finishDanmakuLoad(disableDanmaku: Boolean = false) {
         if (disableDanmaku) {
             danDanmakus.clear()
+            loadedKeys.clear()
             _danmakuOn.value = false
         }
         _danmakuLoading.value = false
@@ -355,10 +435,12 @@ class PlayerDanmakuController(
     }
 
     /** 按分集 ID 获取弹幕（弹幕源切换用） */
-    suspend fun getDanDanmakuByEpisodeID(episodeID: Int): Boolean {
+    suspend fun getDanDanmakuByEpisodeID(episodeID: Int): Boolean = loadMutex.withLock {
         _danmakuLoading.value = true
-        return try {
+        try {
             danDanmakus.clear()
+            loadedKeys.clear()
+            currentRequestKey = "episode:$episodeID"
             val res = danmakuApi.getDanDanmakuByEpisodeID(episodeID)
             addDanmakus(res)
             res.isNotEmpty()
@@ -438,13 +520,40 @@ class PlayerDanmakuController(
         // 关键词/正则屏蔽（对应原版 shieldList 过滤）——转换后再屏蔽，屏蔽词按简体/繁体写都有效
         val rules = runCatching { shieldRulesProvider() }.getOrDefault(emptyList())
         val visible = if (rules.isEmpty()) listToAdd else listToAdd.filter { !isShielded(it.message, rules) }
+        var skipped = 0
         for (element in visible) {
             val second = element.time.toInt()
             val converted = if (transliterator == null) element
             else element.copy(message = transliterator.transliterate(element.message))
+            // 兜底去重：同一秒内「内容 + 类型 + 颜色」完全一致的条目只保留一条。
+            //
+            // 为什么需要这层：正常路径下装载是幂等的（loadDanmakuAndApply 串行 + 复用），
+            // 但仍有旁路可能重复写入（弹幕源切换、下载缓存回写等）。
+            // 一旦同一批数据被 add 两遍，bucket 里就有两份完全相同的条目，
+            // 渲染层会为每条各建一个 ActiveDanmaku —— 屏幕上就是同一条弹幕出现两次。
+            // 这里用源数据自身的字段做判定，不影响「同内容不同时间」的正常弹幕（那是真实的多条）。
+            val key = buildString {
+                append(second).append('\u0001')
+                append(converted.type).append('\u0001')
+                append(converted.color).append('\u0001')
+                append(converted.message)
+            }
+            if (!loadedKeys.add(key)) {
+                skipped++
+                continue
+            }
             (danDanmakus.getOrPut(second) { mutableListOf() }).add(converted)
         }
+        if (skipped > 0) {
+            FileLogger.w("Danmaku", "去重兜底: 跳过 $skipped 条重复条目（本批 ${visible.size} 条）")
+        }
     }
+
+    /**
+     * 已装载条目的指纹集合（秒 + 类型 + 颜色 + 内容）。
+     * 由 [addDanmakus] 维护、[beginDanmakuLoad] 清空，用于防止同一批数据被写入两遍。
+     */
+    private val loadedKeys = HashSet<String>()
 
     /**
      * 判断一条弹幕是否被屏蔽词命中：

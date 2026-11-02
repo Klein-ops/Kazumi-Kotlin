@@ -1414,11 +1414,12 @@ fun PlayerPage(
                 onDismiss = { showDanmakuSettings = false },
                 onChanged = { scope.launch { reloadDanmakuAppearance() } },
                 // 仅简繁转换变更触发：重新拉弹幕（fetchDanmaku 内部已清空旧弹幕，
-                // 重新按新 chConvert 设置拉取，本地转换在 addDanmakus 统一做）
+                // 重新按新 chConvert 设置拉取，本地转换在 addDanmakus 统一做。
+                // 必须 forceReload=true：简繁转换改了设置，幂等复用会拦截"同集重装"导致不生效）
                 onChConvertChanged = {
                     scope.launch {
                         toast("已更新简繁转换，重新装载弹幕…")
-                        playerController.fetchDanmaku()
+                        playerController.fetchDanmaku(forceReload = true)
                     }
                 }
             )

@@ -526,20 +526,23 @@ class PlayerController(
      *  @param bangumiName 可选：补取的番剧名（在线播放 init 时可能还没拿到名字，
      *  补名后重试时传入覆盖 currentParams 里的空快照，供标题兜底匹配）
      */
-    suspend fun fetchDanmaku(bangumiName: String? = null): PlayerDanmakuController.DanmakuLoadResult {
+    suspend fun fetchDanmaku(
+        bangumiName: String? = null,
+        forceReload: Boolean = false
+    ): PlayerDanmakuController.DanmakuLoadResult {
         val params = currentParams ?: return PlayerDanmakuController.DanmakuLoadResult.failed(0)
-        danmaku.beginDanmakuLoad()
-        val result = danmaku.fetchDanmaku(
+        // 走完整的串行 + 幂等装载入口：清空/取数/写入在同一把锁内完成。
+        // 旧实现是 beginDanmakuLoad() → fetchDanmaku() → applyDanmakuLoad() 三步分别调用，
+        // 播放页的两处调用（首轮装载 / 补名重载）会交错成 clear→clear→add→add，
+        // 同一秒的 bucket 被追加两遍，屏幕上表现为同一条弹幕出现两次。
+        val result = danmaku.loadDanmakuAndApply(
             bangumiId = params.bangumiId,
             pluginName = params.pluginName,
             episode = params.episode,
             isLocalPlayback = params.isLocalPlayback,
-            bangumiName = bangumiName ?: params.bangumiName
+            bangumiName = bangumiName ?: params.bangumiName,
+            forceReload = forceReload
         )
-        // 自动装载：只要拿到弹幕就直接打开。
-        // 旧逻辑用 "result.hasDanmakus && enableByDefault"，而 enableByDefault 默认 false，
-        // 导致拉取成功也一条都不显示，必须用户手动去点开关。
-        danmaku.applyDanmakuLoad(result, enableDanmaku = result.hasDanmakus)
         FileLogger.i(
             "Danmaku",
             "装载完成 status=${result.status} count=${result.danmakus.size} bangumi=${params.bangumiId} ep=${params.episode}"
