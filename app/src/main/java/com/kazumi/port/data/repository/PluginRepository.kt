@@ -481,12 +481,31 @@ class PluginRepository(
         val hasNoCandidates: Boolean get() = updated == 0 && failed == 0 && requiresNewerClient == 0 && notNewer == 0
     }
 
-    /** 检查启动时规则更新（对应原版 checkPluginUpdatesOnStartup） */
-    fun checkPluginUpdatesOnStartup(enabled: Boolean): Int {
+    /** 检查启动时规则更新（对应原版 checkPluginUpdatesOnStartup）
+     * 与原版语义一致：启动检测到可更新规则时直接全部自动更新（tryUpdateAllPlugin），
+     * 而不是只统计数量静默返回——否则设置里的"规则更新"开关形同虚设。
+     * @return 本次实际更新的规则条数
+     */
+    suspend fun checkPluginUpdatesOnStartup(enabled: Boolean): Int {
         if (!enabled) return 0
         return try {
             refreshPluginCatalog()
-            allPlugins().count { pluginUpdateStatus(it) == PluginUpdateAvailability.UPDATABLE }
+            val updatable = allPlugins().filter {
+                pluginUpdateStatus(it) == PluginUpdateAvailability.UPDATABLE
+            }
+            if (updatable.isEmpty()) {
+                FileLogger.d("RuleRepo", "启动规则检查：无可更新规则")
+                0
+            } else {
+                FileLogger.i("RuleRepo", "启动规则检查：发现 ${updatable.size} 条可更新规则，开始自动更新")
+                val result = tryUpdateAllPlugin()
+                FileLogger.i(
+                    "RuleRepo",
+                    "启动规则自动更新完成: updated=${result.updated} failed=${result.failed} " +
+                        "requiresNewer=${result.requiresNewerClient} notNewer=${result.notNewer}"
+                )
+                result.updated
+            }
         } catch (_: Exception) {
             0
         }

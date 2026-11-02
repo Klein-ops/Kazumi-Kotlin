@@ -78,9 +78,12 @@ class MainActivity : ComponentActivity() {
         scope.launch {
             try {
                 val enabled = app.settings.getBoolean(SettingsManager.Update.CHECK_PLUGIN_UPDATE_ON_STARTUP, true)
-                val count = app.pluginRepository.checkPluginUpdatesOnStartup(enabled)
+                // 启动规则检查含网络请求（规则仓库 + 逐条更新），必须在 IO 线程执行
+                val count = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    app.pluginRepository.checkPluginUpdatesOnStartup(enabled)
+                }
                 if (count != 0) {
-                    // 检测到可更新规则，可由规则管理页提示（此处静默）
+                    // 启动自动更新完成，此处静默（规则管理页会显示最新状态）
                 }
             } catch (e: Exception) {
                 // 启动更新检查失败不阻塞
