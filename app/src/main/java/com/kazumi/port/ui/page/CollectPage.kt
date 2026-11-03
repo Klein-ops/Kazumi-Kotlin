@@ -1,6 +1,7 @@
 package com.kazumi.port.ui.page
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
@@ -70,6 +71,7 @@ private val collectTabs = listOf(
  * 收藏页（对应原版 collect_page.dart）
  * 从本地收藏仓库读取，按收藏状态分类展示
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CollectPage(navController: NavHostController) {
     val showRating = com.kazumi.port.ui.components.rememberShowRating()
@@ -255,6 +257,7 @@ fun CollectPage(navController: NavHostController) {
                             BangumiCard(
                                 showRating = showRating,
                                 item = collected.bangumiItem,
+                                modifier = Modifier.animateItem(),
                                 onClick = {
                                     navController.navigate(Routes.detail(collected.bangumiItem.id))
                                 }
@@ -269,6 +272,7 @@ fun CollectPage(navController: NavHostController) {
                             val item = collected.bangumiItem
                             Row(
                                 modifier = Modifier
+                                    .animateItem()
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
                                     .clickable {

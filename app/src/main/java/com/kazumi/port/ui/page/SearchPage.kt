@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -61,7 +62,7 @@ import kotlinx.coroutines.launch
  * 搜索页（对应原版 search_page.dart）
  * 搜索框 + 历史记录（管理/清空/单条删除）+ 以图搜番 + 条件筛选入口
  */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchPage(navController: NavHostController) {
     val showRating = com.kazumi.port.ui.components.rememberShowRating()
@@ -276,6 +277,7 @@ fun SearchPage(navController: NavHostController) {
                         BangumiCard(
                             showRating = showRating,
                             item = item,
+                            modifier = Modifier.animateItem(),
                             onClick = { navController.navigate(Routes.detail(item.id)) }
                         )
                     }

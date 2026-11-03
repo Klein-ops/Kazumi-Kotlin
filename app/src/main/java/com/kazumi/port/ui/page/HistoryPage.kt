@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +69,7 @@ import java.time.ZoneId
  * - 点击条目继续播放；右侧菜单可「播放 / 详情 / 删除」
  * - 右上角清空全部（带确认对话框，文案对齐原版）
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HistoryPage(navController: NavHostController) {
     val app = remember { KazumiApp.get() }
@@ -131,6 +134,7 @@ fun HistoryPage(navController: NavHostController) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -184,6 +188,7 @@ fun HistoryPage(navController: NavHostController) {
                     items(items, key = { it.key }) { history ->
                         HistoryRow(
                             history = history,
+                            modifier = Modifier.animateItem(),
                             onClick = { openPlayer(history) },
                             onPlay = { openPlayer(history) },
                             onDetail = {
@@ -235,6 +240,7 @@ fun HistoryPage(navController: NavHostController) {
 @Composable
 private fun HistoryRow(
     history: History,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onPlay: () -> Unit,
     onDetail: () -> Unit,
@@ -252,7 +258,7 @@ private fun HistoryRow(
     } else ""
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),

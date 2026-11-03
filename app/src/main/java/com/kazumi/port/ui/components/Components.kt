@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -67,14 +68,22 @@ fun BangumiCard(
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
     ) {
-        AsyncImage(
-            model = item.coverUrl(),
-            contentDescription = item.displayName(),
-            contentScale = ContentScale.Crop,
+        // 封面：外层加占位底色（surfaceVariant，加载中不再是纯白/黑空洞），
+        // AsyncImage 开 crossfade → 图片就绪后淡入，不再"突然蹦出"
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.65f)
-        )
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            AsyncImage(
+                model = item.coverUrl(),
+                contentDescription = item.displayName(),
+                contentScale = ContentScale.Crop,
+                crossfade = true,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         Text(
             text = item.displayName(),
             style = MaterialTheme.typography.bodyMedium,
@@ -136,6 +145,13 @@ fun EmptyState(
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = Icons.Outlined.Inbox,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(Modifier.height(10.dp))
             Text(
                 text = text,
                 style = MaterialTheme.typography.bodyLarge,

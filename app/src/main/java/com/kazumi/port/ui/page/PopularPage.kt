@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -88,7 +89,7 @@ private fun parseBangumiList(json: String): List<BangumiItem> = try {
  * 顶栏大标题 + 标签下拉菜单 + 搜索/历史按钮
  * 直连超时自动回退 Kazumi 镜像
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PopularPage(navController: NavHostController) {
     val showRating = com.kazumi.port.ui.components.rememberShowRating()
@@ -316,6 +317,7 @@ fun PopularPage(navController: NavHostController) {
                             BangumiCard(
                                 showRating = showRating,
                                 item = item,
+                                modifier = Modifier.animateItem(),
                                 onClick = {
                                     navController.navigate(
                                         Routes.detail(bangumiId = item.id)

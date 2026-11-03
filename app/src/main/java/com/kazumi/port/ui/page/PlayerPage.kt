@@ -817,6 +817,31 @@ fun PlayerPage(
                 modifier = Modifier.fillMaxSize()
             )
 
+            // 缓冲/加载指示：STATE_BUFFERING 时 uiState.isLoading=true。
+            // 排除 isResolving——解析期有独立遮罩层，避免双层提示。
+            if (uiState.isLoading && !isResolving) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.35f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(44.dp)
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "正在缓冲…",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+
             // 弹幕层
             DanmakuOverlay(
                 modifier = Modifier.fillMaxSize(),

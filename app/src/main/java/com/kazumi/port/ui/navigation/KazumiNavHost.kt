@@ -6,6 +6,10 @@ import androidx.navigation.NavHostController
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -55,6 +59,9 @@ object Routes {
     const val IMAGE_SEARCH = "search/image"
     const val DETAIL = "detail/{bangumiId}?pluginName={pluginName}&src={src}"
     const val PLAYER = "player/{bangumiId}?pluginName={pluginName}&src={src}&episode={episode}&road={road}&isLocal={isLocal}&roadsJson={roadsJson}"
+
+    /** 主界面底部导航的 tab 路由（切换时用轻微缩放+淡入淡出过渡） */
+    val mainTabRoutes = setOf(POPULAR, TIMELINE, COLLECT, MY)
 
     // 设置子页（对应原版 /settings/xxx 路由）
     const val SETTINGS_PLAYER = "settings/player"
@@ -118,11 +125,50 @@ fun KazumiNavHost(
         navController = navController,
         startDestination = startDestination,
         modifier = modifier,
-        // 页面过渡动画（对齐原版 index_module：打开淡入 220ms，退出淡出 220ms）
-        enterTransition = { fadeIn(animationSpec = tween(220)) },
-        exitTransition = { fadeOut(animationSpec = tween(220)) },
-        popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-        popExitTransition = { fadeOut(animationSpec = tween(220)) }
+        // 页面过渡动画：
+        // - 主 tab 之间：轻微淡入 + 缩放（0.98→1），切换有"呼吸感"但不突兀
+        // - push/pop 二级页：带方向感的水平滑动 + 淡入淡出，符合 Android 返回手势直觉
+        // - 播放页（沉浸横屏）：只有淡入淡出，避免横屏下左右滑动违和
+        enterTransition = {
+            val fromRoute = initialState.destination.route
+            val toRoute = targetState.destination.route
+            when {
+                fromRoute in Routes.mainTabRoutes && toRoute in Routes.mainTabRoutes ->
+                    fadeIn(tween(200)) + scaleIn(initialScale = 0.97f, animationSpec = tween(200))
+                toRoute == Routes.PLAYER -> fadeIn(tween(300))
+                else -> slideInHorizontally(tween(280)) { it / 3 } + fadeIn(tween(280))
+            }
+        },
+        exitTransition = {
+            val fromRoute = initialState.destination.route
+            val toRoute = targetState.destination.route
+            when {
+                fromRoute in Routes.mainTabRoutes && toRoute in Routes.mainTabRoutes ->
+                    fadeOut(tween(200)) + scaleOut(targetScale = 0.97f, animationSpec = tween(200))
+                fromRoute == Routes.PLAYER -> fadeOut(tween(300))
+                else -> slideOutHorizontally(tween(280)) { -it / 4 } + fadeOut(tween(280))
+            }
+        },
+        popEnterTransition = {
+            val fromRoute = initialState.destination.route
+            val toRoute = targetState.destination.route
+            when {
+                fromRoute in Routes.mainTabRoutes && toRoute in Routes.mainTabRoutes ->
+                    fadeIn(tween(200))
+                toRoute == Routes.PLAYER -> fadeIn(tween(300))
+                else -> slideInHorizontally(tween(280)) { -it / 4 } + fadeIn(tween(280))
+            }
+        },
+        popExitTransition = {
+            val fromRoute = initialState.destination.route
+            val toRoute = targetState.destination.route
+            when {
+                fromRoute in Routes.mainTabRoutes && toRoute in Routes.mainTabRoutes ->
+                    fadeOut(tween(200))
+                fromRoute == Routes.PLAYER -> fadeOut(tween(300))
+                else -> slideOutHorizontally(tween(280)) { it / 3 } + fadeOut(tween(280))
+            }
+        }
     ) {
         composable(Routes.ONBOARDING) { OnboardingPage(navController) }
         composable(Routes.IMAGE_SEARCH) { ImageSearchPage(navController) }

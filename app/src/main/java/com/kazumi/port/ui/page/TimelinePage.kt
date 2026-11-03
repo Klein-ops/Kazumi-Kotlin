@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -65,7 +66,7 @@ private val weekdayNames = listOf("一", "二", "三", "四", "五", "六", "日
  * 时间表页（对应原版 timeline_page.dart）
  * 周选择器对齐 _TimelineWeekSelector：胶囊容器 + 选中高亮 + 今天/周X + 当日计数
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TimelinePage(navController: NavHostController) {
     val showRating = com.kazumi.port.ui.components.rememberShowRating()
@@ -184,6 +185,7 @@ fun TimelinePage(navController: NavHostController) {
                         BangumiCard(
                             showRating = showRating,
                             item = item,
+                            modifier = Modifier.animateItem(),
                             onClick = { navController.navigate(Routes.detail(item.id)) }
                         )
                     }
