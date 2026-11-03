@@ -34,6 +34,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,30 +57,42 @@ fun PlayerAdjustmentHud(
     type: PlayerAdjustmentHudType,
     value: Float
 ) {
-    val accent = if (type == PlayerAdjustmentHudType.Brightness) {
+    // 快照"最后可见"的类型与值：AnimatedVisibility 的退出动画（200ms fadeOut）期间
+    // content 仍会重组，若直接读传入的 type/value，松手瞬间（visible=false 且
+    // showVolumeHud=false、showBrightnessHud=false）会闪成 Brightness 条——
+    // 这就是"调音量松手一瞬闪亮度"的老顽固 bug 根源。只在 visible=true 时刷新
+    // 快照，淡出期间保持最后一次实际显示的类型/值：音量淡出音量条、亮度淡出亮度条。
+    var snapshotType by remember { mutableStateOf(type) }
+    var snapshotValue by remember { mutableFloatStateOf(value) }
+    if (visible) {
+        snapshotType = type
+        snapshotValue = value
+    }
+
+    val accent = if (snapshotType == PlayerAdjustmentHudType.Brightness) {
         MaterialTheme.colorScheme.tertiaryContainer
     } else {
         MaterialTheme.colorScheme.primaryContainer
     }
-    val container = if (type == PlayerAdjustmentHudType.Brightness) {
+    val container = if (snapshotType == PlayerAdjustmentHudType.Brightness) {
         MaterialTheme.colorScheme.tertiary
     } else {
         MaterialTheme.colorScheme.primary
     }
-    val onContainer = if (type == PlayerAdjustmentHudType.Brightness) {
+    val onContainer = if (snapshotType == PlayerAdjustmentHudType.Brightness) {
         MaterialTheme.colorScheme.onTertiary
     } else {
         MaterialTheme.colorScheme.onPrimary
     }
-    val progress = when (type) {
-        PlayerAdjustmentHudType.Brightness -> value.coerceIn(0f, 1f)
-        PlayerAdjustmentHudType.Volume -> (value / 100f).coerceIn(0f, 1f)
+    val progress = when (snapshotType) {
+        PlayerAdjustmentHudType.Brightness -> snapshotValue.coerceIn(0f, 1f)
+        PlayerAdjustmentHudType.Volume -> (snapshotValue / 100f).coerceIn(0f, 1f)
     }
     val percent = (progress * 100).roundToInt()
     val icon = when {
-        type == PlayerAdjustmentHudType.Brightness && percent <= 8 -> Icons.Rounded.BrightnessLow
-        type == PlayerAdjustmentHudType.Brightness && percent < 55 -> Icons.Rounded.BrightnessMedium
-        type == PlayerAdjustmentHudType.Brightness -> Icons.Rounded.BrightnessHigh
+        snapshotType == PlayerAdjustmentHudType.Brightness && percent <= 8 -> Icons.Rounded.BrightnessLow
+        snapshotType == PlayerAdjustmentHudType.Brightness && percent < 55 -> Icons.Rounded.BrightnessMedium
+        snapshotType == PlayerAdjustmentHudType.Brightness -> Icons.Rounded.BrightnessHigh
         percent <= 0 -> Icons.Rounded.VolumeOff
         percent < 45 -> Icons.Rounded.VolumeDown
         else -> Icons.Rounded.VolumeUp
