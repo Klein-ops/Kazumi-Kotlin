@@ -239,16 +239,18 @@ class PluginRepository(
      * 搜索番剧
      * 对应 Plugin.queryBangumi
      * 带 TTL 内存缓存：同一插件+关键词在 10 分钟内不重复请求网络
+     * @param forceRefresh true 时忽略缓存强制重新请求（播放来源弹窗的「重新检索」用）
      */
     suspend fun searchBangumi(
         pluginName: String,
-        keyword: String
+        keyword: String,
+        forceRefresh: Boolean = false
     ): PluginSearchResponse {
         val plugin = getPlugin(pluginName)
             ?: return PluginSearchResponse(pluginName, emptyList())
         val cacheKey = "${plugin.name.lowercase()}::${keyword.trim()}"
         val cached = searchCache[cacheKey]
-        if (isCacheFresh(cached)) {
+        if (!forceRefresh && isCacheFresh(cached)) {
             return PluginSearchResponse(pluginName, cached!!.value)
         }
         return try {
