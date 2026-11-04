@@ -71,8 +71,9 @@ fun BangumiCard(
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
     ) {
-        // 封面：外层加占位底色（surfaceVariant，加载中不再是纯白/黑空洞），
-        // AsyncImage 开 crossfade → 图片就绪后淡入，不再"突然蹦出"
+        // 封面：外层加占位底色（surfaceVariant，加载中不再是纯白/黑空洞）
+        // 淡入动画由 KazumiApp 全局 ImageLoader 的 .crossfade(true) 提供（Coil 2.x
+        // 的 AsyncImage 没有 crossfade 参数，不能在这里传）
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -83,7 +84,6 @@ fun BangumiCard(
                 model = item.coverUrl(),
                 contentDescription = item.displayName(),
                 contentScale = ContentScale.Crop,
-                crossfade = true,
                 modifier = Modifier.fillMaxSize()
             )
         }
