@@ -205,7 +205,11 @@ fun PluginShopPage(navController: NavHostController) {
                     {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                "请检查网络连接，或切换规则仓库镜像后重试。",
+                                // 镜像加速仅适用于官方仓库；自定义仓库失败时提示检查地址
+                                if (repo.ruleRepository.isNotEmpty())
+                                    "请检查自定义仓库地址和网络连接后重试。"
+                                else
+                                    "请检查网络连接，或切换规则仓库镜像后重试。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -215,10 +219,13 @@ fun PluginShopPage(navController: NavHostController) {
                                     Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp)); Text("重新加载")
                                 }
-                                TextButton(onClick = { toggleGitProxyAndRefresh() }) {
-                                    Icon(Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(if (repo.isGitProxyEnabled()) "关闭规则镜像" else "启用规则镜像")
+                                // 对齐原版 85c5106f：镜像仅对官方仓库生效，自定义仓库不显示切换按钮
+                                if (repo.ruleRepository.isEmpty()) {
+                                    TextButton(onClick = { toggleGitProxyAndRefresh() }) {
+                                        Icon(Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(if (repo.isGitProxyEnabled()) "关闭规则镜像" else "启用规则镜像")
+                                    }
                                 }
                             }
                         }
