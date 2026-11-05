@@ -68,6 +68,18 @@ class PluginRepository(
     /** 规则仓库缓存有效期：5 分钟（对应原版 _pluginCatalogMaxAge） */
     private val catalogMaxAge = 5 * 60 * 1000L
 
+    /**
+     * 规则仓库刷新锁：仅用于串行化刷新，防止并发重复拉取。
+     * 刻意不用 PluginRepository 实例锁（@Synchronized）包网络请求——
+     * 启动自动更新（checkPluginUpdatesOnStartup）在 IO 线程持锁发同步 OkHttp 请求时，
+     * 若网络卡住（实测 SSL handshake 卡 >12s）会长时间占锁，
+     * 主线程 any allPlugins()/getPlugin()/pluginStatus() 调用全部被阻塞 → ANR
+     * （2026-11-06 实测 ANR: main Blocked at allPlugins waiting for lock held by
+     *  DefaultDispatcher-worker-4 in SSL_do_handshake → Input dispatching timed out 9.3s）。
+     * 因此网络必须在锁外执行，此锁只串行化"刷新"本身，内存赋值走 volatile。
+     */
+    private val refreshLock = Any()
+
     /** 是否使用规则仓库镜像（对应原版 enableGitProxy，默认 true 对齐原版） */
     private var gitProxyEnabled: Boolean = true
 
@@ -377,22 +389,35 @@ class PluginRepository(
     /** 规则仓库是否可用（缓存非空） */
     fun hasCatalog(): Boolean = catalogList.isNotEmpty()
 
-    /** 刷新规则仓库（强制） */
-    @Synchronized
+    /**
+     * 刷新规则仓库（强制）
+     * 网络请求在 refreshLock 内执行：该锁只被 IO 线程竞争（PluginShopPage/PluginSettingsPage/
+     * Onboarding/MainActivity 全部在 Dispatchers.IO 调用），主线程的内存读方法
+     * （allPlugins/getPlugin/pluginStatus/catalogItems）不碰此锁，网络再慢也不会 ANR。
+     */
     fun refreshPluginCatalog(): List<PluginHTTPItem> {
-        // 自定义仓库非空时 mirror 参数被忽略（PluginCatalogApi 内部处理）
-        val items = PluginCatalogApi.getPluginList(gitProxyEnabled, ruleRepository)
-        catalogList = items
-        catalogByName = items.associateBy { it.name.lowercase() }
-        catalogRefreshedAt = System.currentTimeMillis()
-        return items
+        synchronized(refreshLock) {
+            // 自定义仓库非空时 mirror 参数被忽略（PluginCatalogApi 内部处理）
+            val items = PluginCatalogApi.getPluginList(gitProxyEnabled, ruleRepository)
+            catalogList = items
+            catalogByName = items.associateBy { it.name.lowercase() }
+            catalogRefreshedAt = System.currentTimeMillis()
+            return items
+        }
     }
 
-    /** 使用缓存（5 分钟内）否则刷新 */
-    @Synchronized
+    /** 使用缓存（5 分钟内）否则刷新；快速路径无锁，主线程可安全调用 */
     fun ensurePluginCatalog(): List<PluginHTTPItem> {
         if (catalogFresh && catalogList.isNotEmpty()) return catalogList
-        return refreshPluginCatalog()
+        synchronized(refreshLock) {
+            // 双检：等锁期间可能已被其他线程刷新
+            if (catalogFresh && catalogList.isNotEmpty()) return catalogList
+            val items = PluginCatalogApi.getPluginList(gitProxyEnabled, ruleRepository)
+            catalogList = items
+            catalogByName = items.associateBy { it.name.lowercase() }
+            catalogRefreshedAt = System.currentTimeMillis()
+            return items
+        }
     }
 
     /** 远程版本是否更新（对应原版 _remoteIsNewer） */
