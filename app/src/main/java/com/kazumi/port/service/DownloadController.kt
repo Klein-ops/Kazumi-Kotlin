@@ -19,7 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -209,6 +208,15 @@ class DownloadController(
 
             val episode = entity.toDomain()
             repository.updateEpisode(recordKey, episodeNumber, episode)
+
+            // 弹幕缓存：下载真正完成（目录已就绪）后触发，避免解析时目录未创建
+            // 导致的轮询等待与排队/暂停恢复集数漏缓存（对齐原版 16735534）
+            if (episode.status == DownloadStatus.COMPLETED &&
+                episode.downloadDirectory.isNotEmpty() &&
+                settings.getBoolean(SettingsManager.Download.DANMAKU, true)
+            ) {
+                fetchAndCacheDanmakuAsync(record.bangumiId, episodeNumber, episode.downloadDirectory)
+            }
 
             val speedKey = "${recordKey}_$episodeNumber"
             val isFinalState = episode.status == DownloadStatus.COMPLETED ||
@@ -528,14 +536,9 @@ class DownloadController(
                     episode = updatedEpisode.toEntity(request.recordKey)
                 )
             )
-
-            if (settings.getBoolean(SettingsManager.Download.DANMAKU, true)) {
-                fetchAndCacheDanmakuAsync(
-                    request.recordKey,
-                    request.bangumiId,
-                    request.episodeNumber
-                )
-            }
+            // 弹幕缓存不再在解析时触发：此时 downloadDirectory 尚未创建，
+            // 旧实现靠 10×3s 轮询等目录就绪，排队/暂停恢复的集数容易漏缓存。
+            // 改为在进度回调检测到 COMPLETED 时再触发（见 onDownloadProgress）。
         } finally {
             releaseResolveLease(key, lease)
         }
@@ -843,7 +846,7 @@ class DownloadController(
     // 弹幕缓存（对应原版 _fetchAndCacheDanmakuAsync / getCachedDanmakus）
     // ------------------------------------------------------------------
 
-    private fun fetchAndCacheDanmakuAsync(recordKey: String, bangumiId: Int, episodeNumber: Int) {
+    private fun fetchAndCacheDanmakuAsync(bangumiId: Int, episodeNumber: Int, downloadDirectory: String) {
         scope.launch {
             try {
                 Log.i(TAG, "fetching danmaku for episode $episodeNumber (async)")
@@ -858,28 +861,7 @@ class DownloadController(
                     Log.i(TAG, "no danmaku found for episode $episodeNumber")
                     return@launch
                 }
-
-                // 等待 downloadDirectory 就绪
-                var downloadDirectory = ""
-                for (i in 0 until 10) {
-                    val record = repository.getRecord(recordKey) ?: return@launch
-                    val episode = record.episodes[episodeNumber] ?: return@launch
-                    if (episode.status == DownloadStatus.FAILED ||
-                        episode.status == DownloadStatus.PAUSED
-                    ) {
-                        return@launch
-                    }
-                    if (episode.downloadDirectory.isNotEmpty()) {
-                        downloadDirectory = episode.downloadDirectory
-                        break
-                    }
-                    delay(3000)
-                }
-                if (downloadDirectory.isEmpty()) {
-                    Log.w(TAG, "downloadDirectory not ready for episode $episodeNumber, skipping danmaku cache")
-                    return@launch
-                }
-
+                // 目录由调用方保证已就绪（仅在下载 COMPLETED 后触发），不再轮询等待
                 writeDanmakuToFile(downloadDirectory, danmakus, danDanBangumiID)
                 Log.i(TAG, "cached ${danmakus.size} danmakus for episode $episodeNumber")
             } catch (e: Exception) {
