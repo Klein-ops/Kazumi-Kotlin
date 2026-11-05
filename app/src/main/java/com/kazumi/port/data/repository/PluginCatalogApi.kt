@@ -13,15 +13,18 @@ import com.kazumi.port.util.FileLogger
  * 数据来源：<PLUGIN_SHOP>index.json（条目列表）+ <PLUGIN_SHOP><name>.json（单个规则）
  */
 object PluginCatalogApi {
-
     /**
      * 拉取规则仓库条目列表
      * @param mirror 是否优先使用镜像仓库（对应原版 enableGitProxy）。
      *   mirror 只影响尝试顺序：开启则先镜像后直连，关闭则先直连后镜像；
      *   两个源都会依次尝试，任一成功即返回，避免"开镜像只走镜像、镜像不通就全挂"。
+     * @param repository 自定义规则仓库地址（空 = 官方仓库；非空时 mirror 参数被忽略，只直连该仓库）。
+     *   对应原版 85c5106f feat(plugin): support custom rule repositories。
      */
-    fun getPluginList(mirror: Boolean): List<PluginHTTPItem> {
-        val bases = if (mirror) {
+    fun getPluginList(mirror: Boolean, repository: String = ""): List<PluginHTTPItem> {
+        val bases = if (repository.isNotEmpty()) {
+            listOf(RulesRepositoryConfig.catalogUri(repository))
+        } else if (mirror) {
             listOf(ApiEndpoints.PLUGIN_SHOP_MIRROR, ApiEndpoints.PLUGIN_SHOP)
         } else {
             listOf(ApiEndpoints.PLUGIN_SHOP, ApiEndpoints.PLUGIN_SHOP_MIRROR)
@@ -29,19 +32,20 @@ object PluginCatalogApi {
         var lastError: Exception? = null
         for (base in bases) {
             try {
-                val raw = RulesRepoClient.getText(base + "index.json")
+                val raw = RulesRepoClient.getText(base)
                 return parsePluginList(raw)
             } catch (e: Exception) {
                 lastError = e
-                // 直连失败时自动回退镜像仓库
+                // 直连失败时自动回退镜像仓库（仅官方仓库多源时适用）
             }
         }
         throw lastError ?: IllegalArgumentException("规则仓库不可用")
     }
-
     /** 拉取并解析单个规则（与 getPluginList 相同，双源依次尝试，mirror 只影响顺序） */
-    fun getPlugin(name: String, mirror: Boolean): Plugin {
-        val bases = if (mirror) {
+    fun getPlugin(name: String, mirror: Boolean, repository: String = ""): Plugin {
+        val bases = if (repository.isNotEmpty()) {
+            listOf(RulesRepositoryConfig.ruleUri(repository, name))
+        } else if (mirror) {
             listOf(ApiEndpoints.PLUGIN_SHOP_MIRROR, ApiEndpoints.PLUGIN_SHOP)
         } else {
             listOf(ApiEndpoints.PLUGIN_SHOP, ApiEndpoints.PLUGIN_SHOP_MIRROR)
@@ -49,8 +53,8 @@ object PluginCatalogApi {
         var lastError: Exception? = null
         for (base in bases) {
             try {
-                FileLogger.i("RuleRepo", "getPlugin: 尝试 $base$name.json (mirror=$mirror)")
-                val raw = RulesRepoClient.getText(base + "$name.json")
+                FileLogger.i("RuleRepo", "getPlugin: 尝试 $base (mirror=$mirror)")
+                val raw = RulesRepoClient.getText(base)
                 FileLogger.d("RuleRepo", "getPlugin: $base 返回 len=${raw.length} head=${raw.take(120)}")
                 val json = JsonParser.parseString(raw)
                 if (!json.isJsonObject) {

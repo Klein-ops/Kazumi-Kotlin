@@ -121,6 +121,8 @@ class SettingsManager(private val context: Context) {
     /** 代理设置 */
     object Proxy {
         const val ENABLE_GIT_PROXY = "enableGitProxy"
+        /** 自定义规则仓库地址（空 = 官方仓库；对齐原版 SettingsKeys.ruleRepositoryUrl） */
+        const val RULE_REPOSITORY_URL = "ruleRepositoryUrl"
         const val ENABLE_BANGUMI_PROXY = "enableBangumiProxy"
         const val IMAGE_ACCELERATION = "imageAcceleration"
         const val BANGUMI_ACCELERATION = "bangumiAcceleration"

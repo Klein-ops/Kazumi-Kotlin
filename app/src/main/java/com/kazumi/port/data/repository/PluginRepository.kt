@@ -71,6 +71,15 @@ class PluginRepository(
     /** 是否使用规则仓库镜像（对应原版 enableGitProxy，默认 true 对齐原版） */
     private var gitProxyEnabled: Boolean = true
 
+    /**
+     * 自定义规则仓库地址（空 = 官方仓库；对应原版 controllers.ruleRepository）。
+     * 仅内存态：持久化由调用方（PluginShopPage）写入 SettingsManager.Proxy.RULE_REPOSITORY_URL，
+     * 与 gitProxyEnabled 同一模式（KazumiApp 启动时从 settings 恢复一次）。
+     */
+    @Volatile
+    var ruleRepository: String = ""
+        private set
+
     private val catalogFresh: Boolean
         get() = catalogRefreshedAt > 0 &&
             System.currentTimeMillis() - catalogRefreshedAt < catalogMaxAge
@@ -322,6 +331,23 @@ class PluginRepository(
 
     fun isGitProxyEnabled(): Boolean = gitProxyEnabled
 
+    /**
+     * 设置自定义规则仓库地址（空 = 官方仓库；对应原版 setRuleRepository）。
+     * 返回是否发生变化；变化时清空 catalog 缓存（下次刷新走新仓库）。
+     * 非法地址抛出 [IllegalArgumentException]（原版 FormatException 语义），
+     * 由 UI 层捕获并展示错误信息，不污染当前状态。
+     */
+    fun setRuleRepository(input: String): Boolean {
+        val normalized = RulesRepositoryConfig.normalizeForStorage(input)
+        if (normalized == ruleRepository) return false
+        ruleRepository = normalized
+        // 仓库切换后旧缓存作废，避免合并到新仓库的请求
+        catalogByName = emptyMap()
+        catalogList = emptyList()
+        catalogRefreshedAt = 0L
+        return true
+    }
+
     /** 规则仓库条目列表（缓存） */
     fun catalogItems(): List<PluginHTTPItem> = catalogList
 
@@ -354,7 +380,8 @@ class PluginRepository(
     /** 刷新规则仓库（强制） */
     @Synchronized
     fun refreshPluginCatalog(): List<PluginHTTPItem> {
-        val items = PluginCatalogApi.getPluginList(gitProxyEnabled)
+        // 自定义仓库非空时 mirror 参数被忽略（PluginCatalogApi 内部处理）
+        val items = PluginCatalogApi.getPluginList(gitProxyEnabled, ruleRepository)
         catalogList = items
         catalogByName = items.associateBy { it.name.lowercase() }
         catalogRefreshedAt = System.currentTimeMillis()
@@ -396,8 +423,8 @@ class PluginRepository(
     /** 更新单个规则（对应原版 tryUpdatePluginByName 的下载+替换逻辑) */
     suspend fun tryUpdatePluginByName(name: String): PluginUpdateResult {
         val catalogName = catalogByName[name.lowercase()]?.name ?: name
-        FileLogger.i("RuleRepo", "tryUpdatePluginByName start: name=$name catalogName=$catalogName mirror=$gitProxyEnabled")
-        val remote = runCatching { PluginCatalogApi.getPlugin(catalogName, gitProxyEnabled) }
+        FileLogger.i("RuleRepo", "tryUpdatePluginByName start: name=$name catalogName=$catalogName mirror=$gitProxyEnabled repo=${ruleRepository.ifEmpty { "官方" }}")
+        val remote = runCatching { PluginCatalogApi.getPlugin(catalogName, gitProxyEnabled, ruleRepository) }
             .onFailure { e ->
                 FileLogger.e("RuleRepo", "tryUpdatePluginByName getPlugin 失败: ${e.javaClass.simpleName}: ${e.message} | name=$name", e)
             }

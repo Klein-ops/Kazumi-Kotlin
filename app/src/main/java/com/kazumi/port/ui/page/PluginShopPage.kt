@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
@@ -61,6 +62,7 @@ import com.kazumi.port.data.repository.SettingsManager
 import com.kazumi.port.ui.components.RuleCard
 import com.kazumi.port.ui.components.RuleEmptyState
 import com.kazumi.port.ui.components.RulePageIntro
+import com.kazumi.port.ui.components.RuleRepositoryDialog
 import com.kazumi.port.ui.components.RuleTag
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
 import com.kazumi.port.ui.components.rememberToast
@@ -100,6 +102,7 @@ fun PluginShopPage(navController: NavHostController) {
     var sortByName by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(0) } // 0=全部 1=已安装 2=可更新
     var showSortMenu by remember { mutableStateOf(false) }
+    var showRepoDialog by remember { mutableStateOf(false) }
 
     fun loadCatalog(forceRefresh: Boolean) {
         if (inFlight) return
@@ -182,7 +185,13 @@ fun PluginShopPage(navController: NavHostController) {
 
     SettingsSubPageScaffold(
         title = "规则仓库",
-        onBack = { navController.popBackStack() }
+        onBack = { navController.popBackStack() },
+        actions = {
+            // 配置规则仓库地址（官方为默认；对应原版 85c5106f 标题栏 link 按钮）
+            IconButton(onClick = { showRepoDialog = true }) {
+                Icon(Icons.Filled.Link, contentDescription = "规则仓库地址")
+            }
+        }
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (loading && items.isEmpty()) {
@@ -358,5 +367,17 @@ fun PluginShopPage(navController: NavHostController) {
                 }
             }
         }
+    }
+
+    // 规则仓库地址对话框（对齐原版 85c5106f showRuleRepositoryDialog）
+    if (showRepoDialog) {
+        RuleRepositoryDialog(
+            initialValue = repo.ruleRepository,
+            onDismiss = { showRepoDialog = false },
+            onSaved = { changed ->
+                // 仓库切换后强制刷新目录（setRuleRepository 已清缓存，ensure 会走新仓库）
+                if (changed) loadCatalog(forceRefresh = true)
+            }
+        )
     }
 }

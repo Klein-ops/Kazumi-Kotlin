@@ -304,6 +304,98 @@ fun RuleEmptyState(
     }
 }
 
+/**
+ * 规则仓库地址对话框
+ * 对应原版 85c5106f 新增的 showRuleRepositoryDialog：
+ * 填写自定义规则仓库地址（留空 = 官方仓库），保存后切换仓库并刷新目录。
+ */
+@Composable
+fun RuleRepositoryDialog(
+    initialValue: String,
+    onDismiss: () -> Unit,
+    onSaved: (Boolean) -> Unit
+) {
+    val app = remember { KazumiApp.get() }
+    val toast = rememberToast()
+    var text by remember { mutableStateOf(initialValue) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+
+    fun save() {
+        if (saving) return
+        saving = true
+        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+            val changed = try {
+                app.pluginRepository.setRuleRepository(text)
+            } catch (e: IllegalArgumentException) {
+                withContext(Dispatchers.Main) {
+                    error = e.message ?: "规则仓库地址无效"
+                    saving = false
+                }
+                return@launch
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    error = "保存失败，请重试。"
+                    saving = false
+                }
+                return@launch
+            }
+            // 持久化设置（空 = 官方仓库），重启后由 KazumiApp 恢复
+            withContext(Dispatchers.IO) {
+                app.settings.setString(
+                    com.kazumi.port.data.repository.SettingsManager.Proxy.RULE_REPOSITORY_URL,
+                    app.pluginRepository.ruleRepository
+                )
+            }
+            withContext(Dispatchers.Main) {
+                saving = false
+                onDismiss()
+                onSaved(changed)
+                val current = app.pluginRepository.ruleRepository
+                toast(if (current.isEmpty()) "已恢复官方规则仓库" else "已切换规则仓库")
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = { Text("规则仓库地址") },
+        text = {
+            Column {
+                Text(
+                    "仅添加信任的仓库，第三方规则可以访问任意网站并执行脚本。",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it; error = null },
+                    label = { Text("仓库地址") },
+                    placeholder = { Text(com.kazumi.port.data.model.ApiEndpoints.PLUGIN_SHOP) },
+                    singleLine = true,
+                    isError = error != null,
+                    supportingText = {
+                        Text(error ?: "填写 index.json 所在目录，留空使用官方仓库")
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (!saving) onDismiss() }, enabled = !saving) { Text("取消") }
+            Button(onClick = { save() }, enabled = !saving) {
+                if (saving) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (saving) "保存中" else "保存")
+            }
+        }
+    )
+}
+
 /** 协程辅助：在工作线程导入并持久化插件，回调结果 */
 object ImportHelper {
     fun importPlugins(

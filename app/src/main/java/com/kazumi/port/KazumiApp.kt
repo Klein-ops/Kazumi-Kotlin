@@ -124,6 +124,17 @@ class KazumiApp : Application(), ImageLoaderFactory {
             // 规则仓库镜像默认开启（对齐原版 enableGitProxy 默认 true）
             val gitProxy = settings.getBoolean(SettingsManager.Proxy.ENABLE_GIT_PROXY, true)
             pluginRepository.setGitProxyEnabled(gitProxy)
+            // 恢复自定义规则仓库地址（空 = 官方仓库；对齐原版 SettingsKeys.ruleRepositoryUrl）
+            val ruleRepo = settings.getString(SettingsManager.Proxy.RULE_REPOSITORY_URL, "")
+            if (ruleRepo.isNotEmpty()) {
+                runCatching { pluginRepository.setRuleRepository(ruleRepo) }
+                    .onFailure { e ->
+                        com.kazumi.port.util.FileLogger.w(
+                            "RuleRepo",
+                            "恢复自定义规则仓库失败：${e.message}"
+                        )
+                    }
+            }
         }
         // 读取图片加速模式（默认 ech，与原版一致；ECH native 桥 v3 已修 ack+重定向，
         // 实测 lain.bgm.tv 直链 200，mirror 在你网络下镜像站全挂反而卡死）
