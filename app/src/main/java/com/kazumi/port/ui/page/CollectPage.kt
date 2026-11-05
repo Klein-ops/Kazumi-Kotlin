@@ -3,6 +3,7 @@ package com.kazumi.port.ui.page
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +48,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.kazumi.port.KazumiApp
@@ -224,20 +226,31 @@ fun CollectPage(navController: NavHostController) {
                     .padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                // 对齐原版 4d04b470（perf(collect)）：选中/未选中统一同一字体实例（titleSmall），
+                // 选中仅加粗（w700），避免分类切换时字体大小不同导致标签与列表布局抖动
+                val tabLabelStyle = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.Medium
+                )
                 collectTabs.forEach { (label, type) ->
                     val selected = type == selectedType
                     // 原版标签形如「全部，12 部」
                     val text = "$label，${countOf(type)} 部"
+                    val tabInteraction = remember { MutableInteractionSource() }
                     Text(
                         text = text,
-                        style = if (selected) MaterialTheme.typography.titleSmall
-                        else MaterialTheme.typography.bodySmall,
+                        style = tabLabelStyle.copy(
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                        ),
                         color = if (selected) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         modifier = Modifier
                             .padding(horizontal = 8.dp, vertical = 10.dp)
-                            .clickable { selectedType = type }
+                            // 对齐原版 5f9b3137（fix(collect)）：移除 tab 点击水波纹（NoSplash）
+                            .clickable(
+                                interactionSource = tabInteraction,
+                                indication = null
+                            ) { selectedType = type }
                     )
                 }
             }
