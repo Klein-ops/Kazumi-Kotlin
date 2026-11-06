@@ -23,11 +23,13 @@ object PluginCatalogApi {
      */
     fun getPluginList(mirror: Boolean, repository: String = ""): List<PluginHTTPItem> {
         val bases = if (repository.isNotEmpty()) {
+            // 自定义仓库：catalogUri 已拼好 index.json
             listOf(RulesRepositoryConfig.catalogUri(repository))
         } else if (mirror) {
-            listOf(ApiEndpoints.PLUGIN_SHOP_MIRROR, ApiEndpoints.PLUGIN_SHOP)
+            // 官方仓库：目录 URL 必须拼 index.json，否则请求到 .../main/ 得到 404/HTML
+            listOf(ApiEndpoints.PLUGIN_SHOP_MIRROR + "index.json", ApiEndpoints.PLUGIN_SHOP + "index.json")
         } else {
-            listOf(ApiEndpoints.PLUGIN_SHOP, ApiEndpoints.PLUGIN_SHOP_MIRROR)
+            listOf(ApiEndpoints.PLUGIN_SHOP + "index.json", ApiEndpoints.PLUGIN_SHOP_MIRROR + "index.json")
         }
         var lastError: Exception? = null
         for (base in bases) {
@@ -48,11 +50,13 @@ object PluginCatalogApi {
     /** 拉取并解析单个规则（与 getPluginList 相同，双源依次尝试，mirror 只影响顺序） */
     fun getPlugin(name: String, mirror: Boolean, repository: String = ""): Plugin {
         val bases = if (repository.isNotEmpty()) {
+            // 自定义仓库：ruleUri 已拼好 $name.json
             listOf(RulesRepositoryConfig.ruleUri(repository, name))
         } else if (mirror) {
-            listOf(ApiEndpoints.PLUGIN_SHOP_MIRROR, ApiEndpoints.PLUGIN_SHOP)
+            // 官方仓库：目录 URL 必须拼 $name.json（与旧版 base + "$name.json" 一致）
+            listOf(ApiEndpoints.PLUGIN_SHOP_MIRROR + "$name.json", ApiEndpoints.PLUGIN_SHOP + "$name.json")
         } else {
-            listOf(ApiEndpoints.PLUGIN_SHOP, ApiEndpoints.PLUGIN_SHOP_MIRROR)
+            listOf(ApiEndpoints.PLUGIN_SHOP + "$name.json", ApiEndpoints.PLUGIN_SHOP_MIRROR + "$name.json")
         }
         var lastError: Exception? = null
         for (base in bases) {
