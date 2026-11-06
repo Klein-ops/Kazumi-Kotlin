@@ -205,7 +205,23 @@ fun PluginSettingsPage(navController: NavHostController) {
         }
     ) {
         when {
-            plugins.isEmpty() -> RuleEmptyState(Icons.Filled.Extension, "还没有安装规则")
+            plugins.isEmpty() -> RuleEmptyState(
+                Icons.Filled.Extension,
+                "还没有安装规则",
+                {
+                    // 空态必须保留添加入口，否则一条规则都没有时永远进不了规则仓库/添加对话框
+                    Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { showAddDialog = true }) {
+                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp)); Text("添加规则")
+                        }
+                        FilledTonalButton(onClick = { navController.navigate(Routes.SETTINGS_PLUGIN_SHOP) }) {
+                            Icon(Icons.Filled.TravelExplore, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp)); Text("规则仓库")
+                        }
+                    }
+                }
+            )
             visible.isEmpty() -> RuleEmptyState(
                 Icons.Filled.Search,
                 if (updatesOnly && query.isEmpty()) "没有可更新的规则" else "没有符合条件的规则",
