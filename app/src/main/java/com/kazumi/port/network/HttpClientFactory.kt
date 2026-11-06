@@ -90,6 +90,14 @@ object HttpClientFactory {
         if (proxy != null) {
             builder.proxy(proxy)
         }
+        if (!lenientTls) {
+            // 总超时（含 DNS 解析/连接/TLS/读取全链路）：connect/read/write 超时管不到
+            // DNS 卡死、代理不可达等场景（OkHttp 只有 callTimeout 覆盖整个 call）。
+            // 实测 2026-11-06 规则仓库请求卡 Linux.poll 151s 不返回（DNS/网络被墙），
+            // 页面排队等锁 → "加载不出来"；加总超时后任何请求最多 20s 必返回。
+            // 播放器拉流 client（lenientTls）不加：长连接流媒体会超时中断。
+            builder.callTimeout(20, TimeUnit.SECONDS)
+        }
         builder.addInterceptor { chain ->
             val original = chain.request()
             // 仅当请求未显式设置 UA 时才注入随机浏览器 UA；

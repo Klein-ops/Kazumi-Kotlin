@@ -32,13 +32,17 @@ object PluginCatalogApi {
         var lastError: Exception? = null
         for (base in bases) {
             try {
+                FileLogger.i("RuleRepo", "getPluginList: 尝试 $base (mirror=$mirror, repo=${repository.ifEmpty { "官方" }})")
                 val raw = RulesRepoClient.getText(base)
+                FileLogger.d("RuleRepo", "getPluginList: $base 返回 len=${raw.length} head=${raw.take(120)}")
                 return parsePluginList(raw)
             } catch (e: Exception) {
                 lastError = e
+                FileLogger.w("RuleRepo", "getPluginList: $base 失败 ${e.javaClass.simpleName}: ${e.message}")
                 // 直连失败时自动回退镜像仓库（仅官方仓库多源时适用）
             }
         }
+        FileLogger.e("RuleRepo", "getPluginList: 所有源均失败 lastError=${lastError?.javaClass?.simpleName}: ${lastError?.message}")
         throw lastError ?: IllegalArgumentException("规则仓库不可用")
     }
     /** 拉取并解析单个规则（与 getPluginList 相同，双源依次尝试，mirror 只影响顺序） */
