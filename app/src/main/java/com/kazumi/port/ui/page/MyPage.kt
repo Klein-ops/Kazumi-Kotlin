@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,6 +49,7 @@ import com.kazumi.port.KazumiApp
 import com.kazumi.port.ui.components.PageHeader
 import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
+import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
 
 /**
@@ -251,12 +254,21 @@ private fun ToolTile(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val press = rememberPressScale()
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         shape = RoundedCornerShape(28.dp),
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
+            .clickable(
+                interactionSource = press.interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
     ) {
         Column(
             modifier = Modifier.padding(16.dp),

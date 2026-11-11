@@ -27,9 +27,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,10 +68,19 @@ fun BangumiCard(
     modifier: Modifier = Modifier,
     showRating: Boolean = false
 ) {
+    val press = rememberPressScale()
     Column(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = press.interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
     ) {
         // 封面：外层加占位底色（surfaceVariant，加载中不再是纯白/黑空洞）
         // 淡入动画由 KazumiApp 全局 ImageLoader 的 .crossfade(true) 提供（Coil 2.x

@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -43,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,6 +55,7 @@ import com.kazumi.port.KazumiApp
 import com.kazumi.port.data.repository.History
 import com.kazumi.port.ui.components.EmptyState
 import com.kazumi.port.ui.components.LoadingState
+import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -247,6 +250,7 @@ private fun HistoryRow(
     onDelete: () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val press = rememberPressScale()
     val cover = history.bangumiItem.coverUrl()
     val progressMs = history.progresses[history.lastWatchEpisode]?.progressMs ?: 0L
     val positionText = if (progressMs > 0) {
@@ -260,7 +264,15 @@ private fun HistoryRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
+            .clickable(
+                interactionSource = press.interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

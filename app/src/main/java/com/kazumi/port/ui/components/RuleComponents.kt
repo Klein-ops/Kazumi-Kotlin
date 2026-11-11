@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.components
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,14 +56,21 @@ fun RuleCard(
     val shape = if (selected) RoundedCornerShape(20.dp) else RoundedCornerShape(28.dp)
     val iconBoxColor = if (selected || installed) colors.secondaryContainer else colors.primaryContainer
     val iconColor = if (selected || installed) colors.onSecondaryContainer else colors.onPrimaryContainer
+    val press = rememberPressScale()
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp)
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
             .clip(shape)
             .background(container)
             .combinedClickable(
+                interactionSource = press.interactionSource,
+                indication = LocalIndication.current,
                 enabled = onClick != null || onLongPress != null,
                 onClick = { onClick?.invoke() },
                 onLongClick = { onLongPress?.invoke() }

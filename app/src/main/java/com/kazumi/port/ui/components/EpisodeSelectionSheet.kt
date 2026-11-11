@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.components
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -29,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -127,14 +129,23 @@ fun EpisodeSelectionSheet(
                     val name = road?.identifier?.getOrNull(idx)?.trim()?.takeIf { it.isNotEmpty() }
                         ?: "第${ep}集"
                     val selected = visibleRoad == selectedRoad && ep == selectedEpisode
+                    val press = rememberPressScale()
                     Column(
                         modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = press.scale
+                                scaleY = press.scale
+                            }
                             .clip(RoundedCornerShape(8.dp))
                             .background(
                                 if (selected) MaterialTheme.colorScheme.primaryContainer
                                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                             )
-                            .clickable { onSelect(idx, visibleRoad) }
+                            .clickable(
+                                interactionSource = press.interactionSource,
+                                indication = LocalIndication.current,
+                                onClick = { onSelect(idx, visibleRoad) }
+                            )
                             .padding(vertical = 10.dp, horizontal = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {

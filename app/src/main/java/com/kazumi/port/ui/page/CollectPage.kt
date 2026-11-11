@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
@@ -48,6 +49,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -58,6 +60,7 @@ import com.kazumi.port.ui.components.BangumiCard
 import com.kazumi.port.ui.components.EmptyState
 import com.kazumi.port.ui.components.LoadingState
 import com.kazumi.port.ui.components.PageHeader
+import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
 
 private val collectTabs = listOf(
@@ -283,14 +286,23 @@ fun CollectPage(navController: NavHostController) {
                     ) {
                         itemsIndexed(filtered) { _, collected ->
                             val item = collected.bangumiItem
+                            val press = rememberPressScale()
                             Row(
                                 modifier = Modifier
                                     .animateItem()
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable {
-                                        navController.navigate(Routes.detail(item.id))
+                                    .graphicsLayer {
+                                        scaleX = press.scale
+                                        scaleY = press.scale
                                     }
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable(
+                                        interactionSource = press.interactionSource,
+                                        indication = LocalIndication.current,
+                                        onClick = {
+                                            navController.navigate(Routes.detail(item.id))
+                                        }
+                                    )
                                     .padding(vertical = 8.dp),
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                             ) {
