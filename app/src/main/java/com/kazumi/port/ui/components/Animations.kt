@@ -5,8 +5,30 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.graphicsLayer
+
+/**
+ * 首次组合淡入（观感打磨）
+ *
+ * 组件进入组合时从透明淡入到不透明，消除「加载态/空态/标题」切换的生硬感。
+ * 只作用于 graphicsLayer.alpha（transform-only，不触发重布局），开销极低，
+ * 适合列表外的整块状态组件（EmptyState / LoadingState / PageHeader 等）。
+ *
+ * 注意：使用方组件在组合期间 alpha 从 0→1 只播放一次；重新进入组合（如切页返回）会重播，
+ * 这是「内容重新出现时淡入」的预期行为。
+ */
+fun Modifier.fadeInOnFirstCompose(durationMillis: Int = 220): Modifier = composed {
+    val alpha = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(Unit) {
+        alpha.animateTo(1f, animationSpec = tween(durationMillis))
+    }
+    graphicsLayer { this.alpha = alpha.value }
+}
 
 /**
  * 按压缩放反馈状态（手感打磨）

@@ -155,7 +155,7 @@ fun EmptyState(
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().fadeInOnFirstCompose(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -186,7 +186,8 @@ fun LoadingState(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .fillMaxHeight(),
+            .fillMaxHeight()
+            .fadeInOnFirstCompose(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -214,7 +215,8 @@ fun PageHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .fadeInOnFirstCompose(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {

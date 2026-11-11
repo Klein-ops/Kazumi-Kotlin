@@ -285,7 +285,7 @@ fun RuleEmptyState(
     action: (@Composable () -> Unit)? = null
 ) {
     androidx.compose.foundation.layout.Box(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp).fadeInOnFirstCompose(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
