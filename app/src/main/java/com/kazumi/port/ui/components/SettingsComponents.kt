@@ -70,7 +70,7 @@ fun SettingSectionTitle(
     )
 }
 
-/** 开关行 */
+/** 开关行（整行点击切换开关，对齐原版 SwitchListTile 的手感） */
 @Composable
 fun SettingSwitchRow(
     title: String,
@@ -80,9 +80,20 @@ fun SettingSwitchRow(
     leading: ImageVector? = null,
     enabled: Boolean = true
 ) {
+    val press = rememberPressScale()
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
+            .clickable(
+                enabled = enabled,
+                interactionSource = press.interactionSource,
+                indication = LocalIndication.current,
+                onClick = { onCheckedChange(!checked) }
+            )
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
