@@ -3,6 +3,7 @@ package com.kazumi.port.ui.page
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -70,6 +72,7 @@ import coil.compose.AsyncImage
 import com.kazumi.port.KazumiApp
 import com.kazumi.port.data.repository.ResultItem
 import com.kazumi.port.data.repository.TraceApi
+import com.kazumi.port.ui.components.rememberPressScale
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -675,13 +678,22 @@ private fun OtherMatchCard(
 ) {
     val colors = MaterialTheme.colorScheme
     val title = titleOf(result)
+    val press = rememberPressScale()
     Surface(
         color = colors.surface,
         shape = RoundedCornerShape(16.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onSelect(title) }
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
+            .clickable(
+                interactionSource = press.interactionSource,
+                indication = LocalIndication.current,
+                onClick = { onSelect(title) }
+            )
     ) {
         Row(
             modifier = Modifier.padding(12.dp),

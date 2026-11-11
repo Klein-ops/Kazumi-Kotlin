@@ -3,6 +3,7 @@ package com.kazumi.port.ui.page
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -54,6 +56,7 @@ import com.kazumi.port.ui.components.BangumiCard
 import com.kazumi.port.ui.components.EmptyState
 import com.kazumi.port.ui.components.LoadingState
 import com.kazumi.port.ui.components.SearchFilterSheet
+import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
 import com.google.gson.JsonParser
 import kotlinx.coroutines.launch
@@ -229,10 +232,19 @@ fun SearchPage(navController: NavHostController) {
             }
 
             // 按条件查找入口（对齐原版 search_page.dart 的"按条件查找"ListTile）
+            val filterPress = rememberPressScale()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { showFilterSheet = true }
+                    .graphicsLayer {
+                        scaleX = filterPress.scale
+                        scaleY = filterPress.scale
+                    }
+                    .clickable(
+                        interactionSource = filterPress.interactionSource,
+                        indication = LocalIndication.current,
+                        onClick = { showFilterSheet = true }
+                    )
                     .padding(horizontal = 4.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
