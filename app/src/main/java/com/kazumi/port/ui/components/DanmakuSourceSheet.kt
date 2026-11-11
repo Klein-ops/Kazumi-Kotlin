@@ -2,6 +2,7 @@ package com.kazumi.port.ui.components
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.ImeAction
 import com.kazumi.port.data.repository.DanmakuApi
@@ -278,6 +280,7 @@ fun DanmakuSourceSheet(
                         } else {
                             LazyColumn(modifier = Modifier.fillMaxWidth().height(320.dp)) {
                                 items(animes) { anime ->
+                                    val press = rememberPressScale()
                                     ListItem(
                                         headlineContent = {
                                             Text(anime.animeTitle, maxLines = 2)
@@ -286,7 +289,17 @@ fun DanmakuSourceSheet(
                                             { Text(anime.typeDescription) }
                                         } else null,
                                         trailingContent = { Text("›") },
-                                        modifier = Modifier.animateItem().clickable { selectAnime(anime) }
+                                        modifier = Modifier
+                                            .animateItem()
+                                            .graphicsLayer {
+                                                scaleX = press.scale
+                                                scaleY = press.scale
+                                            }
+                                            .clickable(
+                                                interactionSource = press.interactionSource,
+                                                indication = LocalIndication.current,
+                                                onClick = { selectAnime(anime) }
+                                            )
                                     )
                                     HorizontalDivider()
                                 }
@@ -308,9 +321,20 @@ fun DanmakuSourceSheet(
                         } else {
                             LazyColumn(modifier = Modifier.fillMaxWidth().height(320.dp)) {
                                 items(episodes) { episode ->
+                                    val press = rememberPressScale()
                                     ListItem(
                                         headlineContent = { Text(episode.episodeTitle, maxLines = 1) },
-                                        modifier = Modifier.animateItem().clickable { selectEpisode(episode) }
+                                        modifier = Modifier
+                                            .animateItem()
+                                            .graphicsLayer {
+                                                scaleX = press.scale
+                                                scaleY = press.scale
+                                            }
+                                            .clickable(
+                                                interactionSource = press.interactionSource,
+                                                indication = LocalIndication.current,
+                                                onClick = { selectEpisode(episode) }
+                                            )
                                     )
                                 }
                             }

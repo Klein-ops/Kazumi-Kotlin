@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -57,6 +59,7 @@ import com.kazumi.port.network.BangumiClient
 import com.kazumi.port.ui.components.BangumiCard
 import com.kazumi.port.ui.components.EmptyState
 import com.kazumi.port.ui.components.LoadingState
+import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -205,7 +208,8 @@ fun PopularPage(navController: NavHostController) {
         val maxWidth = maxWidth
         Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // 顶栏：大标题 + 标签下拉 + 搜索/历史按钮（对齐原版 SliverAppBar actions）
+            // 顶栏大标题 + 标签下拉 + 搜索/历史按钮（对齐原版 SliverAppBar actions）
+            val tagPress = rememberPressScale()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -215,7 +219,15 @@ fun PopularPage(navController: NavHostController) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .clickable { menuExpanded = true }
+                        .graphicsLayer {
+                            scaleX = tagPress.scale
+                            scaleY = tagPress.scale
+                        }
+                        .clickable(
+                            interactionSource = tagPress.interactionSource,
+                            indication = LocalIndication.current,
+                            onClick = { menuExpanded = true }
+                        )
                         .padding(end = 16.dp)
                 ) {
                     Text(
