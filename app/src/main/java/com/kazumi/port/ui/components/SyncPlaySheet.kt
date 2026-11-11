@@ -483,6 +483,7 @@ private fun ServerSheet(
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
             official.forEach { ep ->
                 val selectedThis = !isCustom && selected == ep
+                val press = rememberPressScale()
                 ListItem(
                     headlineContent = {
                         Text(
@@ -497,10 +498,20 @@ private fun ServerSheet(
                     trailingContent = if (selectedThis) {
                         { Icon(Icons.Filled.Login, contentDescription = "已选", tint = MaterialTheme.colorScheme.primary) }
                     } else null,
-                    modifier = Modifier.clickable { isCustom = false; selected = ep; customError = null }
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = press.scale
+                            scaleY = press.scale
+                        }
+                        .clickable(
+                            interactionSource = press.interactionSource,
+                            indication = LocalIndication.current,
+                            onClick = { isCustom = false; selected = ep; customError = null }
+                        )
                 )
             }
             val selectedCustom = isCustom
+            val customPress = rememberPressScale()
             ListItem(
                 headlineContent = {
                     Text(
@@ -515,7 +526,16 @@ private fun ServerSheet(
                 trailingContent = if (selectedCustom) {
                     { Icon(Icons.Filled.Login, contentDescription = "已选", tint = MaterialTheme.colorScheme.primary) }
                 } else null,
-                modifier = Modifier.clickable { isCustom = true; customError = null }
+                modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = customPress.scale
+                        scaleY = customPress.scale
+                    }
+                    .clickable(
+                        interactionSource = customPress.interactionSource,
+                        indication = LocalIndication.current,
+                        onClick = { isCustom = true; customError = null }
+                    )
             )
             if (isCustom) {
                 Spacer(modifier = Modifier.height(16.dp))
