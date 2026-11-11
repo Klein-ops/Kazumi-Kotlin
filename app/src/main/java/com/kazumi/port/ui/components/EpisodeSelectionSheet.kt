@@ -3,6 +3,7 @@ package com.kazumi.port.ui.components
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,7 +42,7 @@ import com.kazumi.port.data.model.Road
  * 顶部剧名标题 + 线路横向 FilterChip + 剧集网格（5 列）
  * @param selectedEpisode 当前集（1-based）
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun EpisodeSelectionSheet(
     title: String,
@@ -132,6 +133,7 @@ fun EpisodeSelectionSheet(
                     val press = rememberPressScale()
                     Column(
                         modifier = Modifier
+                            .animateItem()
                             .graphicsLayer {
                                 scaleX = press.scale
                                 scaleY = press.scale
