@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,9 +23,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import com.kazumi.port.ui.components.rememberPressScale
 
 /**
  * 设置页宽屏布局（对应原版 settings_page 的 wide 分支：左侧 280dp 分类栏 + 右侧内容）
@@ -64,6 +67,7 @@ internal fun WideSettingsLayout(navController: NavHostController) {
             )
             entries.forEachIndexed { index, (title, _) ->
                 val isSelected = index == selected
+                val press = rememberPressScale()
                 Surface(
                     color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer
                     else MaterialTheme.colorScheme.surface,
@@ -71,8 +75,16 @@ internal fun WideSettingsLayout(navController: NavHostController) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 2.dp)
+                        .graphicsLayer {
+                            scaleX = press.scale
+                            scaleY = press.scale
+                        }
                         .clip(RoundedCornerShape(28.dp))
-                        .clickable { selected = index }
+                        .clickable(
+                            interactionSource = press.interactionSource,
+                            indication = LocalIndication.current,
+                            onClick = { selected = index }
+                        )
                 ) {
                     Text(
                         text = title,

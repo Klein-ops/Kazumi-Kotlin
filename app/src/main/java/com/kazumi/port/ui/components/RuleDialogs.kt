@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.components
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.kazumi.port.KazumiApp
@@ -78,10 +80,19 @@ fun RuleAddDialog(
                     RuleAddEntry(RuleAddSource.FILE, Icons.Filled.FileOpen, "从文件导入", "读取本地 JSON 规则文件"),
                     RuleAddEntry(RuleAddSource.CREATE, Icons.Filled.EditNote, "新建规则", "从模板开始编写")
                 ).forEach { entry ->
+                    val press = rememberPressScale()
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onResult(entry.source) }
+                            .graphicsLayer {
+                                scaleX = press.scale
+                                scaleY = press.scale
+                            }
+                            .clickable(
+                                interactionSource = press.interactionSource,
+                                indication = LocalIndication.current,
+                                onClick = { onResult(entry.source) }
+                            )
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
