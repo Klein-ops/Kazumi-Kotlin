@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -42,6 +43,7 @@ import kotlinx.coroutines.withContext
  * 输入关键词 → 只用这一条规则检索 → 显示结果条目（名称 + src）或错误信息。
  * 原版还有“查询播放列表/校验章节”等步骤，这里先覆盖最常用的检索验证。
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RuleTestPage(navController: NavHostController, pluginName: String) {
     val app = remember { KazumiApp.get() }
@@ -132,7 +134,7 @@ fun RuleTestPage(navController: NavHostController, pluginName: String) {
                     )
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         items(results) { item ->
-                            Column(modifier = Modifier.padding(vertical = 10.dp)) {
+                            Column(modifier = Modifier.animateItem().padding(vertical = 10.dp)) {
                                 Text(
                                     text = item.name,
                                     style = MaterialTheme.typography.bodyLarge

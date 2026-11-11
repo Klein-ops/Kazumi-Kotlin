@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,6 +52,7 @@ import kotlinx.coroutines.withContext
  * - 无规则时显示空状态「还没有屏蔽规则」；
  * - 说明文案：包含关键词的弹幕会被隐藏。用 / / 包裹正则表达式。
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DanmakuShieldPage(navController: NavHostController) {
     val app = remember { KazumiApp.get() }
@@ -146,6 +148,7 @@ fun DanmakuShieldPage(navController: NavHostController) {
                 items(rules, key = { it.content }) { rule ->
                     Row(
                         modifier = Modifier
+                            .animateItem()
                             .fillMaxWidth()
                             .padding(vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically

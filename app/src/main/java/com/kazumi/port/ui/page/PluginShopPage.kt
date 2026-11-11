@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,6 +82,7 @@ import java.util.Locale
  * - 每条：RuleCard + 安装/更新按钮；安装中显示进度
  * - 失败态：无法访问规则仓库（重试 + 切换镜像）
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PluginShopPage(navController: NavHostController) {
     val app = remember { KazumiApp.get() }
@@ -322,6 +324,7 @@ fun PluginShopPage(navController: NavHostController) {
                             title = item.name,
                             subtitle = if (item.author.isEmpty()) null else "作者 · ${item.author}",
                             installed = installed,
+                            modifier = Modifier.animateItem(),
                             tags = listOfNotNull<@Composable () -> Unit>(
                                 {
                                     RuleTag(

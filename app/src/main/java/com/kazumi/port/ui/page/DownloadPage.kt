@@ -1,6 +1,6 @@
 package com.kazumi.port.ui.page
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -49,6 +49,7 @@ import kotlinx.coroutines.launch
  * 下载管理页（对应原版 download_page.dart）
  * 记录卡片 + 集数状态与操作
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DownloadPage(navController: NavHostController) {
     val app = remember { KazumiApp.get() }
@@ -75,6 +76,7 @@ fun DownloadPage(navController: NavHostController) {
                         DownloadRecordCard(
                             record = record,
                             controller = app.downloadController,
+                            modifier = Modifier.animateItem(),
                             onPlay = { episode ->
                                 navController.navigate(
                                     Routes.player(
@@ -98,13 +100,14 @@ fun DownloadPage(navController: NavHostController) {
 private fun DownloadRecordCard(
     record: DownloadRecord,
     controller: com.kazumi.port.service.DownloadController,
-    onPlay: (DownloadEpisode) -> Unit
+    onPlay: (DownloadEpisode) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
     // 删除确认（原版删除下载/删除全部下载都有确认弹窗）
     var pendingEpisode by remember { mutableStateOf<DownloadEpisode?>(null) }
     var showDeleteAll by remember { mutableStateOf(false) }
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

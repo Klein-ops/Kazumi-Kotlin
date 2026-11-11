@@ -325,6 +325,7 @@ fun SearchPage(navController: NavHostController) {
                                 items(histories, key = { it.timestamp }) { history ->
                                     Row(
                                         modifier = Modifier
+                                            .animateItem()
                                             .fillMaxWidth()
                                             .clickable {
                                                 keyword = history.keyword

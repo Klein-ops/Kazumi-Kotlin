@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -1072,6 +1073,7 @@ private fun LazyListScope.CommentsTabContent(
 /**
  * 角色 Tab
  */
+@OptIn(ExperimentalFoundationApi::class)
 private fun LazyListScope.CharactersTabContent(
     characters: List<CharacterItem>,
     loading: Boolean,
@@ -1129,11 +1131,14 @@ private fun LazyListScope.CharactersTabContent(
         }
         else -> {
             items(characters, key = { it.id }) { character ->
-                CharacterCard(
-                    item = character,
-                    onClick = { onCharacterClick(character) }
-                )
-                HorizontalDivider(thickness = 0.5.dp)
+                Column(modifier = Modifier.animateItem()) {
+                    CharacterCard(
+                        item = character,
+                        onClick = { onCharacterClick(character) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    HorizontalDivider(thickness = 0.5.dp)
+                }
             }
         }
     }
@@ -1142,6 +1147,7 @@ private fun LazyListScope.CharactersTabContent(
 /**
  * 关联 Tab
  */
+@OptIn(ExperimentalFoundationApi::class)
 private fun LazyListScope.RelationsTabContent(
     relations: List<BangumiRelation>,
     loading: Boolean,
@@ -1176,7 +1182,7 @@ private fun LazyListScope.RelationsTabContent(
         }
         else -> {
             items(relations, key = { it.bangumiItem.id }) { relation ->
-                Box(modifier = Modifier.padding(horizontal = 16.dp).padding(top = 12.dp)) {
+                Box(modifier = Modifier.animateItem().padding(horizontal = 16.dp).padding(top = 12.dp)) {
                     RelatedBangumiCard(
                         relation = relation,
                         onClick = { onRelationClick(relation) }
@@ -1190,6 +1196,7 @@ private fun LazyListScope.RelationsTabContent(
 /**
  * 制作人员 Tab
  */
+@OptIn(ExperimentalFoundationApi::class)
 private fun LazyListScope.StaffTabContent(
     staffs: List<StaffFullItem>,
     loading: Boolean,
@@ -1246,8 +1253,10 @@ private fun LazyListScope.StaffTabContent(
         }
         else -> {
             items(staffs, key = { it.staff.id }) { staff ->
-                StaffCard(item = staff)
-                HorizontalDivider(thickness = 0.5.dp)
+                Column(modifier = Modifier.animateItem()) {
+                    StaffCard(item = staff)
+                    HorizontalDivider(thickness = 0.5.dp)
+                }
             }
         }
     }

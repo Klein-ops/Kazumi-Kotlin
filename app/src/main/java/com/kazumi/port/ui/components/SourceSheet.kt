@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
@@ -60,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -111,7 +114,7 @@ private enum class SearchAction { QUERY, RETRY }
  * - 三点菜单：修改检索词 / 使用别名 / 重新检索 / 在浏览器中打开
  * - 有结果的源排在前面，无结果的排后面
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SourceSheet(
     keyword: String,
@@ -299,7 +302,8 @@ fun SourceSheet(
                             showKeywordDialog = true
                         },
                         onRetry = { searchGroup(group, SearchAction.RETRY) },
-                        onOpenBrowser = { openInBrowser(group) }
+                        onOpenBrowser = { openInBrowser(group) },
+                        modifier = Modifier.animateItem()
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -398,6 +402,7 @@ fun SourceSheet(
 }
 
 /** 单个插件的分组行（组头 + 折叠内容） */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SourceGroupRow(
     group: SourceGroup,
@@ -414,16 +419,26 @@ private fun SourceGroupRow(
     onUseAlias: () -> Unit,
     onCustomKeyword: () -> Unit,
     onRetry: () -> Unit,
-    onOpenBrowser: () -> Unit
+    onOpenBrowser: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    val press = rememberPressScale()
+    Column(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         // 组头：插件名 + 状态 + 展开箭头（对齐原版 _buildSourceGroup 头部）
         val collapsed = display == SourceDisplay.COLLAPSED
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = press.scale
+                    scaleY = press.scale
+                }
                 .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onToggle)
+                .clickable(
+                    interactionSource = press.interactionSource,
+                    indication = LocalIndication.current,
+                    onClick = onToggle
+                )
                 .padding(horizontal = 8.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -596,11 +611,20 @@ private fun SourceGroupBody(
             val visibleResults = if (showAll) group.results else group.results.take(1)
             // 结果行（对齐原版 _buildResult SplitListRow）
             visibleResults.forEach { item ->
+                val press = rememberPressScale()
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .graphicsLayer {
+                            scaleX = press.scale
+                            scaleY = press.scale
+                        }
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { onPlayItem(item) }
+                        .clickable(
+                            interactionSource = press.interactionSource,
+                            indication = LocalIndication.current,
+                            onClick = { onPlayItem(item) }
+                        )
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

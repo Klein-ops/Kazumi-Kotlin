@@ -1,5 +1,7 @@
 package com.kazumi.port.ui.components
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -56,7 +58,7 @@ import kotlinx.coroutines.launch
  *
  * 三步流程：搜索番剧 -> 选择番剧 -> 选择分集（应用到当前播放）
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun DanmakuSourceSheet(
     bangumiId: Int,
@@ -146,6 +148,11 @@ fun DanmakuSourceSheet(
         onDismissRequest = onDismiss,
         containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
     ) {
+        // 返回键：按步骤逐级回退（分集 -> 番剧 -> 搜索 -> 关闭），而不是直接关整个弹窗
+        BackHandler(enabled = step > 0) {
+            error = null
+            step = if (step == 2) 1 else 0
+        }
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             // 头部
             Row(
@@ -279,7 +286,7 @@ fun DanmakuSourceSheet(
                                             { Text(anime.typeDescription) }
                                         } else null,
                                         trailingContent = { Text("›") },
-                                        modifier = Modifier.clickable { selectAnime(anime) }
+                                        modifier = Modifier.animateItem().clickable { selectAnime(anime) }
                                     )
                                     HorizontalDivider()
                                 }
@@ -303,7 +310,7 @@ fun DanmakuSourceSheet(
                                 items(episodes) { episode ->
                                     ListItem(
                                         headlineContent = { Text(episode.episodeTitle, maxLines = 1) },
-                                        modifier = Modifier.clickable { selectEpisode(episode) }
+                                        modifier = Modifier.animateItem().clickable { selectEpisode(episode) }
                                     )
                                 }
                             }

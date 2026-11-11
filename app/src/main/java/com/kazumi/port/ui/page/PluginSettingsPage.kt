@@ -1,5 +1,7 @@
 package com.kazumi.port.ui.page
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -77,6 +79,7 @@ import kotlinx.coroutines.withContext
  * 对齐：RulePageIntro / 搜索 / FilterChip(全部·可更新) / 更新全部 / 多选删除 / 更多菜单(编辑·测试·检查更新·分享·上移·下移·删除) / 空态
  * 差异：拖动排序由菜单"上移/下移"替代；编辑/测试页入口保留待接入
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PluginSettingsPage(navController: NavHostController) {
     val app = remember { KazumiApp.get() }
@@ -101,6 +104,12 @@ fun PluginSettingsPage(navController: NavHostController) {
     var sharePlugin by remember { mutableStateOf<Plugin?>(null) }
 
     val clipboard = LocalClipboardManager.current
+
+    // 返回键：批量选择模式优先退出选择，而不是直接退出页面（与顶栏返回按钮行为一致）
+    BackHandler(enabled = selecting) {
+        selecting = false
+        selectedNames = emptySet()
+    }
 
     fun refreshPlugins() { plugins = repo.allPlugins() }
 
@@ -285,6 +294,7 @@ fun PluginSettingsPage(navController: NavHostController) {
                         title = plugin.name,
                         subtitle = runCatching { java.net.URI(plugin.baseUrl).host }.getOrDefault(plugin.baseUrl),
                         selected = selected,
+                        modifier = Modifier.animateItem(),
                         tags = listOfNotNull<@Composable () -> Unit>(
                             { RuleTag(plugin.version.ifEmpty { "v?" }, MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant) },
                             if (updatable) { { RuleTag("可更新", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer) } } else null
