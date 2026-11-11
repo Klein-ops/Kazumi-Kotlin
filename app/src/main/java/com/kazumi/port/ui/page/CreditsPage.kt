@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.kazumi.port.data.model.ApiEndpoints
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
+import com.kazumi.port.ui.components.rememberPressScale
 
 /**
  * 致谢页（对应原版 credits_page.dart）
@@ -147,19 +150,28 @@ private fun CreditsLinkTile(
     subtitle: String?,
     url: String
 ) {
+    val press = rememberPressScale()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
-                // 打开外部链接
-                runCatching {
-                    val intent = android.content.Intent(
-                        android.content.Intent.ACTION_VIEW,
-                        android.net.Uri.parse(url)
-                    )
-                    com.kazumi.port.KazumiApp.get().startActivity(intent)
-                }
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
             }
+            .clickable(
+                interactionSource = press.interactionSource,
+                indication = LocalIndication.current,
+                onClick = {
+                    // 打开外部链接
+                    runCatching {
+                        val intent = android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(url)
+                        )
+                        com.kazumi.port.KazumiApp.get().startActivity(intent)
+                    }
+                }
+            )
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

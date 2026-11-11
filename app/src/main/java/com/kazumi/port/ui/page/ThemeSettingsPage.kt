@@ -1,6 +1,7 @@
 package com.kazumi.port.ui.page
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.kazumi.port.KazumiApp
@@ -42,6 +44,7 @@ import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
 import com.kazumi.port.ui.components.SettingSwitchRow
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
+import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.theme.KazumiThemeColors
 import kotlinx.coroutines.launch
 
@@ -163,13 +166,23 @@ fun ThemeSettingsPage(navController: NavHostController) {
                 ) {
                     KazumiThemeColors.ALL.forEach { (key, label) ->
                         val selected = themeColor == key
+                        val press = rememberPressScale()
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.clickable {
-                                themeColor = key
-                                scope.launch { settings.setString(SettingsManager.Theme.COLOR, key) }
-                                showPaletteDialog = false
-                            }
+                            modifier = Modifier
+                                .graphicsLayer {
+                                    scaleX = press.scale
+                                    scaleY = press.scale
+                                }
+                                .clickable(
+                                    interactionSource = press.interactionSource,
+                                    indication = LocalIndication.current,
+                                    onClick = {
+                                        themeColor = key
+                                        scope.launch { settings.setString(SettingsManager.Theme.COLOR, key) }
+                                        showPaletteDialog = false
+                                    }
+                                )
                         ) {
                             Box(
                                 modifier = Modifier

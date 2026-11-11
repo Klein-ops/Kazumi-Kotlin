@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.components
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,6 +48,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -220,11 +222,22 @@ private fun HomeSheet(
                 }
             }
             else -> {
+                val createPress = rememberPressScale()
                 Row(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                     Surface(
                         shape = MaterialTheme.shapes.medium,
                         tonalElevation = 2.dp,
-                        modifier = Modifier.weight(1f).clickable(onClick = onPickCreate)
+                        modifier = Modifier
+                            .weight(1f)
+                            .graphicsLayer {
+                                scaleX = createPress.scale
+                                scaleY = createPress.scale
+                            }
+                            .clickable(
+                                interactionSource = createPress.interactionSource,
+                                indication = LocalIndication.current,
+                                onClick = onPickCreate
+                            )
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
                             Icon(Icons.Filled.AddCircleOutline, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -234,10 +247,21 @@ private fun HomeSheet(
                         }
                     }
                     Spacer(modifier = Modifier.width(12.dp))
+                    val joinPress = rememberPressScale()
                     Surface(
                         shape = MaterialTheme.shapes.medium,
                         tonalElevation = 2.dp,
-                        modifier = Modifier.weight(1f).clickable(onClick = onPickJoin)
+                        modifier = Modifier
+                            .weight(1f)
+                            .graphicsLayer {
+                                scaleX = joinPress.scale
+                                scaleY = joinPress.scale
+                            }
+                            .clickable(
+                                interactionSource = joinPress.interactionSource,
+                                indication = LocalIndication.current,
+                                onClick = onPickJoin
+                            )
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
                             Icon(Icons.Filled.Login, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -247,11 +271,21 @@ private fun HomeSheet(
                         }
                     }
                 }
+                val serverPress = rememberPressScale()
                 ListItem(
                     headlineContent = { Text("同步服务器") },
                     supportingContent = { Text(endPoint) },
                     trailingContent = { Text("›") },
-                    modifier = Modifier.clickable(onClick = onPickServer)
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = serverPress.scale
+                            scaleY = serverPress.scale
+                        }
+                        .clickable(
+                            interactionSource = serverPress.interactionSource,
+                            indication = LocalIndication.current,
+                            onClick = onPickServer
+                        )
                 )
             }
         }
