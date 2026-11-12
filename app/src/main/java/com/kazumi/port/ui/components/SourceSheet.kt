@@ -61,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -531,8 +532,10 @@ private fun SourceGroupRow(
             )
         }
         // 折叠内容：AnimatedVisibility 高度动画
+        // clipToBounds：防止动画期间内容绘制到容器外（多结果展开/收起时与相邻行重叠）
         AnimatedVisibility(
             visible = !collapsed,
+            modifier = Modifier.fillMaxWidth().clipToBounds(),
             enter = fadeIn(tween(180)) + slideInVertically(tween(180)) { -it / 4 },
             exit = fadeOut(tween(140)) + slideOutVertically(tween(140)) { -it / 4 }
         ) {
@@ -617,65 +620,69 @@ private fun SourceGroupBody(
         group.results.isNotEmpty() -> {
             val showAll = display == SourceDisplay.EXPANDED
             val visibleResults = if (showAll) group.results else group.results.take(1)
-            // 结果行（对齐原版 _buildResult SplitListRow）
-            visibleResults.forEach { item ->
-                val press = rememberPressScale()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            scaleX = press.scale
-                            scaleY = press.scale
-                        }
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(
-                            interactionSource = press.interactionSource,
-                            indication = LocalIndication.current,
-                            onClick = { onPlayItem(item) }
+            // 结果行必须包在 Column 里：AnimatedVisibility 内容不是自带垂直布局的容器，
+            // 多个平铺节点会堆叠在同一位置（用户反馈"多个结果与展开按钮重叠"的根因）
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // 结果行（对齐原版 _buildResult SplitListRow）
+                visibleResults.forEach { item ->
+                    val press = rememberPressScale()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                scaleX = press.scale
+                                scaleY = press.scale
+                            }
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(
+                                interactionSource = press.interactionSource,
+                                indication = LocalIndication.current,
+                                onClick = { onPlayItem(item) }
+                            )
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                        Spacer(Modifier.width(16.dp))
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
-            }
-            // 展开/收起全部条目按钮（对齐原版展开全部 N 个结果）
-            if (group.results.size > 1) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable {
-                            onSetDisplay(if (showAll) SourceDisplay.PREVIEW else SourceDisplay.EXPANDED)
-                        }
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (showAll) "收起全部条目" else "展开全部 ${group.results.size} 个结果",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Icon(
-                        imageVector = if (showAll) Icons.Filled.UnfoldLess else Icons.Filled.UnfoldMore,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                // 展开/收起全部条目按钮（对齐原版展开全部 N 个结果）
+                if (group.results.size > 1) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                onSetDisplay(if (showAll) SourceDisplay.PREVIEW else SourceDisplay.EXPANDED)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (showAll) "收起全部条目" else "展开全部 ${group.results.size} 个结果",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Icon(
+                            imageVector = if (showAll) Icons.Filled.UnfoldLess else Icons.Filled.UnfoldMore,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
