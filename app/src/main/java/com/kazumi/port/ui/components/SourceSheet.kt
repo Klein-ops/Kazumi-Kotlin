@@ -134,9 +134,10 @@ fun SourceSheet(
     var resultCount by remember { mutableStateOf(0) }
     // 全局检索词（原版「使用别名」会把检索词换成番剧别名后重新检索）
     var query by remember { mutableStateOf(keyword) }
-    // 折叠状态：默认全部收起；首个出现结果的组自动展开为 PREVIEW（对齐原版 _autoExpandFirstResult）
+    // 折叠状态：默认全部收起；首次检索期间所有出现结果的组自动展开为 PREVIEW
+    // （用户手动展开/收起任意组后进入手动模式，不再被自动展开覆盖）
     val displayStates = remember { mutableStateListOf<Pair<String, SourceDisplay>>() }
-    var autoExpansionHandled by remember { mutableStateOf(false) }
+    var userInteracted by remember { mutableStateOf(false) }
     // 菜单/弹窗状态
     var menuGroup by remember { mutableStateOf<String?>(null) }
     var showAliasDialog by remember { mutableStateOf(false) }
@@ -149,9 +150,17 @@ fun SourceSheet(
         displayStates.firstOrNull { it.first == name }?.second ?: SourceDisplay.COLLAPSED
 
     fun setDisplay(name: String, display: SourceDisplay) {
-        autoExpansionHandled = true
+        // 用户手动操作（含修改检索词/别名后主动展开）：进入手动模式，停止自动展开
+        userInteracted = true
         val idx = displayStates.indexOfFirst { it.first == name }
         if (idx >= 0) displayStates[idx] = name to display else displayStates.add(name to display)
+    }
+
+    /** 首次检索自动展开（不进入手动模式，不覆盖用户已手动调整过的组） */
+    fun autoExpand(group: SourceGroup) {
+        if (userInteracted || !group.hasResults) return
+        if (displayOf(group.name) != SourceDisplay.COLLAPSED) return
+        displayStates.add(group.name to SourceDisplay.PREVIEW)
     }
 
     fun toggle(name: String) {
@@ -192,10 +201,9 @@ fun SourceSheet(
             }
             withContext(Dispatchers.Main.immediate) {
                 updateCount()
-                // 首个出现结果的组自动展开为预览（只触发一次）
-                if (!autoExpansionHandled && group.hasResults) {
-                    setDisplay(group.name, SourceDisplay.PREVIEW)
-                }
+                // 首次检索期间：每个有结果的组都自动展开为预览（检索失败/无结果的组保持收起，
+                // 用户手动操作后不再自动展开）
+                autoExpand(group)
             }
         }
     }
