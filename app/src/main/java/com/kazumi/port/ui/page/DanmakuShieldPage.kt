@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +63,30 @@ fun DanmakuShieldPage(navController: NavHostController) {
     val rules by dao.observeAll().collectAsState(initial = emptyList())
     var input by remember { mutableStateOf("") }
 
+    /** 同步开关词：增删后把最新全量上传（WebDAV 弹幕屏蔽通道） */
+    fun syncRulesToRemote() {
+        scope.launch {
+            runCatching {
+                app.webDavSyncService.uploadDanmakuShield(
+                    app.webDavSyncService.serializeShieldRules(
+                        dao.getAll().map { it.content }
+                    )
+                )
+            }
+        }
+    }
+
+    // 进入页面时拉取远端屏蔽词合并（对应原版"修改规则后自动同步"）：
+    // 远端有本地无 -> 补充；本地有远端无 -> 保留。已在服务内落库+回传。
+    LaunchedEffect(Unit) {
+        runCatching {
+            app.webDavSyncService.syncDanmakuShieldFull(
+                localProvider = { dao.getAll().map { it.content } },
+                localAdd = { dao.insert(ShieldEntity(content = it)) }
+            )
+        }
+    }
+
     fun addRule() {
         val rule = input.trim()
         if (rule.isEmpty()) return
@@ -72,6 +97,7 @@ fun DanmakuShieldPage(navController: NavHostController) {
         scope.launch {
             withContext(Dispatchers.IO) { dao.insert(ShieldEntity(content = rule)) }
             input = ""
+            syncRulesToRemote()
         }
     }
 
@@ -174,6 +200,7 @@ fun DanmakuShieldPage(navController: NavHostController) {
                         IconButton(onClick = {
                             scope.launch {
                                 withContext(Dispatchers.IO) { dao.delete(rule.content) }
+                                syncRulesToRemote()
                             }
                         }) {
                             Icon(

@@ -136,6 +136,24 @@ class HistoryRepository(
 
     suspend fun delete(key: String) = dao.deleteByKey(key)
 
+    /** 由远端同步数据落库（WebDAV 恢复）：直接按领域模型 upsert */
+    suspend fun upsert(history: History) {
+        val entity = HistoryEntity(
+            key = history.key,
+            bangumiId = history.bangumiItem.id,
+            bangumiJson = gson.toJson(history.bangumiItem.toJson()),
+            lastWatchEpisode = history.lastWatchEpisode,
+            lastWatchEpisodeName = history.lastWatchEpisodeName,
+            adapterName = history.adapterName,
+            lastWatchTime = history.lastWatchTime,
+            lastSrc = history.lastSrc,
+            entryKind = History.normalizeKind(history.entryKind),
+            episodePageUrl = history.episodePageUrl,
+            progressJson = gson.toJson(history.progresses.values.toList())
+        )
+        dao.upsert(entity)
+    }
+
     suspend fun deleteOlderThan(thresholdMs: Long) = dao.deleteOlderThan(thresholdMs)
 
     suspend fun clear() = dao.clear()

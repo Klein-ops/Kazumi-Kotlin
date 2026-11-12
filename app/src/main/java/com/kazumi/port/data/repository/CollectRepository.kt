@@ -71,6 +71,42 @@ class CollectRepository(
         dao.clear()
     }
 
+    /**
+     * 从 WebDAV 同步 JSON 恢复收藏到本地（[{bangumiItem,time,type}] 数组）。
+     * 供"备份恢复"使用：本地数据清空/换设备后，把远端快照写回本地库。
+     * @return 恢复的条数
+     */
+    suspend fun restoreFromSyncJson(json: String): Int {
+        if (json.isBlank()) return 0
+        var restored = 0
+        try {
+            val arr = JsonParser.parseString(json).asJsonArray
+            arr.forEach { el ->
+                if (!el.isJsonObject) return@forEach
+                val o = el.asJsonObject
+                val bangumiObj = o.getAsJsonObject("bangumiItem") ?: return@forEach
+                val bangumi = try {
+                    BangumiItem.fromJson(bangumiObj)
+                } catch (e: Exception) {
+                    return@forEach
+                }
+                if (bangumi.id == 0) return@forEach
+                dao.upsert(
+                    CollectedBangumiEntity(
+                        bangumiId = bangumi.id,
+                        bangumiJson = gson.toJson(bangumi.toJson()),
+                        time = o.get("time")?.asLong ?: System.currentTimeMillis(),
+                        type = o.get("type")?.asInt ?: CollectType.WANT_TO_WATCH
+                    )
+                )
+                restored++
+            }
+        } catch (e: Exception) {
+            // 无效 JSON 视为恢复 0 条，不抛给上层
+        }
+        return restored
+    }
+
     private fun CollectedBangumiEntity.toDomain(): CollectedBangumi {
         val bangumi = try {
             BangumiItem.fromJson(JsonParser.parseString(bangumiJson).asJsonObject)

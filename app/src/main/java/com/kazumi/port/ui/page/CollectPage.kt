@@ -129,14 +129,19 @@ fun CollectPage(navController: NavHostController) {
                     }
                     arr.toString()
                 }.getOrDefault("[]")
-                app.webDavSyncService.syncCollectibles { remote ->
+                val merged = app.webDavSyncService.syncCollectibles { remote ->
                     // merge：远端无数据→传本地；本地无数据→用远端；都有→保留本地（简单策略）
                     when {
                         remote == null -> localJson
                         allItems.isEmpty() -> remote
                         else -> localJson
                     }
-                } != null
+                }
+                if (merged != null) {
+                    // 备份恢复：把合并结果写回本地库，再刷新列表（此前只上传不落库）
+                    app.collectRepository.restoreFromSyncJson(merged)
+                    true
+                } else false
             } else if (bangumiEnabled) {
                 app.bangumiSyncService.syncCollectibles()
             } else false

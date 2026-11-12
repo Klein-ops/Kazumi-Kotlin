@@ -53,12 +53,24 @@ class MainActivity : ComponentActivity() {
         // 3) 插件启动更新检查（checkPluginUpdateOnStartup）
         scope.launch {
             try {
-                if (app.settings.getBoolean(SettingsManager.WebDav.ENABLE, false)) {
-                    app.webDavSyncService.init()
-                    if (app.settings.getBoolean(SettingsManager.WebDav.ENABLE_HISTORY, false)) {
-                        app.webDavSyncService.syncHistory { remote ->
-                            // 本地无历史快照时以远端为准；类型要求返回非空字符串
-                            remote.orEmpty()
+                // WebDAV 初始化 + 同步涉及网络与数据库 IO，必须在 IO 线程执行（避免主线程卡顿/ANR）
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    if (app.settings.getBoolean(SettingsManager.WebDav.ENABLE, false)) {
+                        app.webDavSyncService.init()
+                        if (app.settings.getBoolean(SettingsManager.WebDav.ENABLE_HISTORY, false)) {
+                            // 完整历史同步（此前只下载不落库，空转；现在下载->合并->落库->上传）
+                            app.webDavSyncService.syncHistoryFull(
+                                localProvider = { app.historyRepository.getAll() },
+                                localUpsert = { h -> app.historyRepository.upsert(h) }
+                            )
+                        }
+                        if (app.settings.getBoolean(SettingsManager.WebDav.ENABLE_DANMAKU_SHIELD, false)) {
+                            // 弹幕屏蔽词启动拉取合并（此前零调用，空转）
+                            val dao = app.database.shieldDao()
+                            app.webDavSyncService.syncDanmakuShieldFull(
+                                localProvider = { dao.getAll().map { it.content } },
+                                localAdd = { dao.insert(com.kazumi.port.data.db.ShieldEntity(content = it)) }
+                            )
                         }
                     }
                 }
