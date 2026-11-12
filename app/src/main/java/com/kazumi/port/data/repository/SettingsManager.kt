@@ -123,6 +123,8 @@ class SettingsManager(private val context: Context) {
         const val ENABLE_GIT_PROXY = "enableGitProxy"
         /** 自定义规则仓库地址（空 = 官方仓库；对齐原版 SettingsKeys.ruleRepositoryUrl） */
         const val RULE_REPOSITORY_URL = "ruleRepositoryUrl"
+        /** 已添加的规则仓库列表（含官方仓库；多仓库管理增强，独立于当前激活仓库） */
+        const val RULE_REPOSITORIES = "ruleRepositories"
         const val ENABLE_BANGUMI_PROXY = "enableBangumiProxy"
         const val IMAGE_ACCELERATION = "imageAcceleration"
         const val BANGUMI_ACCELERATION = "bangumiAcceleration"

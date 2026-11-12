@@ -124,7 +124,18 @@ class KazumiApp : Application(), ImageLoaderFactory {
             // 规则仓库镜像默认开启（对齐原版 enableGitProxy 默认 true）
             val gitProxy = settings.getBoolean(SettingsManager.Proxy.ENABLE_GIT_PROXY, true)
             pluginRepository.setGitProxyEnabled(gitProxy)
-            // 恢复自定义规则仓库地址（空 = 官方仓库；对齐原版 SettingsKeys.ruleRepositoryUrl）
+            // 恢复已添加的规则仓库列表（多仓库管理增强；首项固定官方仓库）
+            val savedRepos = settings.getStringList(SettingsManager.Proxy.RULE_REPOSITORIES, emptyList())
+            if (savedRepos.isNotEmpty()) {
+                runCatching { pluginRepository.restoreRuleRepositories(savedRepos) }
+                    .onFailure { e ->
+                        com.kazumi.port.util.FileLogger.w(
+                            "RuleRepo",
+                            "恢复规则仓库列表失败：${e.message}"
+                        )
+                    }
+            }
+            // 恢复当前激活的自定义规则仓库地址（空 = 官方仓库；对齐原版 SettingsKeys.ruleRepositoryUrl）
             val ruleRepo = settings.getString(SettingsManager.Proxy.RULE_REPOSITORY_URL, "")
             if (ruleRepo.isNotEmpty()) {
                 runCatching { pluginRepository.setRuleRepository(ruleRepo) }

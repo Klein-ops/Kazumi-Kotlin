@@ -94,6 +94,15 @@ class PluginRepository(
     var ruleRepository: String = ""
         private set
 
+    /**
+     * 已添加的规则仓库列表（首项固定为官方仓库 ""，其后为自定义仓库地址）。
+     * 空列表默认仅官方仓库；用于仓库管理弹窗的展示与「只看特定仓库的源」切换。
+     * 与 ruleRepository 同一持久化模式（KazumiApp 启动时恢复）。
+     */
+    @Volatile
+    var ruleRepositories: List<String> = listOf("")
+        private set
+
     private val catalogFresh: Boolean
         get() = catalogRefreshedAt > 0 &&
             System.currentTimeMillis() - catalogRefreshedAt < catalogMaxAge
@@ -361,6 +370,74 @@ class PluginRepository(
         catalogRefreshedAt = 0L
         return true
     }
+
+    // ---- 多仓库管理（移植增强：原版仅单一 ruleRepository）----
+
+    /** 官方仓库标识（空串） */
+    val officialRepository: String get() = ""
+
+    /** 当前是否有自定义仓库（区别于仅官方） */
+    fun hasCustomRepositories(): Boolean = ruleRepositories.any { it.isNotEmpty() }
+
+    /** 恢复已保存的仓库列表（KazumiApp 启动时调用；保持官方仓库在首位） */
+    fun restoreRuleRepositories(saved: List<String>) {
+        val cleaned = saved.mapNotNull { runCatching { RulesRepositoryConfig.normalizeForStorage(it) }.getOrNull() }
+            .distinct()
+        val list = buildList {
+            add("")
+            addAll(cleaned.filter { it.isNotEmpty() })
+        }
+        ruleRepositories = list.distinct()
+    }
+
+    /**
+     * 添加自定义规则仓库（官方仓库除外）。
+     * @return 添加结果：ALREADY 已存在 / ADDED 已添加 / INVALID 地址非法
+     */
+    fun addRuleRepository(input: String): RepositoryAddResult {
+        if (input.trim().isEmpty()) return RepositoryAddResult.INVALID
+        val normalized = runCatching { RulesRepositoryConfig.normalizeForStorage(input) }
+            .getOrElse { return RepositoryAddResult.INVALID }
+        if (normalized.isEmpty()) return RepositoryAddResult.INVALID
+        if (ruleRepositories.contains(normalized)) return RepositoryAddResult.ALREADY
+        ruleRepositories = ruleRepositories + normalized
+        return RepositoryAddResult.ADDED
+    }
+
+    /**
+     * 移除自定义规则仓库。若移除的是当前激活仓库，自动回退官方仓库。
+     * @return 是否移除成功（官方仓库不可移除）
+     */
+    fun removeRuleRepository(repository: String): Boolean {
+        val normalized = runCatching { RulesRepositoryConfig.normalizeForStorage(repository) }
+            .getOrElse { return false }
+        if (normalized.isEmpty()) return false // 官方仓库不可移除
+        if (!ruleRepositories.contains(normalized)) return false
+        ruleRepositories = ruleRepositories - normalized
+        if (ruleRepository == normalized) {
+            ruleRepository = ""
+            catalogByName = emptyMap()
+            catalogList = emptyList()
+            catalogRefreshedAt = 0L
+        }
+        return true
+    }
+
+    /** 切换到指定仓库（必须是已添加的仓库或官方） */
+    fun switchRuleRepository(repository: String): Boolean {
+        val normalized = runCatching { RulesRepositoryConfig.normalizeForStorage(repository) }
+            .getOrElse { return false }
+        if (!ruleRepositories.contains(normalized)) return false
+        if (normalized == ruleRepository) return false
+        ruleRepository = normalized
+        catalogByName = emptyMap()
+        catalogList = emptyList()
+        catalogRefreshedAt = 0L
+        return true
+    }
+
+    /** 仓库添加结果 */
+    enum class RepositoryAddResult { ADDED, ALREADY, INVALID }
 
     /** 规则仓库条目列表（缓存） */
     fun catalogItems(): List<PluginHTTPItem> = catalogList

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,11 +21,16 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -36,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -316,54 +323,118 @@ fun RuleEmptyState(
 }
 
 /**
- * 规则仓库地址对话框
- * 对应原版 85c5106f 新增的 showRuleRepositoryDialog：
- * 填写自定义规则仓库地址（留空 = 官方仓库），保存后切换仓库并刷新目录。
+ * 规则仓库管理对话框（移植增强：支持多仓库 增/删/切换/查看）
+ * - 列表展示全部已添加仓库（官方仓库固定首位，不可删除）
+ * - 每行可点击切换为当前激活仓库；自定义仓库可删除
+ * - 底部输入框添加新仓库（留空/重复/非法地址都有明确提示）
+ * - 任何变更（增/删/切换）都会回调 [onChanged]，由页面刷新目录
  */
 @Composable
 fun RuleRepositoryDialog(
-    initialValue: String,
+    /** 已添加仓库列表（含官方仓库 ""） */
+    repositories: List<String>,
+    /** 当前激活仓库 */
+    current: String,
     onDismiss: () -> Unit,
-    onSaved: (Boolean) -> Unit
+    onChanged: () -> Unit
 ) {
     val app = remember { KazumiApp.get() }
+    val repo = app.pluginRepository
     val toast = rememberToast()
-    var text by remember { mutableStateOf(initialValue) }
+    var list by remember { mutableStateOf(repositories) }
+    var active by remember { mutableStateOf(current) }
+    var text by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
 
-    fun save() {
+    /** 持久化仓库列表（包含官方仓库首项） */
+    fun persist() {
+        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+            runCatching {
+                app.settings.setStringList(
+                    com.kazumi.port.data.repository.SettingsManager.Proxy.RULE_REPOSITORIES,
+                    repo.ruleRepositories
+                )
+            }.onFailure { e ->
+                com.kazumi.port.util.FileLogger.w("RuleRepo", "保存规则仓库列表失败：${e.message}")
+            }
+        }
+    }
+
+    /** 切换激活仓库 */
+    fun switchRepo(repository: String) {
+        if (repository == active) return
+        if (!repo.switchRuleRepository(repository)) {
+            toast("切换规则仓库失败")
+            return
+        }
+        active = repository
+        // 持久化当前激活仓库（对齐原版 ruleRepositoryUrl 键）
+        persist()
+        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+            app.settings.setString(
+                com.kazumi.port.data.repository.SettingsManager.Proxy.RULE_REPOSITORY_URL,
+                repo.ruleRepository
+            )
+        }
+        toast(if (repository.isEmpty()) "已切换到官方仓库" else "已切换规则仓库")
+        onChanged()
+    }
+
+    /** 删除自定义仓库（官方不可删；删除当前激活则回退官方） */
+    fun removeRepo(repository: String) {
+        if (repository.isEmpty()) return
         if (saving) return
         saving = true
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
-            val changed = try {
-                app.pluginRepository.setRuleRepository(text)
-            } catch (e: IllegalArgumentException) {
-                withContext(Dispatchers.Main) {
-                    error = e.message ?: "规则仓库地址无效"
-                    saving = false
-                }
-                return@launch
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    error = "保存失败，请重试。"
-                    saving = false
-                }
-                return@launch
-            }
-            // 持久化设置（空 = 官方仓库），重启后由 KazumiApp 恢复
-            withContext(Dispatchers.IO) {
+        val wasActive = repository == active
+        val ok = repo.removeRuleRepository(repository)
+        saving = false
+        if (!ok) {
+            toast("删除规则仓库失败")
+            return
+        }
+        list = repo.ruleRepositories
+        if (wasActive) {
+            active = ""
+            // 回退官方后持久化激活仓库
+            kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
                 app.settings.setString(
                     com.kazumi.port.data.repository.SettingsManager.Proxy.RULE_REPOSITORY_URL,
-                    app.pluginRepository.ruleRepository
+                    ""
                 )
             }
-            withContext(Dispatchers.Main) {
+        }
+        persist()
+        toast("已删除规则仓库")
+        onChanged()
+    }
+
+    /** 添加新仓库 */
+    fun addRepo() {
+        if (saving) return
+        val input = text.trim()
+        if (input.isEmpty()) {
+            error = "请输入仓库地址"
+            return
+        }
+        saving = true
+        when (repo.addRuleRepository(input)) {
+            com.kazumi.port.data.repository.PluginRepository.RepositoryAddResult.ADDED -> {
                 saving = false
-                onDismiss()
-                onSaved(changed)
-                val current = app.pluginRepository.ruleRepository
-                toast(if (current.isEmpty()) "已恢复官方规则仓库" else "已切换规则仓库")
+                list = repo.ruleRepositories
+                text = ""
+                error = null
+                persist()
+                toast("已添加规则仓库")
+                onChanged()
+            }
+            com.kazumi.port.data.repository.PluginRepository.RepositoryAddResult.ALREADY -> {
+                saving = false
+                error = "该仓库已添加"
+            }
+            else -> {
+                saving = false
+                error = "规则仓库地址无效：请输入目录或 index.json 结尾的 HTTP(S) 地址"
             }
         }
     }
@@ -371,38 +442,108 @@ fun RuleRepositoryDialog(
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
         containerColor = MaterialTheme.colorScheme.surface,
-        title = { Text("规则仓库地址") },
+        title = { Text("规则仓库管理") },
         text = {
             Column {
                 Text(
-                    "仅添加信任的仓库，第三方规则可以访问任意网站并执行脚本。",
+                    "仅添加信任的仓库，第三方规则可以访问任意网站并执行脚本。点击仓库可切换为当前使用的仓库。",
                     style = MaterialTheme.typography.bodyMedium
                 )
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it; error = null },
-                    label = { Text("仓库地址") },
-                    placeholder = { Text(com.kazumi.port.data.model.ApiEndpoints.PLUGIN_SHOP) },
-                    singleLine = true,
-                    isError = error != null,
-                    supportingText = {
-                        Text(error ?: "填写 index.json 所在目录，留空使用官方仓库")
-                    },
+                Spacer(Modifier.size(12.dp))
+                // 仓库列表（官方固定首位，自定义可删除）
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp)
-                )
+                        .heightIn(max = 240.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    list.forEach { repository ->
+                        val isOfficial = repository.isEmpty()
+                        val isActive = repository == active
+                        val press = rememberPressScale()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .graphicsLayer {
+                                    scaleX = press.scale
+                                    scaleY = press.scale
+                                }
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                .clickable(
+                                    interactionSource = press.interactionSource,
+                                    indication = LocalIndication.current,
+                                    onClick = { switchRepo(repository) }
+                                )
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isOfficial) Icons.Filled.Star else Icons.Filled.Link,
+                                contentDescription = null,
+                                tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isOfficial) "官方仓库" else repository,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                                if (isActive) {
+                                    Text(
+                                        "当前使用中",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            if (!isOfficial) {
+                                IconButton(
+                                    onClick = { removeRepo(repository) },
+                                    enabled = !saving
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        contentDescription = "删除仓库",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.size(8.dp))
+                HorizontalDivider()
+                Spacer(Modifier.size(12.dp))
+                // 添加新仓库
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it; error = null },
+                        label = { Text("添加仓库地址") },
+                        placeholder = { Text("填写 index.json 所在目录") },
+                        singleLine = true,
+                        isError = error != null,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    FilledTonalButton(onClick = { addRepo() }, enabled = !saving) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                }
+                if (error != null) {
+                    Text(
+                        error ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (!saving) onDismiss() }, enabled = !saving) { Text("取消") }
-            Button(onClick = { save() }, enabled = !saving) {
-                if (saving) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(if (saving) "保存中" else "保存")
-            }
+            TextButton(onClick = { if (!saving) onDismiss() }, enabled = !saving) { Text("完成") }
         }
     )
 }

@@ -191,7 +191,7 @@ fun PluginShopPage(navController: NavHostController) {
         actions = {
             // 配置规则仓库地址（官方为默认；对应原版 85c5106f 标题栏 link 按钮）
             IconButton(onClick = { showRepoDialog = true }) {
-                Icon(Icons.Filled.Link, contentDescription = "规则仓库地址")
+                Icon(Icons.Filled.Link, contentDescription = "规则仓库管理")
             }
         }
     ) {
@@ -209,7 +209,7 @@ fun PluginShopPage(navController: NavHostController) {
                             Text(
                                 // 镜像加速仅适用于官方仓库；自定义仓库失败时提示检查地址
                                 if (repo.ruleRepository.isNotEmpty())
-                                    "请检查自定义仓库地址和网络连接后重试。"
+                                    "请检查仓库地址和网络连接后重试。"
                                 else
                                     "请检查网络连接，或切换规则仓库镜像后重试。",
                                 style = MaterialTheme.typography.bodySmall,
@@ -249,7 +249,34 @@ fun PluginShopPage(navController: NavHostController) {
                             "浏览社区规则，为你的番剧搜索添加更多选择。",
                             Icons.Filled.TravelExplore
                         )
-                        Spacer(Modifier.size(20.dp))
+                        Spacer(Modifier.size(12.dp))
+                        // 当前仓库指示 + 切换入口（多仓库管理增强）
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "当前仓库：",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = repo.ruleRepository.ifEmpty { "官方仓库" },
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { showRepoDialog = true }) {
+                                Icon(Icons.Filled.Link, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("管理仓库")
+                            }
+                        }
+                        Spacer(Modifier.size(8.dp))
                         OutlinedTextField(
                             value = query,
                             onValueChange = { query = it },
@@ -379,14 +406,15 @@ fun PluginShopPage(navController: NavHostController) {
         }
     }
 
-    // 规则仓库地址对话框（对齐原版 85c5106f showRuleRepositoryDialog）
+    // 规则仓库管理对话框（多仓库管理增强）
     if (showRepoDialog) {
         RuleRepositoryDialog(
-            initialValue = repo.ruleRepository,
+            repositories = repo.ruleRepositories,
+            current = repo.ruleRepository,
             onDismiss = { showRepoDialog = false },
-            onSaved = { changed ->
-                // 仓库切换后强制刷新目录（setRuleRepository 已清缓存，ensure 会走新仓库）
-                if (changed) loadCatalog(forceRefresh = true)
+            onChanged = {
+                // 仓库增/删/切换后强制刷新目录（缓存已清空，ensure 会走新仓库）
+                loadCatalog(forceRefresh = true)
             }
         )
     }
