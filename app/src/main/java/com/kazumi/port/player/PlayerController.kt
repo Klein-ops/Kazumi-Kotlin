@@ -275,6 +275,24 @@ class PlayerController(
         exoPlayer = player
         _playerState.value = player
 
+        // 恢复记住的音量/静音（对齐原版 player_controller.dart init：
+        // 应用 defaultVolume + playerMuted）。仅当用户明确改过默认音量或
+        // 上次处于静音时才恢复，避免默认值(100%/未静音)每次强制覆盖系统音量。
+        runCatching {
+            val storedMuted = settings.getBoolean(SettingsManager.Player.PLAYER_MUTED, false)
+            val storedVolume = settings.getDouble(SettingsManager.Player.DEFAULT_VOLUME, 100.0)
+            if (storedMuted) {
+                val am = audioManager
+                val max = am?.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) ?: 0
+                if (max > 0) {
+                    memoryVolume = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                    am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, 0, 0)
+                }
+            } else if (storedVolume != 100.0 && storedVolume > 0f) {
+                setSystemVolume((storedVolume / 100.0).toFloat())
+            }
+        }
+
         return try {
             val mediaSource = buildMediaSource(params)
             FileLogger.i(
@@ -453,6 +471,17 @@ class PlayerController(
                 isMuted = systemVolume() == 0f
             )
         }
+        // 持久化默认音量（对齐原版 player_controller.dart setVolume：写入 defaultVolume）
+        scope.launch {
+            settings.setDouble(SettingsManager.Player.DEFAULT_VOLUME, systemVolume().toDouble())
+        }
+    }
+
+    /** 静音状态持久化（playerMuted） */
+    private fun persistMuted(muted: Boolean) {
+        scope.launch {
+            settings.setBoolean(SettingsManager.Player.PLAYER_MUTED, muted)
+        }
     }
 
     /** 切换系统媒体音量静音（记忆原音量，取消静音时恢复） */
@@ -465,9 +494,11 @@ class PlayerController(
             // 取消静音：恢复上次音量（memory 不存在时用 max/2）
             val restore = if (memoryVolume > 0) memoryVolume else max / 2
             am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, restore, 0)
+            persistMuted(false)
         } else {
             memoryVolume = cur
             am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, 0, 0)
+            persistMuted(true)
         }
         _uiState.update {
             it.copy(
