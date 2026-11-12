@@ -281,9 +281,9 @@ class PlayerController(
         runCatching {
             val storedMuted = settings.getBoolean(SettingsManager.Player.PLAYER_MUTED, false)
             val storedVolume = settings.getDouble(SettingsManager.Player.DEFAULT_VOLUME, 100.0)
-            if (storedMuted) {
-                val am = audioManager
-                val max = am?.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) ?: 0
+            val am = audioManager
+            if (storedMuted && am != null) {
+                val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
                 if (max > 0) {
                     memoryVolume = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
                     am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, 0, 0)

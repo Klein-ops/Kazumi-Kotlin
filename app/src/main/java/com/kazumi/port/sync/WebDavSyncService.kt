@@ -7,6 +7,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.kazumi.port.data.repository.History
 import com.kazumi.port.data.repository.Progress
+import com.kazumi.port.data.repository.SettingsManager
 import java.io.File
 
 /**
