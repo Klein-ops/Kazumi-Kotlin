@@ -419,6 +419,27 @@ fun PlayerPage(
     var danmakuInput by remember { mutableStateOf("") }
     var danmakuInputFocus by remember { mutableStateOf(false) }
 
+    // 发送弹幕输入框获得焦点时自动暂停（对齐原版 pauseOnDanmakuEdit，默认开）
+    // 记录暂停前的播放状态，取消焦点/发送后若原本在播放则恢复
+    var pauseOnDanmakuEdit by remember { mutableStateOf(true) }
+    var wasPlayingBeforeDanmakuInput by remember { mutableStateOf(false) }
+    LaunchedEffect(danmakuInputFocus) {
+        if (danmakuInputFocus) {
+            // 首次获得焦点才记录暂停前状态并暂停
+            wasPlayingBeforeDanmakuInput = uiState.isPlaying
+            runCatching { pauseOnDanmakuEdit = app.settings.getBoolean(SettingsManager.Danmaku.PAUSE_ON_EDIT, true) }.getOrDefault(true)
+            if (pauseOnDanmakuEdit && uiState.isPlaying && !isLocal) {
+                playerController.pause(enableSync = false)
+            }
+        } else {
+            // 焦点离开：原本在播放且设置了暂停弹幕编辑，则恢复播放
+            if (pauseOnDanmakuEdit && wasPlayingBeforeDanmakuInput && !isLocal) {
+                playerController.play(enableSync = false)
+            }
+            wasPlayingBeforeDanmakuInput = false
+        }
+    }
+
     // 发送弹幕：原版逻辑——输入非空、当前集有弹幕、长度<=100；本地回显（弹幕发送接口无官方支持）
     fun sendDanmaku() {
         val msg = danmakuInput.trim()
@@ -437,6 +458,7 @@ fun PlayerPage(
         // 本地回显（对齐原版：无官方发送 API，本地加一条弹幕）
         playerController.danmaku.addDanmakuLocal(msg)
         danmakuInput = ""
+        danmakuInputFocus = false
         toast("弹幕已发送（本地回显）")
     }
 

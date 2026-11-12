@@ -7,9 +7,13 @@ import com.kazumi.port.data.repository.BilibiliDanmakuApi
 import com.kazumi.port.data.repository.DanmakuApi
 import com.kazumi.port.data.repository.SettingsManager
 import com.kazumi.port.util.FileLogger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -38,6 +42,9 @@ class PlayerDanmakuController(
 
     /** 弹幕加载结果状态 */
     enum class DanmakuLoadStatus { SUCCESS, EMPTY, FAILED }
+
+    /** 设置持久化协程作用域（setDanmakuEnabled 后台写 DataStore） */
+    private val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     data class DanmakuLoadResult(
         val danmakus: List<DanmakuEntry>,
@@ -138,6 +145,11 @@ class PlayerDanmakuController(
 
     fun setDanmakuEnabled(value: Boolean) {
         _danmakuOn.value = value
+        // 对齐原版 handleDanmaku：用户手动开关弹幕时把选择持久化到
+        // danmakuEnabledByDefault，下次进播放页按此偏好自动显示/隐藏
+        settingsScope.launch {
+            settings.setBoolean(SettingsManager.Danmaku.ENABLED_BY_DEFAULT, value)
+        }
     }
 
     /** 本地回显一条弹幕（发送弹幕功能：原版无官方发送 API，本地加一条） */
@@ -236,7 +248,14 @@ class PlayerDanmakuController(
             FileLogger.w("Danmaku", "装载异常: ${e.javaClass.simpleName}: ${e.message}")
             DanmakuLoadResult.failed(bangumiID, "${e.javaClass.simpleName}: ${e.message}")
         }
-        applyDanmakuLoad(result, enableDanmaku = result.hasDanmakus)
+        applyDanmakuLoad(
+            result,
+            // 对齐原版 video_controller.dart：装载后弹幕是否默认显示由
+            // danmakuEnabledByDefault 设置决定（默认关；用户手动开后持久化为开）
+            enableDanmaku = result.hasDanmakus && settings.getBoolean(
+                SettingsManager.Danmaku.ENABLED_BY_DEFAULT, false
+            )
+        )
         result
     }
 
