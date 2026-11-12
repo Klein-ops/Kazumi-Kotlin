@@ -256,17 +256,18 @@ fun PlayerPage(
     }
 
     // 切换上一集/下一集（对齐原版 handlePreNextEpisode：越界提示 toast，不走选集弹窗）
-    fun playNextOrPrev(delta: Int) {
+    // silent=true 用于自动连播：到最后一集时静默，不弹 toast 打扰
+    fun playNextOrPrev(delta: Int, silent: Boolean = false) {
         if (roads.isEmpty()) return
         val target = episode + delta
         if (target <= 0) {
-            toast("已经是第一集")
+            if (!silent) toast("已经是第一集")
             return
         }
         val currentRoad = roads.getOrNull(road)
         val maxEp = currentRoad?.data?.size ?: 0
         if (target > maxEp) {
-            toast("已经是最新一集")
+            if (!silent) toast("已经是最新一集")
             return
         }
         val newUrl = currentRoad?.data?.getOrNull(target - 1) ?: return
@@ -285,6 +286,38 @@ fun PlayerPage(
         ) {
             popUpTo(com.kazumi.port.ui.navigation.Routes.PLAYER) { inclusive = true }
             launchSingleTop = true
+        }
+    }
+
+    // 自动连播：播放结束后自动切下一集（对齐原版 autoPlayNext；
+    // 本地播放无线路列表、隐私模式、设置关闭时不自动跳）
+    val endedTick by playerController.playbackEndedTick.collectAsState()
+    LaunchedEffect(endedTick) {
+        if (endedTick == 0) return@LaunchedEffect
+        if (isLocal || roads.isEmpty()) return@LaunchedEffect
+        val autoNext = runCatching { app.settings.autoPlayNext() }.getOrDefault(true)
+        if (!autoNext || runCatching { app.settings.isPrivateMode() }.getOrDefault(false)) return@LaunchedEffect
+        // 稍等 STATE_ENDED 状态稳定后再切下一集（静默，不弹 toast 打扰）
+        delay(800)
+        playNextOrPrev(1, silent = true)
+    }
+
+    // 播放中定期把最新观看历史同步到 WebDAV（对齐设置页"自动同步播放进度与历史记录"文案）；
+    // 此前历史只有启动时同步一次，播放中产生的进度需要重启才上传
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            runCatching {
+                if (app.settings.getBoolean(SettingsManager.WebDav.ENABLE, false) &&
+                    app.settings.getBoolean(SettingsManager.WebDav.ENABLE_HISTORY, false) &&
+                    !app.settings.isPrivateMode()
+                ) {
+                    app.webDavSyncService.syncHistoryFull(
+                        localProvider = { app.historyRepository.getAll() },
+                        localUpsert = { h -> app.historyRepository.upsert(h) }
+                    )
+                }
+            }
         }
     }
 
@@ -705,9 +738,16 @@ fun PlayerPage(
     }
 
     // 自动隐藏控制条（拖动进度条期间不能隐藏，否则滑到一半控件消失）
+    // 隐藏延时读取设置（原版 controllerLayerDisappearTime，默认 4000ms）
+    var controlsHideDelayMs by remember { mutableIntStateOf(4000) }
+    LaunchedEffect(Unit) {
+        controlsHideDelayMs = app.settings.getInt(
+            com.kazumi.port.data.repository.SettingsManager.Player.PLAYER_CONTROLLER_LAYER_DISAPPEAR_TIME, 4000
+        )
+    }
     LaunchedEffect(controlsVisible, locked, barDragging) {
         if (!controlsVisible || locked || barDragging) return@LaunchedEffect
-        delay(4000)
+        delay(controlsHideDelayMs.toLong())
         if (!interactiveSeeking && !speedMenuOpen && !moreMenuOpen && !barDragging) {
             controlsVisible = false
         }

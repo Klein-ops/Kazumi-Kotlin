@@ -107,6 +107,10 @@ class PlayerController(
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    /** 播放结束事件计数（每次 STATE_ENDED +1，供上层实现自动连播） */
+    private val _playbackEndedTick = MutableStateFlow(0)
+    val playbackEndedTick: StateFlow<Int> = _playbackEndedTick.asStateFlow()
+
     /**
      * 当前 ExoPlayer 实例（供 Compose 观察）。
      *
@@ -181,6 +185,10 @@ class PlayerController(
                 else -> "UNKNOWN($playbackState)"
             }
             FileLogger.i(tag, "playbackState=$stateName")
+            // 播放结束事件：供上层实现"自动连播"（对齐原版 autoPlayNext）
+            if (playbackState == Player.STATE_ENDED) {
+                _playbackEndedTick.update { it + 1 }
+            }
             val loading = playbackState == Player.STATE_BUFFERING
             _uiState.update { it.copy(isLoading = loading) }
         }
