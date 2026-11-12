@@ -1,7 +1,6 @@
 package com.kazumi.port.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.compose.animation.core.tween
@@ -122,25 +121,6 @@ fun KazumiNavHost(
     modifier: Modifier = Modifier,
     startDestination: String = Routes.POPULAR
 ) {
-    // 进程重建/Activity 重建恢复兜底：
-    // rememberNavController() 通过 rememberSaveable 自动保存并恢复导航返回栈，
-    // 导致应用重启（如 CodeAssist 重新安装运行、系统回收进程后恢复、深色模式切换等）
-    // 后仍停留在设置页——用户反馈"保存设置后竟然不回到主界面"。
-    // 这里在首次组合时检查恢复后的栈顶：若停在任何设置类页面（settings / settings/*），
-    // 说明是重建恢复而非用户主动导航，强制回退到启动页（startDestination）。
-    LaunchedEffect(navController) {
-        val current = navController.currentBackStackEntry?.destination?.route
-        if (current != null && (current == Routes.SETTINGS || current.startsWith("settings/"))) {
-            val popped = navController.popBackStack(startDestination, inclusive = false)
-            if (!popped) {
-                // 极端情况：启动页不在恢复的栈内，清空整栈导航过去
-                navController.navigate(startDestination) {
-                    popUpTo(navController.graph.id) { inclusive = true }
-                    launchSingleTop = true
-                }
-            }
-        }
-    }
     NavHost(
         navController = navController,
         startDestination = startDestination,
