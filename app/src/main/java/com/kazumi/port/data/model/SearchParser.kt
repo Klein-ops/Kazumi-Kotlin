@@ -181,10 +181,14 @@ class SearchParser(private val query: String) {
             if (state.season.isNotEmpty()) {
                 tokens.add("season:${state.season}")
             } else if (state.dateRange?.isValid == true) {
-                tokens.add("date:${state.dateRange!!.start}..${state.dateRange!!.end}")
+                state.dateRange?.let { tokens.add("date:${it.start}..${it.end}") }
             }
-            if (state.rankRange?.isValid == true) tokens.add("rank:${state.rankRange!!.toToken()}")
-            if (state.scoreRange?.isValid == true) tokens.add("score:${state.scoreRange!!.toToken()}")
+            if (state.rankRange?.isValid == true) {
+                state.rankRange?.let { tokens.add("rank:${it.toToken()}") }
+            }
+            if (state.scoreRange?.isValid == true) {
+                state.scoreRange?.let { tokens.add("score:${it.toToken()}") }
+            }
             if (state.weekdays.isNotEmpty()) {
                 val weekdays = state.weekdays.toSet().toList().sorted()
                 tokens.add("weekday:${weekdays.joinToString(",")}")

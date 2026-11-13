@@ -510,7 +510,7 @@ fun DetailPage(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 else -> {
-                    val item = bangumi!!
+                    val item = bangumi
                     val selectedTab = tabIndex
                     // 统一滚动：头部作为普通 item 参与滚动，TabRow 吸顶。
                     // 手写吸顶（不依赖 stickyHeader）：header 是 index 0，tab 是 index 1，
@@ -626,8 +626,8 @@ fun DetailPage(
     // 播放来源弹窗（对齐原版 SourceSheet：点 FAB「开始观看」弹出）
     if (showSourceSheet && bangumi != null) {
         SourceSheet(
-            keyword = bangumi!!.displayName(),
-            aliases = bangumi!!.alias,
+            keyword = bangumi.displayName(),
+            aliases = bangumi.alias,
             onPlay = { pluginName, src, title ->
                 showSourceSheet = false
                 scope.launch {
@@ -652,7 +652,7 @@ fun DetailPage(
                             } else {
                                 navController.navigate(
                                     Routes.player(
-                                        bangumiId = bangumi!!.id,
+                                        bangumiId = bangumi.id,
                                         pluginName = pluginName,
                                         src = firstEpisodeUrl,
                                         episode = 1,
@@ -686,7 +686,7 @@ fun DetailPage(
     // 评分吐槽弹窗
     if (showReviewSheet && bangumi != null) {
         RatingReviewSheet(
-            bangumiItem = bangumi!!,
+            bangumiItem = bangumi,
             onSubmit = { score, tags, comment ->
                 val token = app.settings.bangumiAccessToken().trim()
                 if (token.isEmpty()) {
@@ -697,7 +697,7 @@ fun DetailPage(
                     false
                 } else {
                     val updated = bangumiApi.addOrUpdateBangumiEvaluationBySubjectID(
-                        subjectID = bangumi!!.id,
+                        subjectID = bangumi.id,
                         localType = collectType,
                         comment = comment,
                         rate = score,

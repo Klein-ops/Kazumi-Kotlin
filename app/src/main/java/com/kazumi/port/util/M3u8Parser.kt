@@ -200,18 +200,19 @@ object M3u8Parser {
                 lastDiscontinuityGroup = seg.discontinuityGroup
             }
 
-            if (seg.key != lastKey) {
-                if (seg.key == null) {
+            val key = seg.key
+            if (key != lastKey) {
+                if (key == null) {
                     sb.appendLine("#EXT-X-KEY:METHOD=NONE")
                 } else {
-                    val localUri = keyUriToLocal[seg.key!!.uri] ?: seg.key!!.uri
-                    val keySb = StringBuilder("#EXT-X-KEY:METHOD=${seg.key!!.method},URI=\"$localUri\"")
-                    if (seg.key!!.iv != null) {
-                        keySb.append(",IV=${seg.key!!.iv}")
+                    val localUri = keyUriToLocal[key.uri] ?: key.uri
+                    val keySb = StringBuilder("#EXT-X-KEY:METHOD=${key.method},URI=\"$localUri\"")
+                    if (key.iv != null) {
+                        keySb.append(",IV=${key.iv}")
                     }
                     sb.appendLine(keySb.toString())
                 }
-                lastKey = seg.key
+                lastKey = key
             }
 
             sb.appendLine("#EXTINF:${String.format("%.6f", seg.duration)},")
