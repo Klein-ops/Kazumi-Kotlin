@@ -26,9 +26,9 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.VolumeDown
-import androidx.compose.material.icons.rounded.VolumeOff
-import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -93,9 +93,9 @@ fun PlayerAdjustmentHud(
         snapshotType == PlayerAdjustmentHudType.Brightness && percent <= 8 -> Icons.Rounded.BrightnessLow
         snapshotType == PlayerAdjustmentHudType.Brightness && percent < 55 -> Icons.Rounded.BrightnessMedium
         snapshotType == PlayerAdjustmentHudType.Brightness -> Icons.Rounded.BrightnessHigh
-        percent <= 0 -> Icons.Rounded.VolumeOff
-        percent < 45 -> Icons.Rounded.VolumeDown
-        else -> Icons.Rounded.VolumeUp
+        percent <= 0 -> Icons.AutoMirrored.Rounded.VolumeOff
+        percent < 45 -> Icons.AutoMirrored.Rounded.VolumeDown
+        else -> Icons.AutoMirrored.Rounded.VolumeUp
     }
 
     AnimatedVisibility(

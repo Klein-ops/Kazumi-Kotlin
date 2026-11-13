@@ -27,7 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Movie
@@ -199,7 +199,7 @@ fun ImageSearchPage(navController: NavHostController) {
                 modifier = Modifier.weight(1f)
             )
             IconButton(onClick = { showHelp = true }) {
-                Icon(Icons.Filled.HelpOutline, contentDescription = "搜图小贴士")
+                Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = "搜图小贴士")
             }
         }
         Text(

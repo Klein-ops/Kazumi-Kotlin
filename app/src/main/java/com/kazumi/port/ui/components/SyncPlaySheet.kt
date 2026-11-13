@@ -20,7 +20,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -264,7 +264,7 @@ private fun HomeSheet(
                             )
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
-                            Icon(Icons.Filled.Login, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.height(20.dp))
                             Text("加入房间", style = MaterialTheme.typography.titleMedium)
                             Text("输入房间号", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -427,7 +427,7 @@ private fun RoomSheet(
                 if (submitting) {
                     KazumiLoadingIndicator(modifier = Modifier.width(18.dp).height(18.dp))
                 } else {
-                    Icon(if (isCreate) Icons.Filled.AddCircleOutline else Icons.Filled.Login, contentDescription = null, modifier = Modifier.width(18.dp))
+                    Icon(if (isCreate) Icons.Filled.AddCircleOutline else Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.width(18.dp))
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(if (isCreate) "创建并加入" else "加入房间")
@@ -496,7 +496,7 @@ private fun ServerSheet(
                         Icon(Icons.Filled.Public, contentDescription = null, tint = if (selectedThis) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     },
                     trailingContent = if (selectedThis) {
-                        { Icon(Icons.Filled.Login, contentDescription = "已选", tint = MaterialTheme.colorScheme.primary) }
+                        { Icon(Icons.AutoMirrored.Filled.Login, contentDescription = "已选", tint = MaterialTheme.colorScheme.primary) }
                     } else null,
                     modifier = Modifier
                         .graphicsLayer {
@@ -524,7 +524,7 @@ private fun ServerSheet(
                     Icon(Icons.Filled.Edit, contentDescription = null, tint = if (selectedCustom) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 },
                 trailingContent = if (selectedCustom) {
-                    { Icon(Icons.Filled.Login, contentDescription = "已选", tint = MaterialTheme.colorScheme.primary) }
+                    { Icon(Icons.AutoMirrored.Filled.Login, contentDescription = "已选", tint = MaterialTheme.colorScheme.primary) }
                 } else null,
                 modifier = Modifier
                     .graphicsLayer {

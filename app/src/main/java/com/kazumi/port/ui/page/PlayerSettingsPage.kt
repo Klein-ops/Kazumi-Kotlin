@@ -20,8 +20,8 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PictureInPictureAlt
-import androidx.compose.material.icons.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
@@ -162,7 +162,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
                 SettingSwitchRow(
                     title = "自动连播",
                     subtitle = "当前视频播放完毕后自动播放下一集",
-                    leading = Icons.Filled.PlaylistPlay,
+                    leading = Icons.AutoMirrored.Filled.PlaylistPlay,
                     checked = autoPlayNext,
                     onCheckedChange = { autoPlayNext = it; saveBoolean(SettingsManager.Player.AUTO_PLAY_NEXT, it) }
                 )
@@ -221,7 +221,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
                 SettingClickRow(
                     title = "日志等级",
                     subtitle = "播放器内部日志等级",
-                    leading = Icons.Filled.ReceiptLong,
+                    leading = Icons.AutoMirrored.Filled.ReceiptLong,
                     trailingValue = when (playerLogLevel) { 0 -> "无"; 1 -> "错误"; 2 -> "警告"; 3 -> "信息"; else -> "调试" },
                     onClick = {
                         playerLogLevel = (playerLogLevel + 1) % 5

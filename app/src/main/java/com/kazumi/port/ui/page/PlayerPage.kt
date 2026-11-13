@@ -28,7 +28,7 @@ import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Lock
@@ -40,8 +40,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -1104,7 +1104,7 @@ fun PlayerPage(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "返回", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = Color.White)
                     }
                     Text(
                         text = buildString {
@@ -1283,7 +1283,7 @@ fun PlayerPage(
                         }
                         IconButton(onClick = { playerController.toggleSystemMute() }) {
                             Icon(
-                                if (uiState.isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                                if (uiState.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = if (uiState.isMuted) "取消静音" else "静音",
                                 tint = Color.White
                             )

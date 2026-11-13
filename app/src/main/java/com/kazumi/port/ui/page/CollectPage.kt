@@ -22,7 +22,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.draw.clip
@@ -217,7 +217,7 @@ fun CollectPage(navController: NavHostController) {
                     }
                     IconButton(onClick = { listLayout = !listLayout }) {
                         Icon(
-                            imageVector = if (listLayout) Icons.Filled.GridView else Icons.Filled.ViewList,
+                            imageVector = if (listLayout) Icons.Filled.GridView else Icons.AutoMirrored.Filled.ViewList,
                             contentDescription = if (listLayout) "卡片布局" else "列表布局"
                         )
                     }

@@ -15,7 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.ImageSearch
@@ -65,7 +65,7 @@ fun CreditsPage(navController: NavHostController) {
             Spacer(Modifier.size(24.dp))
             CreditsGroup("服务") {
                 CreditsLinkTile(
-                    icon = Icons.Filled.MenuBook,
+                    icon = Icons.AutoMirrored.Filled.MenuBook,
                     title = "Bangumi",
                     subtitle = "番剧信息",
                     url = ApiEndpoints.BANGUMI_INDEX

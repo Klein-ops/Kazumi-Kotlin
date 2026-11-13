@@ -26,7 +26,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.Button
@@ -309,7 +309,7 @@ fun PluginShopPage(navController: NavHostController) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box {
                                 TextButton(onClick = { showSortMenu = true }) {
-                                    Icon(Icons.Filled.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text(if (sortByName) "名称排序" else "最近更新")
                                 }
