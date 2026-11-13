@@ -1,5 +1,7 @@
 package com.kazumi.port.ui.page
 
+@file:OptIn(coil.annotation.ExperimentalCoilApi::class)
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -8,7 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -93,7 +95,7 @@ fun StorageSettingsPage(navController: NavHostController) {
                 SettingClickRow(
                     title = "错误日志",
                     subtitle = "查看应用错误日志",
-                    leading = Icons.Filled.ReceiptLong,
+                    leading = Icons.AutoMirrored.Filled.ReceiptLong,
                     onClick = { navController.navigate(com.kazumi.port.ui.navigation.Routes.SETTINGS_LOGS) }
                 )
             }

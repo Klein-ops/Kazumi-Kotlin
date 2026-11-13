@@ -84,7 +84,7 @@ object RestrictedJsonPath {
             @Suppress("UNCHECKED_CAST")
             val result = JsonPath.read<Any>(document, expression)
             return when (result) {
-                is List<*> -> result as List<Any?>
+                is List<*> -> result
                 else -> listOf(result)
             }
         } catch (e: Exception) {

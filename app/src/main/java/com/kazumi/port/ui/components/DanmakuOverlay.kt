@@ -249,7 +249,7 @@ fun DanmakuOverlay(
 
         currentDanmakus.forEach { entry ->
             if (!shouldShowType(entry, showScroll, showTop, showBottom)) return@forEach
-            val widthPx = textPaint.measureText(entry.message).toFloat() + borderSize.coerceAtLeast(0f)
+            val widthPx = textPaint.measureText(entry.message) + borderSize.coerceAtLeast(0f)
             val type = entry.type
             // 存活时长在创建时冻结：倍速切换会改变 durationSeconds，
             // 若让在場弹幕跟着重算，progress 会突变导致整屏回弹。

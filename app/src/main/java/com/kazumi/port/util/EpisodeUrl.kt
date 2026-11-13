@@ -26,7 +26,7 @@ object EpisodeUrl {
             !rawUri.host.isNullOrEmpty()
         ) {
             resolved = rawUri
-        } else if (hasValidBase && baseUri != null) {
+        } else if (hasValidBase) {
             resolved = try {
                 baseUri.resolve(trimmed)
             } catch (e: Exception) {
@@ -39,7 +39,7 @@ object EpisodeUrl {
         }
 
         // 同站 URL 的协议统一到 baseUrl 声明的协议
-        if (hasValidBase && baseUri != null &&
+        if (hasValidBase &&
             isHttpScheme(baseUri.scheme) && isHttpScheme(resolved.scheme) &&
             resolved.scheme != baseUri.scheme &&
             resolved.host == baseUri.host &&
