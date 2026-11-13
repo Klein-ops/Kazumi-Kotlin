@@ -86,17 +86,19 @@ fun kazumiDarkColorScheme(seed: Color): ColorScheme = M3SeedPalettes.dark(seed)
 
 /**
  * OLED 深色纯黑覆盖（对应原版 oledDarkTheme）
+ *
+ * 对齐原版 utils/theme.dart：只改 5 个槽位（scaffoldBackground/surface/onSurface/onPrimary/onSecondary），
+ * surfaceContainer* / surfaceVariant / outline 等容器槽位**保持深色主题正常值**——
+ * 这样设置卡片、TonalCard 等 surfaceContainerLow 容器在 OLED 下仍有可见底色，不会和纯黑背景融为一体。
+ * （原版：scaffoldBackgroundColor=black, colorScheme.surface=black, onSurface=white, onPrimary=black, onSecondary=black）
  */
 private fun ColorScheme.oledDark(): ColorScheme = copy(
     background = Color.Black,
     onBackground = Color.White,
     surface = Color.Black,
     onSurface = Color.White,
-    surfaceVariant = Color.Black,
-    onSurfaceVariant = Color.White,
     onPrimary = Color.Black,
     onSecondary = Color.Black,
-    outline = Color(0xFF333333),
 )
 
 /**
@@ -200,10 +202,12 @@ fun KazumiTheme(
         if (darkTheme) kazumiDarkColorScheme(seed) else kazumiLightColorScheme(seed)
     }
 
-    val effectiveScheme = if (darkTheme && oledEnhance) colorScheme.oledDark() else colorScheme
-    // 补齐 M3SeedPalettes 显式色板缺失的 surfaceContainer*/surfaceBright/surfaceDim 槽位
-    // （默认 Unspecified 透明，会导致引用这些槽位的 UI 看不见）
-    val finalScheme = effectiveScheme.completeSurfaces()
+    // 先补齐 M3SeedPalettes 显式色板缺失的 surfaceContainer*/surfaceBright/surfaceDim 槽位
+    // （默认 Unspecified 透明，会导致引用这些槽位的 UI 看不见），再应用 OLED 覆盖。
+    // 顺序不能反：OLED 覆盖会把 surface 置黑，若再据此推导 surfaceContainer* 会全变黑，
+    // 容器与纯黑背景融为一体（原版 OLED 只改 surface/onSurface 等 5 槽，surfaceContainer 保持深色正常值）。
+    val baseScheme = colorScheme.completeSurfaces()
+    val finalScheme = if (darkTheme && oledEnhance) baseScheme.oledDark() else baseScheme
 
     val view = LocalView.current
     if (!view.isInEditMode) {
