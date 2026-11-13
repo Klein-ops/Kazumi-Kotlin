@@ -1,8 +1,14 @@
 package com.kazumi.port.ui.components
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,10 +24,14 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,6 +95,12 @@ fun SettingSwitchRow(
     enabled: Boolean = true
 ) {
     val press = rememberPressScale()
+    val pressed by press.interactionSource.collectIsPressedAsState()
+    val corner by animateDpAsState(
+        targetValue = if (pressed) 24.dp else 4.dp,
+        animationSpec = tween(250),
+        label = "switchRowCorner"
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -92,6 +108,8 @@ fun SettingSwitchRow(
                 scaleX = press.scale
                 scaleY = press.scale
             }
+            .clip(RoundedCornerShape(corner))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(
                 enabled = enabled,
                 interactionSource = press.interactionSource,
@@ -143,6 +161,12 @@ fun SettingClickRow(
     enabled: Boolean = true
 ) {
     val press = rememberPressScale()
+    val pressed by press.interactionSource.collectIsPressedAsState()
+    val corner by animateDpAsState(
+        targetValue = if (pressed) 24.dp else 4.dp,
+        animationSpec = tween(250),
+        label = "clickRowCorner"
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -150,6 +174,8 @@ fun SettingClickRow(
                 scaleX = press.scale
                 scaleY = press.scale
             }
+            .clip(RoundedCornerShape(corner))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(
                 enabled = enabled,
                 interactionSource = press.interactionSource,
@@ -198,7 +224,46 @@ fun SettingClickRow(
     }
 }
 
-/** 分组容器：标题 + 内容打包成一张圆角卡片（对应原版 SplitListGroup / TonalCard） */
+/**
+ * 滑块行（label + Slider 在同一独立框内，对应原版 SliderSettingsTile）
+ * 用于设置组里"标题+滑块"组合，与 Switch/Click 行保持一致的独立框+按压圆角样式
+ */
+@Composable
+fun SettingSliderRow(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(4.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+        )
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
+            valueRange = valueRange
+        )
+    }
+}
+
+/**
+ * 分组容器（对应原版 SplitListGroup）：
+ * 每个子项是独立的圆角小框，行间 4dp 间隙；首尾行由内容自行不处理，
+ * 按压时每行圆角动画到 24dp（对齐原版 split_list_row.dart 的 pressedRadius 动画）。
+ */
 @Composable
 fun SettingGroup(
     title: String? = null,
@@ -210,9 +275,8 @@ fun SettingGroup(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         content()
     }
