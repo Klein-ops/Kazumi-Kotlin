@@ -6,7 +6,12 @@ import com.google.gson.JsonParser
 import com.kazumi.port.data.model.ApiEndpoints
 import com.kazumi.port.data.model.HttpHeaders
 import com.kazumi.port.data.repository.SettingsManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.net.URLEncoder
 import okhttp3.Headers.Companion.toHeaders
@@ -90,11 +95,15 @@ class BangumiClient(
 
     /**
      * Bangumi 加速执行（对齐原版 BangumiAccelerationInterceptor）：
-     * - 设置 mirror：优先请求 BANGUMI_MIRROR_DOMAIN（api.bgmapi.com）镜像，失败再回退直连
-     * - 设置 direct/ech：先直连，失败自动回退镜像
+     * - 设置 mirror：改写为 BANGUMI_MIRROR_DOMAIN 镜像请求
+     * - 设置 direct/ech：直连
      * 只对 api.bgm.tv / next.bgm.tv 公共主机做改写，其它（鉴权/镜像域名）原样单发。
+     *
+     * 与串行回退不同，这里改成【并发 race】：镜像与直连同时发起，
+     * 谁先成功用谁（不再串行等 12s+12s，冷启动不再被慢通道拖到超时返回空）。
+     * 全部失败才抛异常。
      */
-    private fun executeWithFallback(request: Request, accel: String, allowMirror: Boolean = true): JsonElement {
+    private suspend fun executeWithFallback(request: Request, accel: String, allowMirror: Boolean = true): JsonElement {
         val url = request.url.toString()
         val isPublic = bangumiPublicHosts.any { url.startsWith("https://$it/") || url.startsWith("http://$it/") }
         if (!isPublic || !allowMirror) return execute(request)
@@ -103,15 +112,55 @@ class BangumiClient(
         if (mirror == url) return execute(request)
 
         val mirrorFirst = accel == "mirror"
-        val attempts = if (mirrorFirst) listOf(mirror, url) else listOf(url, mirror)
-        var lastError: Exception? = null
-        for (target in attempts) {
-            try {
-                val r = if (target == url) request else request.newBuilder().url(target).build()
-                return execute(r)
-            } catch (e: Exception) {
-                lastError = e
+        val mirrorRequest = request.newBuilder().url(mirror).build()
+        val directRequest = request
+
+        return coroutineScope {
+            val mirrorDeferred = async(Dispatchers.IO) {
+                try {
+                    Result.success(execute(mirrorRequest))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
             }
+            val directDeferred = async(Dispatchers.IO) {
+                try {
+                    Result.success(execute(directRequest))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+            val ordered = if (mirrorFirst) listOf(mirrorDeferred, directDeferred)
+            else listOf(directDeferred, mirrorDeferred)
+            try {
+                awaitFirstSuccess(ordered)
+            } finally {
+                mirrorDeferred.cancel()
+                directDeferred.cancel()
+            }
+        }
+    }
+
+    /**
+     * 并发 race 取第一个成功结果；全部失败时抛最后一个异常。
+     */
+    private suspend fun awaitFirstSuccess(jobs: List<Deferred<Result<JsonElement>>>): JsonElement {
+        var lastError: Exception? = null
+        while (true) {
+            val done = jobs.filter { it.isCompleted }
+            if (done.isNotEmpty()) {
+                for (job in done) {
+                    val r = job.await()
+                    if (r.isSuccess) return r.getOrThrow()
+                    if (lastError == null) lastError = r.exceptionOrNull() as? Exception
+                }
+                if (jobs.all { it.isCompleted }) break
+            }
+            delay(5)
         }
         throw lastError ?: NetworkException(NetworkExceptionType.UNKNOWN, "Bangumi 请求失败")
     }
