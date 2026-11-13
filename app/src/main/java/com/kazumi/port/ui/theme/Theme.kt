@@ -118,21 +118,27 @@ private fun ColorScheme.oledDark(): ColorScheme = copy(
  */
 private fun ColorScheme.completeSurfaces(): ColorScheme {
     val s = surface
+    // 方向对齐标准 Material3 色阶（M3 官方 light/dark 基准）：
+    //   light:  surfaceContainerLowest=white, low=surface+黑(≈暗2.7%), container=+黑≈4.3%, high=+黑≈7%, highest=+黑≈9.5%
+    //           （浅色卡片比背景略暗的浅灰，如 #FEF7FF→#F7F2FA）
+    //   dark:   surfaceContainerLowest≈黑, low=surface+白≈亮4%, container=+白≈6%, high=+白≈12%, highest=+白≈18%
+    //           （深色卡片比背景略亮，如 #141218→#1D1B20）
+    // 此前方向写反（light blend 白、dark blend 黑），导致卡片质感与原版相反。
     return copy(
         surfaceContainerLowest = if (surfaceContainerLowest == Color.Unspecified) {
             if (isLight()) Color.White else Color.Black
         } else surfaceContainerLowest,
         surfaceContainerLow = if (surfaceContainerLow == Color.Unspecified) {
-            if (isLight()) blend(s, Color.White, 0.02f) else blend(s, Color.Black, 0.08f)
+            if (isLight()) blend(s, Color.Black, 0.03f) else blend(s, Color.White, 0.04f)
         } else surfaceContainerLow,
         surfaceContainer = if (surfaceContainer == Color.Unspecified) {
-            if (isLight()) blend(s, Color.White, 0.04f) else blend(s, Color.Black, 0.10f)
+            if (isLight()) blend(s, Color.Black, 0.05f) else blend(s, Color.White, 0.06f)
         } else surfaceContainer,
         surfaceContainerHigh = if (surfaceContainerHigh == Color.Unspecified) {
-            if (isLight()) blend(s, Color.White, 0.08f) else blend(s, Color.Black, 0.14f)
+            if (isLight()) blend(s, Color.Black, 0.08f) else blend(s, Color.White, 0.12f)
         } else surfaceContainerHigh,
         surfaceContainerHighest = if (surfaceContainerHighest == Color.Unspecified) {
-            if (isLight()) blend(s, Color.White, 0.12f) else blend(s, Color.Black, 0.18f)
+            if (isLight()) blend(s, Color.Black, 0.11f) else blend(s, Color.White, 0.18f)
         } else surfaceContainerHighest,
         surfaceDim = if (surfaceDim == Color.Unspecified) {
             if (isLight()) blend(s, Color.Black, 0.06f) else s
