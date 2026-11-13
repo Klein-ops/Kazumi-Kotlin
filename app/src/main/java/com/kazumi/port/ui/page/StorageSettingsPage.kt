@@ -1,6 +1,6 @@
-package com.kazumi.port.ui.page
-
 @file:OptIn(coil.annotation.ExperimentalCoilApi::class)
+
+package com.kazumi.port.ui.page
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
