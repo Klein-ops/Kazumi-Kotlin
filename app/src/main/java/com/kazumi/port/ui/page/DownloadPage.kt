@@ -1,6 +1,7 @@
 package com.kazumi.port.ui.page
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,9 +9,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -32,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.kazumi.port.KazumiApp
@@ -41,7 +45,6 @@ import com.kazumi.port.data.repository.DownloadRecord
 import com.kazumi.port.service.formatBytes
 import com.kazumi.port.service.formatSpeed
 import com.kazumi.port.ui.components.EmptyState
-import com.kazumi.port.ui.components.PageHeader
 import com.kazumi.port.ui.navigation.Routes
 import kotlinx.coroutines.launch
 
@@ -60,36 +63,57 @@ fun DownloadPage(navController: NavHostController) {
         records = app.downloadController.records
     }
 
-    MainScaffold(navController) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            PageHeader(title = "下载管理")
+    // 独立页（对齐原版 download_page.dart Scaffold(appBar: SysAppBar('下载管理'))）：
+    // 自带返回按钮 + 无底部导航，不嵌 MainScaffold
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        // 顶栏：返回按钮 + 标题
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            }
+            Text(
+                text = "下载管理",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+        }
 
-            if (records.isEmpty()) {
-                EmptyState("还没有下载记录")
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(records, key = { it.key }) { record ->
-                        DownloadRecordCard(
-                            record = record,
-                            controller = app.downloadController,
-                            modifier = Modifier.animateItem(),
-                            onPlay = { episode ->
-                                navController.navigate(
-                                    Routes.player(
-                                        bangumiId = record.bangumiId,
-                                        pluginName = record.pluginName,
-                                        episode = episode.episodeNumber,
-                                        road = episode.road,
-                                        isLocal = true
-                                    )
+        if (records.isEmpty()) {
+            EmptyState("还没有下载记录")
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(records, key = { it.key }) { record ->
+                    DownloadRecordCard(
+                        record = record,
+                        controller = app.downloadController,
+                        modifier = Modifier.animateItem(),
+                        onPlay = { episode ->
+                            navController.navigate(
+                                Routes.player(
+                                    bangumiId = record.bangumiId,
+                                    pluginName = record.pluginName,
+                                    episode = episode.episodeNumber,
+                                    road = episode.road,
+                                    isLocal = true
                                 )
-                            }
-                        )
-                    }
+                            )
+                        }
+                    )
                 }
             }
         }
