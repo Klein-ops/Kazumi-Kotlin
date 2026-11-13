@@ -21,9 +21,24 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-        // 弹弹play 凭据：内置在 DanmakuClient.kt 的 BuiltinCredentials（Base64 编码，避免 git 明文）。
-        // 不再通过 buildConfigField 注入——CodeAssist 环境的构建脚本解析多次生成坏 BuildConfig
-        // （插值变字面量 "$dandanAppId"、拼接变未闭合引号），导致编译失败或运行时 403。
+        // 弹弹play 凭据：构建时从 local.properties 读取注入 BuildConfig（local.properties 已被
+        // .gitignore 排除，不会进入仓库，推送 GitHub 不含任何密钥）。local.properties 示例：
+        //   dandanAppId=xxx
+        //   dandanAppSecret=xxx
+        // 未配置时为空字符串（不填也能编译）；运行时用户可在「设置→弹幕→弹弹play 凭据」手动填写覆盖。
+        val localProps = Properties().apply {
+            val f = rootProject.file("local.properties")
+            if (f.exists()) {
+                f.inputStream().use { load(it) }
+            }
+        }
+        val dandanAppId = (localProps.getProperty("dandanAppId") ?: "").trim()
+        val dandanAppSecret = (localProps.getProperty("dandanAppSecret") ?: "").trim()
+        // 历史教训（历史提交 aa83bfb 曾回退 buildConfigField 方案）：CodeAssist 构建引擎对 "$var"
+        // 字符串插值会当成字面量、对 \" 转义引号解析会生成未闭合引号，导致 BuildConfig 值错乱/编译失败。
+        // 这里避免 $ 插值，并用 \u0022 代替引号字面量，规避解析问题（该写法已在历史提交 159675c 验证可用）。
+        buildConfigField("String", "DANDAN_APP_ID", "\u0022" + dandanAppId + "\u0022")
+        buildConfigField("String", "DANDAN_APP_SECRET", "\u0022" + dandanAppSecret + "\u0022")
     }
 
     buildTypes {

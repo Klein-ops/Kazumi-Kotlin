@@ -23,8 +23,9 @@ import okhttp3.Request
  *    其中 Path 为 URL 路径（以 / 开头、不含域名与查询参数）；
  *  - AppId / AppSecret 由构建时注入（--dart-define），仓库内不含明文。
  *
- * 移植版内置凭据（Base64 编码存储，避免 git 明文泄露；运行时解码后参与签名）。
- * 用户也可在「设置 → 弹幕 → 弹弹play 凭据」手动填写覆盖内置值。
+ * 移植版不内置任何凭据：构建时由 gradle 从 local.properties（已被 .gitignore 排除，
+ * 不会进入仓库）注入 BuildConfig.DANDAN_APP_ID / DANDAN_APP_SECRET；
+ * 未注入时为空字符串，运行时用户可在「设置 → 弹幕 → 弹弹play 凭据」手动填写。
  */
 class DanmakuClient(
     private val settings: SettingsManager? = null
@@ -44,9 +45,9 @@ class DanmakuClient(
                     "弹幕请求 URL 非法: $fullUrl"
                 )
 
-            // 内置凭据：Base64 编码（避免 git 明文）；为空时用用户手动填写（可覆盖）。
-            val builtinAppId = BuiltinCredentials.appId
-            val builtinAppSecret = BuiltinCredentials.appSecret
+            // 凭据优先级：构建注入（local.properties → BuildConfig，git 排除）> 用户手动填写（设置页，仅存本机）
+            val builtinAppId = com.kazumi.port.BuildConfig.DANDAN_APP_ID.trim()
+            val builtinAppSecret = com.kazumi.port.BuildConfig.DANDAN_APP_SECRET.trim()
             val appId = builtinAppId.ifEmpty {
                 settings?.getString(SettingsManager.Danmaku.DAN_DAN_APP_ID, "")?.trim().orEmpty()
             }
@@ -116,23 +117,5 @@ class DanmakuClient(
                 .digest(data.toByteArray(Charsets.UTF_8))
             return Base64.getEncoder().encodeToString(digest)
         }
-    }
-}
-
-/**
- * 弹弹play 内置凭据（Base64 编码，避免 git 明文泄露；运行时解码）。
- * 用户可在设置里手动填写覆盖。
- */
-object BuiltinCredentials {
-    private val ID_B64 = "c3VoeXlhcjQ1NQ=="
-    private val SEC_B64 = "dllIamVqa0tGdk04YmRMSkp3SG1JbUxWZVU0M1ZiZHo="
-
-    val appId: String by lazy { decode(ID_B64) }
-    val appSecret: String by lazy { decode(SEC_B64) }
-
-    private fun decode(b64: String): String = try {
-        String(Base64.getDecoder().decode(b64), Charsets.UTF_8)
-    } catch (e: Exception) {
-        ""
     }
 }
