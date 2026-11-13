@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -57,6 +56,7 @@ import com.kazumi.port.ui.components.SettingGroup
 import com.kazumi.port.ui.components.SettingSwitchRow
 import com.kazumi.port.ui.navigation.Routes
 import kotlinx.coroutines.launch
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 private val stepLabels = listOf("使用约定", "访问加速", "添加规则")
 
@@ -183,7 +183,7 @@ fun OnboardingPage(navController: NavHostController) {
                 Spacer(Modifier.weight(1f))
                 Button(onClick = { goNext() }, enabled = !preparing) {
                     if (preparing) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        KazumiLoadingIndicator(modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("正在准备")
                     } else {
@@ -375,7 +375,7 @@ private fun DisclaimerStepContent() {
                         modifier = Modifier.fillMaxWidth().padding(24.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator()
+                        KazumiLoadingIndicator()
                     }
                 } else {
                     statements!!.trim().split("\n").forEach { p ->

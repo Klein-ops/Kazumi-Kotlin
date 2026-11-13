@@ -23,7 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,6 +62,7 @@ import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /** 原版 defaultAnimeTags 标签列表（热门番组 + 15 个标签） */
 private val animeTags = listOf(
@@ -343,7 +343,7 @@ fun PopularPage(navController: NavHostController) {
                                     modifier = Modifier.fillMaxWidth().padding(8.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    CircularProgressIndicator()
+                                    KazumiLoadingIndicator()
                                 }
                             }
                         }

@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -36,6 +35,7 @@ import com.kazumi.port.ui.components.SettingsSubPageScaffold
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /**
  * 规则测试页（对应原版 plugin_test_page 的核心能力）
@@ -106,7 +106,7 @@ fun RuleTestPage(navController: NavHostController, pluginName: String) {
                     modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.width(20.dp))
+                    KazumiLoadingIndicator(modifier = Modifier.width(20.dp))
                     Spacer(Modifier.width(10.dp))
                     Text("检索中…", style = MaterialTheme.typography.bodyMedium)
                 }

@@ -7,7 +7,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /**
  * 主界面入口（对应原版 main.dart / init_page.dart）
@@ -139,7 +139,7 @@ class MainActivity : ComponentActivity() {
                         KazumiNavHost(startDestination = startDest)
                     } else {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                            KazumiLoadingIndicator(modifier = Modifier.padding(16.dp))
                         }
                     }
                 }

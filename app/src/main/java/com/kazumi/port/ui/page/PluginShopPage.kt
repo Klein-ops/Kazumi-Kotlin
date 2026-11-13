@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -74,6 +73,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /**
  * 规则仓库页（对应原版 plugin_shop_page.dart + plugin_catalog_view.dart）
@@ -198,7 +198,7 @@ fun PluginShopPage(navController: NavHostController) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (loading && items.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize().padding(48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    KazumiLoadingIndicator()
                 }
             } else if (items.isEmpty() && loadFailed) {
                 RuleEmptyState(
@@ -390,7 +390,7 @@ fun PluginShopPage(navController: NavHostController) {
                                         enabled = !busy
                                     ) {
                                         if (busy) {
-                                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                            KazumiLoadingIndicator(Modifier.size(18.dp))
                                             Spacer(Modifier.width(6.dp)); Text(if (isInstall) "安装中" else "更新中")
                                         } else {
                                             Icon(if (isInstall) Icons.Filled.Add else Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(18.dp))

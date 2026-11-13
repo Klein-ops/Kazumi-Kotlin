@@ -23,7 +23,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -54,6 +53,7 @@ import com.kazumi.port.data.repository.DanmakuSearchAnime
 import com.kazumi.port.data.repository.SettingsManager
 import com.kazumi.port.player.PlayerDanmakuController
 import kotlinx.coroutines.launch
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /**
  * 弹幕源切换底部弹窗（对应原版 danmaku_source_sheet.dart）
@@ -191,7 +191,7 @@ fun DanmakuSourceSheet(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.width(22.dp).height(22.dp))
+                    KazumiLoadingIndicator(modifier = Modifier.width(22.dp).height(22.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = when (step) {

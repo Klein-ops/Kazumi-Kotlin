@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -60,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.kazumi.port.data.repository.SettingsManager
 import com.kazumi.port.player.PlayerSyncPlayController
 import kotlinx.coroutines.launch
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /**
  * 同步播放（一起看）底部弹窗（对应原版 syncplay_sheet.dart）
@@ -161,7 +161,7 @@ private fun HomeSheet(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.width(22.dp).height(22.dp))
+                    KazumiLoadingIndicator(modifier = Modifier.width(22.dp).height(22.dp))
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text("正在连接", style = MaterialTheme.typography.bodyMedium)
@@ -425,7 +425,7 @@ private fun RoomSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (submitting) {
-                    CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp))
+                    KazumiLoadingIndicator(modifier = Modifier.width(18.dp).height(18.dp))
                 } else {
                     Icon(if (isCreate) Icons.Filled.AddCircleOutline else Icons.Filled.Login, contentDescription = null, modifier = Modifier.width(18.dp))
                 }

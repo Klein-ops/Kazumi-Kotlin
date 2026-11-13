@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -110,6 +109,7 @@ import com.kazumi.port.ui.components.SyncPlaySheet
 import com.kazumi.port.ui.components.rememberToast
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /** 可选倍速（对应原版 defaultPlaySpeedList） */
 private val playSpeedList = listOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f, 2.75f, 3.0f)
@@ -889,11 +889,7 @@ fun PlayerPage(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            strokeWidth = 3.dp,
-                            modifier = Modifier.size(44.dp)
-                        )
+                        KazumiLoadingIndicator(color = Color.White, modifier = Modifier.size(44.dp))
                         Spacer(Modifier.height(12.dp))
                         Text(
                             text = "正在缓冲…",
@@ -1066,7 +1062,7 @@ fun PlayerPage(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = Color.White)
+                        KazumiLoadingIndicator(color = Color.White)
                         Spacer(Modifier.height(12.dp))
                         Text(
                             text = "正在解析视频源…",
@@ -1323,11 +1319,7 @@ fun PlayerPage(
                             enabled = !danmakuLoading
                         ) {
                             if (danmakuLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color.White
-                                )
+                                KazumiLoadingIndicator(modifier = Modifier.size(18.dp), color = Color.White)
                             } else {
                                 Icon(
                                     Icons.Filled.Subtitles,

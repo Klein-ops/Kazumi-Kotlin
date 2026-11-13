@@ -37,7 +37,6 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -75,6 +74,7 @@ import com.kazumi.port.data.repository.TraceApi
 import com.kazumi.port.ui.components.rememberPressScale
 import kotlinx.coroutines.launch
 import java.io.File
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /**
  * 以图搜番页（对应原版 image_search_page.dart）
@@ -376,7 +376,7 @@ fun ImageSearchPage(navController: NavHostController) {
                 .height(52.dp)
         ) {
             if (isSearching) {
-                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                KazumiLoadingIndicator(modifier = Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
                 Spacer(Modifier.width(10.dp))
                 Text("正在识别")
             } else {
@@ -404,7 +404,7 @@ fun ImageSearchPage(navController: NavHostController) {
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
+                        KazumiLoadingIndicator()
                         Text(
                             text = "正在寻找这一幕",
                             style = MaterialTheme.typography.titleMedium,

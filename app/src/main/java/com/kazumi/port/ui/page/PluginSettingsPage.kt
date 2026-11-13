@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -73,6 +72,7 @@ import com.kazumi.port.ui.navigation.Routes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /**
  * 规则管理页（对应原版 plugin_view_page.dart）
@@ -270,7 +270,7 @@ fun PluginSettingsPage(navController: NavHostController) {
                         FilterChip(selected = !updatesOnly, onClick = { updatesOnly = false }, label = { Text("全部 ${plugins.size}") })
                         FilterChip(selected = updatesOnly, onClick = { updatesOnly = true }, label = { Text("可更新 $updatesCount") })
                         TextButton(onClick = { updateAll() }, enabled = !updating && updatingNames.isEmpty()) {
-                            if (updating) { CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Spacer(Modifier.width(6.dp)) }
+                            if (updating) { KazumiLoadingIndicator(Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)) }
                             else { Icon(Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)) }
                             Text(if (updating) "正在更新" else "更新全部")
                         }
@@ -311,7 +311,7 @@ fun PluginSettingsPage(navController: NavHostController) {
                                     selectedNames = if (selected) selectedNames - plugin.name else selectedNames + plugin.name
                                 })
                             } else if (plugin.name in updatingNames) {
-                                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                                KazumiLoadingIndicator(Modifier.size(24.dp))
                             } else {
                                 var menuOpen by remember(plugin.name) { mutableStateOf(false) }
                                 Box {

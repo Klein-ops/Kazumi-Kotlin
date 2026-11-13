@@ -15,7 +15,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,6 +37,7 @@ import com.kazumi.port.ui.components.rememberToast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /**
  * 引导第三步：内嵌规则仓库（对应原版 onboarding 的 PluginShopStep → PluginCatalogView.onboarding）
@@ -112,7 +112,7 @@ internal fun OnboardingCatalogStep(onOpenShop: () -> Unit) {
             loading -> Box(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                 contentAlignment = Alignment.Center
-            ) { CircularProgressIndicator() }
+            ) { KazumiLoadingIndicator() }
 
             items.isEmpty() -> Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -173,10 +173,7 @@ internal fun OnboardingCatalogStep(onOpenShop: () -> Unit) {
                                     color = MaterialTheme.colorScheme.primary
                                 )
 
-                                busy -> CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp
-                                )
+                                busy -> KazumiLoadingIndicator(modifier = Modifier.size(18.dp))
 
                                 else -> TextButton(onClick = { install(item.name) }) {
                                     Text("添加")

@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -54,6 +53,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /** 添加规则来源，对应原版 enum RuleAddSource */
 enum class RuleAddSource { CATALOG, CLIPBOARD, FILE, CREATE }
@@ -186,7 +186,7 @@ fun RuleImportDialog(
                 enabled = text.isNotBlank() && !saving
             ) {
                 if (saving) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    KazumiLoadingIndicator(modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                 } else {
                     Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))

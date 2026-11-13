@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.filled.UnfoldLess
 import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -74,6 +73,7 @@ import com.kazumi.port.data.model.SearchItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /** 单个插件的检索状态 */
 private class SourceGroup(
@@ -569,7 +569,7 @@ private fun SourceGroupBody(
                     .padding(horizontal = 8.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                KazumiLoadingIndicator(modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(12.dp))
                 Text(
                     "正在检索…",

@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -62,6 +61,7 @@ import com.kazumi.port.ui.components.LoadingState
 import com.kazumi.port.ui.components.PageHeader
 import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 private val collectTabs = listOf(
     "全部" to 0,
@@ -180,10 +180,7 @@ fun CollectPage(navController: NavHostController) {
                     // 同步收藏（对齐原版 collect_page actions 的 StateActionButton.tonal 同步）
                     TextButton(onClick = { syncTrigger++ }) {
                         if (syncing) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
+                            KazumiLoadingIndicator(modifier = Modifier.size(16.dp))
                         } else {
                             Icon(
                                 imageVector = Icons.Filled.Sync,

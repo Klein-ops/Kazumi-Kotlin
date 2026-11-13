@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.PeopleAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -110,6 +109,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 private val INFO_TABS = listOf("概览", "吐槽", "角色", "关联", "制作人员")
 
@@ -503,9 +503,7 @@ fun DetailPage(
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             when {
-                isLoading -> CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                isLoading -> KazumiLoadingIndicator(modifier = Modifier.align(Alignment.Center))
                 bangumi == null -> Text(
                     "加载失败",
                     modifier = Modifier.padding(32.dp).align(Alignment.Center),
@@ -1177,7 +1175,7 @@ private fun LazyListScope.RelationsTabContent(
                 modifier = Modifier.fillMaxWidth().padding(48.dp),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator()
+                KazumiLoadingIndicator()
             }
         }
         else -> {
