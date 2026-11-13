@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -216,29 +217,46 @@ fun PopularPage(navController: NavHostController) {
                     .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .graphicsLayer {
-                            scaleX = tagPress.scale
-                            scaleY = tagPress.scale
-                        }
-                        .clickable(
-                            interactionSource = tagPress.interactionSource,
-                            indication = LocalIndication.current,
-                            onClick = { menuExpanded = true }
+                Box {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = tagPress.scale
+                                scaleY = tagPress.scale
+                            }
+                            .clickable(
+                                interactionSource = tagPress.interactionSource,
+                                indication = LocalIndication.current,
+                                onClick = { menuExpanded = true }
+                            )
+                            .padding(end = 16.dp)
+                    ) {
+                        Text(
+                            text = tagLabel(currentTag),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
                         )
-                        .padding(end = 16.dp)
-                ) {
-                    Text(
-                        text = tagLabel(currentTag),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Icon(
-                        imageVector = Icons.Filled.ArrowDropDown,
-                        contentDescription = "选择标签"
-                    )
+                        Icon(
+                            imageVector = Icons.Filled.ArrowDropDown,
+                            contentDescription = "选择标签"
+                        )
+                    }
+                    // 锚定在标题下方（对齐原版 KazumiMenuButton：
+                    // MenuAnchor 挂在标题 InkWell 上，maximumSize = Size(240, 350)）
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                        modifier = Modifier.widthIn(max = 240.dp),
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ) {
+                        animeTags.forEach { tag ->
+                            DropdownMenuItem(
+                                text = { Text(tagLabel(tag)) },
+                                onClick = { selectTag(tag) }
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = { navController.navigate(Routes.SEARCH) }) {
@@ -246,19 +264,6 @@ fun PopularPage(navController: NavHostController) {
                 }
                 IconButton(onClick = { navController.navigate(Routes.HISTORY) }) {
                     Icon(Icons.Filled.History, contentDescription = "历史记录")
-                }
-            }
-
-            DropdownMenu(
-            expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false },
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-                animeTags.forEach { tag ->
-                    DropdownMenuItem(
-                        text = { Text(tagLabel(tag)) },
-                        onClick = { selectTag(tag) }
-                    )
                 }
             }
 
