@@ -125,18 +125,20 @@ fun KazumiNavHost(
         navController = navController,
         startDestination = startDestination,
         modifier = modifier,
-        // 页面过渡动画（对齐原版 CupertinoPageTransitionsBuilder）：
+        // 页面过渡动画（对齐原版 CupertinoPageTransitionsBuilder，时长 400ms）：
         // - push：新页从右侧全宽滑入并盖住旧页（旧页保持可见、轻微压暗），杜绝 fade 露黑屏
         // - pop：当前页向右滑出，露出下面的旧页（popEnter 时旧页从左侧回位）
+        // - 主 tab 切换：缩放(0.97→1) + 淡入淡出，有"呼吸感"而不是生硬闪切
+        //   （历史教训：150ms 纯淡入在视觉上几乎无感=用户感知的"一闪而过"）
         // - 播放页（沉浸横屏）：保留淡入淡出，避免横屏下左右滑动违和
         enterTransition = {
             val fromRoute = initialState.destination.route
             val toRoute = targetState.destination.route
             when {
                 fromRoute in Routes.mainTabRoutes && toRoute in Routes.mainTabRoutes ->
-                    fadeIn(tween(150))
+                    fadeIn(tween(220)) + scaleIn(initialScale = 0.97f, animationSpec = tween(220))
                 toRoute == Routes.PLAYER -> fadeIn(tween(300))
-                else -> slideInHorizontally(tween(300)) { it } + fadeIn(tween(300))
+                else -> slideInHorizontally(tween(400)) { it } + fadeIn(tween(400))
             }
         },
         exitTransition = {
@@ -144,9 +146,9 @@ fun KazumiNavHost(
             val toRoute = targetState.destination.route
             when {
                 fromRoute in Routes.mainTabRoutes && toRoute in Routes.mainTabRoutes ->
-                    fadeOut(tween(150))
+                    fadeOut(tween(220)) + scaleOut(targetScale = 0.97f, animationSpec = tween(220))
                 fromRoute == Routes.PLAYER -> fadeOut(tween(300))
-                else -> slideOutHorizontally(tween(300)) { -it / 3 } + fadeOut(tween(300))
+                else -> slideOutHorizontally(tween(400)) { -it / 3 } + fadeOut(tween(400))
             }
         },
         popEnterTransition = {
@@ -154,9 +156,9 @@ fun KazumiNavHost(
             val toRoute = targetState.destination.route
             when {
                 fromRoute in Routes.mainTabRoutes && toRoute in Routes.mainTabRoutes ->
-                    fadeIn(tween(150))
+                    fadeIn(tween(220)) + scaleIn(initialScale = 0.97f, animationSpec = tween(220))
                 toRoute == Routes.PLAYER -> fadeIn(tween(300))
-                else -> slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300))
+                else -> slideInHorizontally(tween(400)) { -it / 4 } + fadeIn(tween(400))
             }
         },
         popExitTransition = {
@@ -164,9 +166,9 @@ fun KazumiNavHost(
             val toRoute = targetState.destination.route
             when {
                 fromRoute in Routes.mainTabRoutes && toRoute in Routes.mainTabRoutes ->
-                    fadeOut(tween(150))
+                    fadeOut(tween(220)) + scaleOut(targetScale = 0.97f, animationSpec = tween(220))
                 fromRoute == Routes.PLAYER -> fadeOut(tween(300))
-                else -> slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
+                else -> slideOutHorizontally(tween(400)) { it } + fadeOut(tween(400))
             }
         }
     ) {
