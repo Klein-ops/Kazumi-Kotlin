@@ -62,7 +62,6 @@ import com.kazumi.port.ui.components.LoadingState
 import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
 /** 原版 defaultAnimeTags 标签列表（热门番组 + 15 个标签） */
@@ -134,15 +133,17 @@ fun PopularPage(navController: NavHostController) {
      * - 非镜像模式：走官方 trending（无标签）/ 榜单搜索（有标签）。
      */
     suspend fun fetchPage(offset: Int, tag: String, limit: Int = 24): List<BangumiItem> {
-        return withTimeoutOrNull(8_000) {
-            if (mirrorEnabled()) {
-                bangumiApi.getBangumiMirrorPopularSubjects(tag = tag, limit = limit, offset = offset)
-            } else if (tag.isEmpty()) {
-                bangumiApi.getBangumiTrendsList(limit = limit, offset = offset)
-            } else {
-                bangumiApi.getBangumiList(tag = tag)
-            }
-        } ?: emptyList()
+        // 不设外层 withTimeoutOrNull：底层 OkHttp 已配 connect/read 12s + callTimeout 20s +
+        // retryOnConnectionFailure，BangumiClient 内部还会镜像/直连并发 race（谁先成功用谁）。
+        // 之前加的 8s 硬超时会在镜像/直连都在慢（>8s）时提前掐断返回空 → 首页"慢时直接提示刷新"，
+        // 原版没有这层限制；去掉后最坏 20s 由底层兜底必返回，慢只会多等几秒而非直接失败。
+        return if (mirrorEnabled()) {
+            bangumiApi.getBangumiMirrorPopularSubjects(tag = tag, limit = limit, offset = offset)
+        } else if (tag.isEmpty()) {
+            bangumiApi.getBangumiTrendsList(limit = limit, offset = offset)
+        } else {
+            bangumiApi.getBangumiList(tag = tag)
+        }
     }
 
     suspend fun fetchFirstPage(tag: String) {
