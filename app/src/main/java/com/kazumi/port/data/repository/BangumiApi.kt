@@ -16,9 +16,6 @@ import com.kazumi.port.data.model.SearchDoubleRange
 import com.kazumi.port.data.model.SearchIntRange
 import com.kazumi.port.data.model.StaffResponse
 import com.kazumi.port.network.BangumiClient
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 
 /**
  * Bangumi API 封装
@@ -303,64 +300,26 @@ class BangumiApi(
      * 按 ID 获取 Bangumi 详情
      * 对应 getBangumiInfoByID()
      *
-     * 性能修复：next 与 v0 接口【并发 race】，谁先返回且字段完整用谁。
-     * 旧实现是串行双请求（next 等完再打 v0），最坏 2 轮完整网络往返；
-     * 镜像模式下每个 client.get 内部还会并发 race 镜像+直连，
-     * 串行 = 2× 慢通道，详情页因此比原版慢一倍。并发后恒为 1 轮。
+     * 对齐原版 bangumi_api.dart:361：**只打一次 next 接口**（next.bgm.tv/p1/subjects/{id}），
+     * 返回即用。原版没有任何 v0 回退、没有"字段完整才用"的二次判断。
+     *
+     * 历史教训（2026-11-14 用户实测"详情页一直打不开"）：
+     * 旧实现 next+v0 双请求并发 + "ratingScore>0 或 airDate 非空才认可"的字段完整判断，
+     * 在 next 已返回但字段缺评分/放送日时会死等 v0（镜像 v0 404 / 直连 DNS 污染 8s 超时），
+     * 1 个请求 4s 的事被拖成 8~12s+ → 页面永久转圈。改为单请求后恒为一次往返。
      */
     suspend fun getBangumiInfoByID(id: Int): BangumiItem? {
-        val nextUrl = ApiEndpoints.formatUrl(
+        val url = ApiEndpoints.formatUrl(
             ApiEndpoints.BANGUMI_API_NEXT_DOMAIN + ApiEndpoints.BANGUMI_INFO_BY_ID_NEXT,
             listOf(id)
         )
-        val v0Url = ApiEndpoints.formatUrl(
-            ApiEndpoints.BANGUMI_API_DOMAIN + ApiEndpoints.BANGUMI_INFO_BY_ID,
-            listOf(id)
-        )
-        return coroutineScope {
-            val nextDeferred = async {
-                try {
-                    val jsonData = client.get(nextUrl)
-                    if (jsonData.isJsonObject) BangumiItem.fromJson(jsonData.asJsonObject) else null
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    null
-                }
-            }
-            val v0Deferred = async {
-                try {
-                    val jsonData = client.get(v0Url)
-                    if (jsonData.isJsonObject) BangumiItem.fromJson(jsonData.asJsonObject) else null
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    null
-                }
-            }
-            // 谁先返回「字段完整」（有评分或放送时间）用谁；都不完整则用任意非空结果
-            var fallback: BangumiItem? = null
-            while (true) {
-                val nextDone = nextDeferred.isCompleted
-                val v0Done = v0Deferred.isCompleted
-                if (nextDone) {
-                    val fromNext = nextDeferred.getCompleted()
-                    if (fromNext != null) {
-                        fallback = fromNext
-                        if (fromNext.ratingScore > 0 || fromNext.airDate.isNotEmpty()) return@coroutineScope fromNext
-                    }
-                }
-                if (v0Done) {
-                    val fromV0 = v0Deferred.getCompleted()
-                    if (fromV0 != null) {
-                        fallback = fromV0
-                        if (fromV0.ratingScore > 0 || fromV0.airDate.isNotEmpty()) return@coroutineScope fromV0
-                    }
-                }
-                if (nextDone && v0Done) break
-                delay(5)
-            }
-            fallback
+        return try {
+            val jsonData = client.get(url)
+            if (jsonData.isJsonObject) BangumiItem.fromJson(jsonData.asJsonObject) else null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
         }
     }
 

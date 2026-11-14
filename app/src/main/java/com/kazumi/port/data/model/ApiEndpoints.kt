@@ -109,9 +109,9 @@ object HttpHeaders {
 
     fun randomAcceptLanguage(): String = acceptLanguageList.random()
 
-    /** Bangumi API 文档要求的 UA */
+    /** Bangumi API 文档要求的 UA（对齐原版 constants.dart bangumiHTTPHeader） */
     fun bangumiHTTPHeader(): Map<String, String> = mapOf(
-        "user-agent" to "Kazumi/${ApiEndpoints.VERSION} (Android)",
+        "user-agent" to "Predidit/Kazumi/${ApiEndpoints.VERSION} (Android) (https://github.com/Predidit/Kazumi)",
         "content-type" to "application/json"
     )
 }
