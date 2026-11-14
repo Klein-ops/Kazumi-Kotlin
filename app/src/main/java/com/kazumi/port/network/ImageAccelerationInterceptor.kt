@@ -1,5 +1,7 @@
 package com.kazumi.port.network
 
+import android.util.Log
+import coil.imageLoader
 import coil.intercept.Interceptor
 import coil.intercept.Interceptor.Chain
 import coil.request.ImageResult
@@ -8,6 +10,7 @@ import com.kazumi.port.util.FileLogger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Coil 图片加速拦截器（Coil 2.x）
@@ -61,10 +64,34 @@ class ImageAccelerationInterceptor(
         // BangumiEchImageService 的 ECH 失败即 rethrow，不拿镜像轮询——镜像兜底是 mirror 模式的事）
         if (mode == ImageAcceleration.ECH) {
             try {
-                // 1) 内存缓存命中：同一 URL 直接复用（列表滚动/详情页大图秒出，不碰 native）
+                // 0) Coil 磁盘缓存优先（加载慢根因修复）：
+                //    自定义 Interceptor 在 EngineInterceptor（负责磁盘缓存检查）之前执行，
+                //    若不主动先查盘，冷启动时每张图都会先完整跑一遍 ECH 下载
+                //    （DoH+握手+拉图，每张几秒）才轮到磁盘缓存兜底 → 表现就是
+                //    "缓存不生效、每次开 App 所有封面重新下载、加载极慢"。
+                //    这里用 diskCacheKey(original)=原始 URL 直接查磁盘缓存，
+                //    命中即复用，冷启动免去全量重下。
+                val diskCache = chain.request.context.imageLoader.diskCache
+                val diskHit = diskCache?.get(original)
+                if (diskHit != null) {
+                    diskHit.use { snapshot ->
+                        val bytes = snapshot.data.readBytes()
+                        if (bytes.isNotEmpty()) {
+                            Log.i("ImageAccel", "disk cache HIT url=$original len=${bytes.size}")
+                            return chain.proceed(
+                                chain.request.newBuilder()
+                                    .data(bytes)
+                                    .memoryCacheKey(original)
+                                    .diskCacheKey(original)
+                                    .build()
+                            )
+                        }
+                    }
+                }
+                // 1) 进程内 ECH 内存缓存命中：同一 URL 直接复用（列表滚动/详情页大图秒出，不碰 native）
                 val cached = cacheGet(original)
                 if (cached != null) {
-                    FileLogger.d("ImageAccel", "ech cache HIT url=$original len=${cached.size}")
+                    FileLogger.d("ImageAccel", "ech memory cache HIT url=$original len=${cached.size}")
                     return chain.proceed(
                         chain.request.newBuilder()
                             .data(cached)
@@ -72,35 +99,35 @@ class ImageAccelerationInterceptor(
                             .build()
                     )
                 }
-                // 2) fetchEchConfig 内部是同步 OkHttp 阻塞调用，放到 IO 线程避免卡住 Coil 调度线程；
-                //    60s 内复用缓存，不重复打 DoH
-                val echConfig = withContext(Dispatchers.IO) {
-                    EchResolver.fetchEchConfig()
-                }
-                if (echConfig != null) {
-                    FileLogger.d("ImageAccel", "echConfig fetched len=${echConfig.length}")
-                    val bytes = EchHttpNative.loadSuspend(original, echConfig)
-                    FileLogger.i("ImageAccel", "ech download OK bytes=${bytes.size} for $original")
-                    if (bytes.isNotEmpty()) {
-                        cachePut(original, bytes)
-                        // 把下载好的字节重新作为 data 交给 Coil 解码链路（Coil 支持 ByteArray）。
-                        // 关键修复（"缓存了个寂寞"根因）：data 换成 ByteArray 后，Coil 磁盘缓存 key
-                        // 默认取 data.toString()（ByteArray 是对象地址 [B@xxxx，每次新实例都不同），
-                        // 导致磁盘缓存永远 miss、每次冷启动都重新 ECH 下载。这里必须显式钉住
-                        // diskCacheKey(original)（原始 URL），让磁盘缓存真正落盘复用；
-                        // memoryCacheKey(original) 保证内存缓存也按 URL 命中（滚动秒出）。
-                        val byteReq = chain.request.newBuilder()
-                            .data(bytes)
-                            .memoryCacheKey(original)
-                            .diskCacheKey(original)
-                            .build()
-                        return chain.proceed(byteReq)
+                // 2) ECH 下载：全程 15s 总超时兜底（native 无内置超时，熔断黑洞 IP，
+                //    避免单张图卡死拖累整个列表）。fetchEchConfig 在 IO 线程执行
+                //    （内部是同步 OkHttp 阻塞调用），60s 内复用缓存不重复打 DoH。
+                val bytes = withTimeoutOrNull(15_000L) {
+                    withContext(Dispatchers.IO) {
+                        val echConfig = EchResolver.fetchEchConfig()
+                        if (echConfig != null) {
+                            EchHttpNative.loadSuspend(original, echConfig)
+                        } else {
+                            null
+                        }
                     }
-                } else {
-                    FileLogger.w("ImageAccel", "echConfig is null, ech load aborted")
                 }
-                // ECH 未拿到/字节为空：直接抛错，不降级到镜像（对齐原版）
-                throw IllegalStateException("ECH 图片加载失败: echConfig=${echConfig != null}")
+                if (bytes != null && bytes.isNotEmpty()) {
+                    FileLogger.i("ImageAccel", "ech download OK bytes=${bytes.size} for $original")
+                    cachePut(original, bytes)
+                    // 把下载好的字节重新作为 data 交给 Coil 解码链路（Coil 支持 ByteArray）。
+                    // 关键：data 换成 ByteArray 后必须显式钉住 diskCacheKey(original)（原始 URL），
+                    // 否则 Coil 默认取 data.toString()（ByteArray 对象地址 [B@xxxx 每次不同），
+                    // 磁盘缓存永远 miss；memoryCacheKey(original) 保证内存缓存按 URL 命中（滚动秒出）。
+                    val byteReq = chain.request.newBuilder()
+                        .data(bytes)
+                        .memoryCacheKey(original)
+                        .diskCacheKey(original)
+                        .build()
+                    return chain.proceed(byteReq)
+                }
+                // ECH 超时（15s）/配置为空/字节为空：直接抛错，不降级到镜像（对齐原版）
+                throw IllegalStateException("ECH 图片加载失败: 下载超时或配置为空")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
