@@ -1,5 +1,6 @@
 package com.kazumi.port.network
 
+import android.util.Log
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -32,13 +33,52 @@ class BangumiClient(
     /** Bangumi 公共 API 主机（可被镜像加速） */
     private val bangumiPublicHosts = setOf("api.bgm.tv", "next.bgm.tv")
 
+    /**
+     * 配置内存缓存（30s TTL）：消除每个请求多次 runBlocking 读 DataStore 的 IO 阻塞。
+     * 旧实现 get/post 每次请求都 readAcceleration()（suspend 读）+ runBlockingGetAccessToken()
+     * + runBlockingGetBangumiSync()（两次 runBlocking），详情页多请求并发时 IO 线程被反复
+     * 阻塞排队 → 明显变慢。token/sync/accel 属于低频变更配置，30s 缓存完全够用。
+     */
+    private var cachedToken: String? = null
+    private var cachedTokenAt = 0L
+    private var cachedSync: Boolean? = null
+    private var cachedSyncAt = 0L
+    private var cachedAccel: String? = null
+    private var cachedAccelAt = 0L
+    private val CACHE_TTL_MS = 30_000L
+
+    private fun cachedTokenValue(): String {
+        val now = System.currentTimeMillis()
+        if (cachedToken != null && now - cachedTokenAt < CACHE_TTL_MS) return cachedToken!!
+        return runBlockingGetAccessToken().also {
+            cachedToken = it; cachedTokenAt = now
+        }
+    }
+
+    private fun cachedSyncValue(): Boolean {
+        val now = System.currentTimeMillis()
+        if (cachedSync != null && now - cachedSyncAt < CACHE_TTL_MS) return cachedSync!!
+        return runBlockingGetBangumiSync().also {
+            cachedSync = it; cachedSyncAt = now
+        }
+    }
+
+    /** 缓存版 accel 读取：30s 内纯内存命中（不碰 DataStore），miss 才 suspend 读并写回 */
+    private suspend fun readAccelerationCached(): String {
+        val now = System.currentTimeMillis()
+        if (cachedAccel != null && now - cachedAccelAt < CACHE_TTL_MS) return cachedAccel!!
+        return readAcceleration().also {
+            cachedAccel = it; cachedAccelAt = now
+        }
+    }
+
     suspend fun get(
         url: String,
         queryParameters: Map<String, String> = emptyMap(),
         requiresAuth: Boolean = false,
         accessToken: String? = null
     ): JsonElement {
-        val accel = readAcceleration()
+        val accel = readAccelerationCached()
         return withContext(Dispatchers.IO) {
             val fullUrl = buildUrl(url, queryParameters)
             val request = Request.Builder()
@@ -62,7 +102,7 @@ class BangumiClient(
         queryParameters: Map<String, String> = emptyMap(),
         requiresAuth: Boolean = false
     ): JsonElement {
-        val accel = readAcceleration()
+        val accel = readAccelerationCached()
         return withContext(Dispatchers.IO) {
             val fullUrl = buildUrl(url, queryParameters)
             val bodyText = if (data != null) {
@@ -185,9 +225,12 @@ class BangumiClient(
     }
 
     private fun execute(request: Request): JsonElement {
+        val startedAt = System.currentTimeMillis()
+        val url = request.url.toString()
         try {
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
+                Log.i("BangumiClient", "GET ${url} -> ${response.code} in ${System.currentTimeMillis() - startedAt}ms")
                 if (!response.isSuccessful) {
                     throw NetworkException(
                         NetworkExceptionType.BAD_RESPONSE,
@@ -198,8 +241,10 @@ class BangumiClient(
                 return JsonParser.parseString(body)
             }
         } catch (e: NetworkException) {
+            Log.w("BangumiClient", "GET $url failed in ${System.currentTimeMillis() - startedAt}ms: ${e.message}")
             throw e
         } catch (e: Exception) {
+            Log.w("BangumiClient", "GET $url failed in ${System.currentTimeMillis() - startedAt}ms: ${e.message}")
             throw NetworkException.wrap(e)
         }
     }
@@ -228,8 +273,8 @@ class BangumiClient(
         val headers = mutableMapOf<String, String>()
         HttpHeaders.bangumiHTTPHeader().forEach { (k, v) -> headers[k] = v }
 
-        val token = (accessToken ?: runBlockingGetAccessToken()).trim()
-        val bangumiSyncEnabled = runBlockingGetBangumiSync()
+        val token = (accessToken ?: cachedTokenValue()).trim()
+        val bangumiSyncEnabled = cachedSyncValue()
         if ((requiresAuth || bangumiSyncEnabled) && token.isNotEmpty()) {
             headers["Authorization"] = "Bearer $token"
         }
