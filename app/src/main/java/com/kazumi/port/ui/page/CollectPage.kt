@@ -1,6 +1,7 @@
 package com.kazumi.port.ui.page
 
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
@@ -297,7 +298,10 @@ fun CollectPage(navController: NavHostController) {
                                         scaleX = press.scale
                                         scaleY = press.scale
                                     }
+                                    // 圆角容器：对齐原版卡片观感（surfaceContainerLow 底色 + 12dp 圆角），
+                                    // 避免"裸平铺在背景上无容器"（用户反馈）
                                     .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
                                     .clickable(
                                         interactionSource = press.interactionSource,
                                         indication = LocalIndication.current,

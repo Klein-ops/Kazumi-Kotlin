@@ -47,6 +47,7 @@ import com.kazumi.port.data.repository.DownloadRecord
 import com.kazumi.port.service.formatBytes
 import com.kazumi.port.service.formatSpeed
 import com.kazumi.port.ui.components.EmptyState
+import com.kazumi.port.ui.components.fadeInOnFirstCompose
 import com.kazumi.port.ui.navigation.Routes
 import kotlinx.coroutines.launch
 
@@ -134,7 +135,10 @@ private fun DownloadRecordCard(
     var pendingEpisode by remember { mutableStateOf<DownloadEpisode?>(null) }
     var showDeleteAll by remember { mutableStateOf(false) }
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            // 入场过渡动画：下载条目出现时淡入（对齐原版卡片出现动画）
+            .fadeInOnFirstCompose(durationMillis = 200),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow

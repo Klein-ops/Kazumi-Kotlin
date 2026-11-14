@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -245,10 +246,15 @@ fun PopularPage(navController: NavHostController) {
                     }
                     // 锚定在标题下方（对齐原版 KazumiMenuButton：
                     // MenuAnchor 挂在标题 InkWell 上，maximumSize = Size(240, 350)）
+                    // 标签下拉菜单：对齐原版 KazumiMenuButton maximumSize Size(240,350)。
+                    // 必须同时限制高度（heightIn max 350），否则 16 个标签全部平铺、
+                    // 菜单溢出到屏幕上下边缘且无法滚动（用户反馈"全铺开扑到屏幕顶上和最底下"）。
                     DropdownMenu(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
-                        modifier = Modifier.widthIn(max = 240.dp),
+                        modifier = Modifier
+                            .widthIn(max = 240.dp)
+                            .heightIn(max = 350.dp),
                         containerColor = MaterialTheme.colorScheme.surface
                     ) {
                         animeTags.forEach { tag ->

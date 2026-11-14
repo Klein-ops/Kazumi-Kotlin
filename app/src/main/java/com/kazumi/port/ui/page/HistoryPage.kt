@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -48,6 +49,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
@@ -55,6 +57,7 @@ import com.kazumi.port.KazumiApp
 import com.kazumi.port.data.repository.History
 import com.kazumi.port.ui.components.EmptyState
 import com.kazumi.port.ui.components.LoadingState
+import com.kazumi.port.ui.components.fadeInOnFirstCompose
 import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
 import kotlinx.coroutines.launch
@@ -188,12 +191,23 @@ fun HistoryPage(navController: NavHostController) {
                             modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
                         )
                     }
-                    items(items, key = { it.key }) { history ->
+                    // 连续卡片块：同一天的多条记录拼成一个圆角大卡片
+                    // （对齐原版 history_list_view._buildRow：
+                    //  组内首行 top=24/bottom=4，末行 top=4/bottom=24，中间行 4dp 方角，
+                    //  行间留 2dp 缝，视觉上是"中间有缝的一整块圆角卡"）
+                    itemsIndexed(items, key = { _, h -> h.key }) { index, history ->
+                        val isFirst = index == 0
+                        val isLast = index == items.size - 1
                         HistoryRow(
                             history = history,
                             modifier = Modifier
                                 .animateItem()
-                                .padding(horizontal = 16.dp),
+                                .padding(horizontal = 16.dp)
+                                .then(
+                                    if (!isFirst) Modifier.padding(top = 2.dp) else Modifier
+                                ),
+                            topRadius = if (isFirst) 24.dp else 4.dp,
+                            bottomRadius = if (isLast) 24.dp else 4.dp,
                             onClick = { openPlayer(history) },
                             onPlay = { openPlayer(history) },
                             onDetail = {
@@ -212,7 +226,6 @@ fun HistoryPage(navController: NavHostController) {
                                 }
                             }
                         )
-                        Spacer(Modifier.height(8.dp))
                     }
                 }
             }
@@ -246,6 +259,8 @@ fun HistoryPage(navController: NavHostController) {
 private fun HistoryRow(
     history: History,
     modifier: Modifier = Modifier,
+    topRadius: Dp = 24.dp,
+    bottomRadius: Dp = 24.dp,
     onClick: () -> Unit,
     onPlay: () -> Unit,
     onDetail: () -> Unit,
@@ -266,11 +281,22 @@ private fun HistoryRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            // 入场过渡动画：历史条目出现时淡入（对齐原版卡片出现动画）
+            .fadeInOnFirstCompose(durationMillis = 200)
             .graphicsLayer {
                 scaleX = press.scale
                 scaleY = press.scale
             }
-            .clip(RoundedCornerShape(24.dp))
+            // 连续卡片块：圆角由调用方按 首/中/末 传入（top/bottom 分开），
+            // 中间行是 4dp 方角，首行 top=24、末行 bottom=24
+            .clip(
+                RoundedCornerShape(
+                    topStart = topRadius,
+                    topEnd = topRadius,
+                    bottomStart = bottomRadius,
+                    bottomEnd = bottomRadius
+                )
+            )
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(
                 interactionSource = press.interactionSource,

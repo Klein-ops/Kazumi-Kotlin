@@ -71,6 +71,8 @@ fun BangumiCard(
     val press = rememberPressScale()
     Column(
         modifier = modifier
+            // 入场过渡动画：卡片首次进入组合时淡入（对齐原版每个卡片带出现动画）
+            .fadeInOnFirstCompose(durationMillis = 250)
             .graphicsLayer {
                 scaleX = press.scale
                 scaleY = press.scale

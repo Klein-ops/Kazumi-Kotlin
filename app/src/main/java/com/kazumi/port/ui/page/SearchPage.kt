@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -60,6 +61,7 @@ import com.kazumi.port.ui.components.BangumiCard
 import com.kazumi.port.ui.components.EmptyState
 import com.kazumi.port.ui.components.LoadingState
 import com.kazumi.port.ui.components.SearchFilterSheet
+import com.kazumi.port.ui.components.fadeInOnFirstCompose
 import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
 import com.google.gson.JsonParser
@@ -307,7 +309,9 @@ fun SearchPage(navController: NavHostController) {
                 isLoading -> LoadingState(modifier = Modifier.padding(top = 24.dp))
                 // 已搜索且有结果
                 searched && bangumiResults.isNotEmpty() -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
+                    // 列数：原版 _SearchResultGrid columns = max(2, width/180)。手机(≈400dp) 2 列，
+                    // 平板/横屏自适应增列。Adaptive(180.dp) 等价，卡片最小宽 180dp。
+                    columns = GridCells.Adaptive(180.dp),
                     contentPadding = PaddingValues(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -317,7 +321,9 @@ fun SearchPage(navController: NavHostController) {
                         BangumiCard(
                             showRating = showRating,
                             item = item,
-                            modifier = Modifier.animateItem(),
+                            modifier = Modifier
+                                .animateItem()
+                                .fadeInOnFirstCompose(),
                             onClick = { navController.navigate(Routes.detail(item.id)) }
                         )
                     }
@@ -367,6 +373,9 @@ fun SearchPage(navController: NavHostController) {
                                         modifier = Modifier
                                             .animateItem()
                                             .fillMaxWidth()
+                                            // 对齐原版：每个历史项是 16dp 圆角（ListTile shape circular(16)），
+                                            // 无底部横线分隔（原版没有 Divider，靠圆角卡片区分）
+                                            .clip(RoundedCornerShape(16.dp))
                                             .clickable {
                                                 keyword = history.keyword
                                                 doSearch()
@@ -403,7 +412,6 @@ fun SearchPage(navController: NavHostController) {
                                             }
                                         }
                                     }
-                                    HorizontalDivider(modifier = Modifier.padding(start = 40.dp))
                                 }
                             }
                         }
