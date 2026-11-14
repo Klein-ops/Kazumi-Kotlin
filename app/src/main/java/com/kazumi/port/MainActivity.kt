@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.animation.core.LocalMotionDurationScale
-import androidx.compose.animation.core.MotionDurationScale
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -134,25 +131,15 @@ class MainActivity : ComponentActivity() {
                 oledEnhance = oledEnhance,
                 useDynamicColor = useDynamicColor
             ) {
-                // 覆盖系统"动画时长缩放"（ANIMATOR_DURATION_SCALE）：Flutter 原版动画不受该设置
-                // 影响、恒定播放；Compose 的 LocalMotionDurationScale 会读取它，用户系统若设为 0
-                // 或极小，所有 tween（导航转场/卡片淡入/按压缩放）会瞬间跳到终值 → "一闪而过"。
-                // 这里强制 1f，让动画时长对齐原版（页面平滑滑入盖住、返回滑出，卡片淡入上浮）。
-                CompositionLocalProvider(
-                    LocalMotionDurationScale provides object : MotionDurationScale {
-                        override var scaleFactor: Float = 1f
-                    }
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
                 ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
-                    ) {
-                        if (startReady) {
-                            KazumiNavHost(startDestination = startDest)
-                        } else {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                KazumiLoadingIndicator(modifier = Modifier.padding(16.dp))
-                            }
+                    if (startReady) {
+                        KazumiNavHost(startDestination = startDest)
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            KazumiLoadingIndicator(modifier = Modifier.padding(16.dp))
                         }
                     }
                 }
