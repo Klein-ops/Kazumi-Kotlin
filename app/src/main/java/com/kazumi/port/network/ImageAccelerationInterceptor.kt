@@ -84,13 +84,15 @@ class ImageAccelerationInterceptor(
                     if (bytes.isNotEmpty()) {
                         cachePut(original, bytes)
                         // 把下载好的字节重新作为 data 交给 Coil 解码链路（Coil 支持 ByteArray）。
-                        // 关键：必须显式 memoryCacheKey(original)——否则 data 变成 ByteArray 后，
-                        // Coil 内存缓存 key 会基于 ByteArray 内容哈希（字节稳定时本可命中），
-                        // 但显式钉到原始 URL 更稳：切换 ECH/direct 模式、不同字节哈希时
-                        // 也能命中同一张图，不重复下载。
+                        // 关键修复（"缓存了个寂寞"根因）：data 换成 ByteArray 后，Coil 磁盘缓存 key
+                        // 默认取 data.toString()（ByteArray 是对象地址 [B@xxxx，每次新实例都不同），
+                        // 导致磁盘缓存永远 miss、每次冷启动都重新 ECH 下载。这里必须显式钉住
+                        // diskCacheKey(original)（原始 URL），让磁盘缓存真正落盘复用；
+                        // memoryCacheKey(original) 保证内存缓存也按 URL 命中（滚动秒出）。
                         val byteReq = chain.request.newBuilder()
                             .data(bytes)
                             .memoryCacheKey(original)
+                            .diskCacheKey(original)
                             .build()
                         return chain.proceed(byteReq)
                     }
