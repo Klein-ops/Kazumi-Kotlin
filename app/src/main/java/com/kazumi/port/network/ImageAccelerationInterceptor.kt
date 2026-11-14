@@ -75,7 +75,9 @@ class ImageAccelerationInterceptor(
                 val diskHit = diskCache?.get(original)
                 if (diskHit != null) {
                     diskHit.use { snapshot ->
-                        val bytes = snapshot.data.readBytes()
+                        // Coil 2.x DiskCache.Snapshot.data 是 okio.Path（非 java.io.File），
+                        // 没有 readBytes() 扩展；用 toString() 拿到路径串再构造 File 读取。
+                        val bytes = java.io.File(snapshot.data.toString()).readBytes()
                         if (bytes.isNotEmpty()) {
                             Log.i("ImageAccel", "disk cache HIT url=$original len=${bytes.size}")
                             return chain.proceed(
