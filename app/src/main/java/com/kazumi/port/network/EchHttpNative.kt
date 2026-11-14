@@ -1,6 +1,10 @@
 package com.kazumi.port.network
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -54,13 +58,53 @@ object EchHttpNative {
     }
 
     /**
+     * 并发 race：3 个 CF IP 同时发起，谁先成功用谁。
+     * 修复：原串行试错时若第一个 IP 黑洞（不可达但不报错），单张图要卡到外层
+     * 15s 熔断，列表 20+ 张封面连环拖慢。JNI 桥 v4 per-request 独立状态并发安全，
+     * Semaphore(6) 只做总限流，这里在 1 个 permit 内再起 3 路并发完全安全。
+     */
+    private suspend fun runBlockingLoadRace(url: String, echConfig: String): ByteArray =
+        coroutineScope {
+            val deferreds = CONNECT_IPS.map { ip ->
+                async(Dispatchers.IO) {
+                    try {
+                        Result.success(request(url, echConfig, ip, DEFAULT_HEADERS, IntArray(4)))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                }
+            }
+            var lastError: Exception? = null
+            while (true) {
+                val done = deferreds.filter { it.isCompleted }
+                if (done.isNotEmpty()) {
+                    for (d in done) {
+                        val r = d.await()
+                        if (r.isSuccess) {
+                            val body = r.getOrThrow()
+                            if (body != null && body.isNotEmpty()) return@coroutineScope body
+                            if (lastError == null) lastError = IllegalStateException("ECH 返回空 body")
+                        } else {
+                            if (lastError == null) lastError = r.exceptionOrNull() as? Exception
+                        }
+                    }
+                    if (deferreds.all { it.isCompleted }) break
+                }
+                delay(5)
+            }
+            throw lastError ?: IllegalStateException("所有 ECH 入口均失败")
+        }
+
+    /**
      * 并发执行原生下载（供 suspend 调用方使用）。
      * JNI v4 已并发安全（per-request 状态），Semaphore(6) 仅限流防线程爆炸。
      */
     suspend fun loadSuspend(url: String, echConfig: String): ByteArray =
         semaphore.withPermit {
             withContext(Dispatchers.IO) {
-                runBlockingLoad(url, echConfig)
+                runBlockingLoadRace(url, echConfig)
             }
         }
 
