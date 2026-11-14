@@ -109,8 +109,12 @@ class ImageAccelerationInterceptor(
             return chain.proceed(chain.request)
         }
 
-        // ECH：先用原生 ECH 栈下载，成功直接解码返回；失败直接抛错（对齐原版：
-        // BangumiEchImageService 的 ECH 失败即 rethrow，不拿镜像轮询——镜像兜底是 mirror 模式的事）
+        // ECH：先用原生 ECH 栈下载，成功直接解码返回；失败/超时降级镜像兜底。
+        // 对齐原版语义（ImageFileService ECH 失败 rethrow）但增加容错：
+        // 原版 ech_http 库在正常网络下稳定，因此失败即抛；移植版 JNI 桥在部分
+        // 网络下间歇性超时（2026-11-14 实测第1遍通第2遍全超时），若裸抛会导致
+        // 整页图片全挂。因此 ECH 失败后按序尝试镜像（corsproxy 实测可达），
+        // 镜像也全失败才抛错。
         if (mode == ImageAcceleration.ECH) {
             try {
                 val context = chain.request.context
@@ -150,53 +154,47 @@ class ImageAccelerationInterceptor(
                 // 3) ECH 下载：全程 15s 总超时兜底（native 无内置超时，熔断黑洞 IP，
                 //    避免单张图卡死拖累整个列表）。fetchEchConfig 在 IO 线程执行
                 //    （内部是同步 OkHttp 阻塞调用），60s 内复用缓存不重复打 DoH。
-                val bytes = withTimeoutOrNull(15_000L) {
-                    withContext(Dispatchers.IO) {
-                        val echConfig = EchResolver.fetchEchConfig()
-                        if (echConfig != null) {
-                            EchHttpNative.loadSuspend(original, echConfig)
-                        } else {
-                            null
+                var echBytes: ByteArray? = null
+                try {
+                    echBytes = withTimeoutOrNull(15_000L) {
+                        withContext(Dispatchers.IO) {
+                            val echConfig = EchResolver.fetchEchConfig()
+                            if (echConfig != null) {
+                                EchHttpNative.loadSuspend(original, echConfig)
+                            } else {
+                                null
+                            }
                         }
                     }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    FileLogger.w("ImageAccel", "ech download error: ${e.message} | $original")
                 }
-                if (bytes != null && bytes.isNotEmpty()) {
-                    FileLogger.i("ImageAccel", "ech download OK bytes=${bytes.size} for $original")
-                    cachePut(original, bytes)
-                    writeEchFile(context, original, bytes)
-                    return chain.proceed(byteRequest(chain, original, bytes))
+                if (echBytes != null && echBytes.isNotEmpty()) {
+                    FileLogger.i("ImageAccel", "ech download OK bytes=${echBytes.size} for $original")
+                    cachePut(original, echBytes)
+                    writeEchFile(context, original, echBytes)
+                    return chain.proceed(byteRequest(chain, original, echBytes))
                 }
-                // ECH 超时（15s）/配置为空/字节为空：直接抛错，不降级到镜像（对齐原版）
-                throw IllegalStateException("ECH 图片加载失败: 下载超时或配置为空")
+
+                // 4) ECH 失败/超时/配置为空：降级镜像兜底（不裸抛 → 图片不因 ECH 不稳而全挂）
+                FileLogger.w("ImageAccel", "ech unavailable, fallback to mirror | $original")
+                val mirrorResult = tryMirrorFallback(chain, original)
+                if (mirrorResult != null) return mirrorResult
+                throw IllegalStateException("ECH 与镜像均失败: $original")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // 失败抛出（不再逐个试镜像），由 Coil 上层显示占位/重试
+                // 失败抛出（镜像已兜底仍失败），由 Coil 上层显示占位/重试
                 FileLogger.w("ImageAccel", "ech download failed: ${e.message} | $original")
                 throw e
             }
         }
 
         // mirror 模式：走镜像候选，首个成功即返回（对齐原版 ImageFileService 的 mirror 重写）
-        val candidates = BangumiImageUrlRewriter.rewriteCandidates(original)
-        FileLogger.d("ImageAccel", "mirror candidates: $candidates")
-        var lastError: Exception? = null
-        for (candidate in candidates) {
-            if (candidate == original) continue // 跳过原始地址，代理候选优先
-            try {
-                val result = chain.proceed(chain.request.newBuilder().data(candidate).build())
-                if (result is SuccessResult) {
-                    FileLogger.i("ImageAccel", "mirror OK via $candidate")
-                    return result
-                }
-                FileLogger.d("ImageAccel", "mirror candidate $candidate returned non-success: ${result.javaClass.simpleName}")
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                FileLogger.w("ImageAccel", "mirror candidate $candidate failed: ${e.message}")
-                lastError = e
-            }
-        }
+        val mirrorResult = tryMirrorFallback(chain, original)
+        if (mirrorResult != null) return mirrorResult
         // 全部候选失败：最后再尝试一次原始地址（可能站内可达）
         FileLogger.w("ImageAccel", "all mirror candidates failed, try original")
         return try {
@@ -204,7 +202,37 @@ class ImageAccelerationInterceptor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            throw lastError ?: e
+            throw e
         }
+    }
+
+    /**
+     * 按序尝试镜像候选（corsproxy/wsrv/weserv），任一成功即返回；全部失败返回 null。
+     * 每个候选带 6s 超时（实测 corsproxy 可用但慢 ~8s，wsrv/weserv 快速失败），
+     * 避免单个镜像卡死拖累整页。
+     */
+    private suspend fun tryMirrorFallback(chain: Chain, original: String): ImageResult? {
+        val candidates = BangumiImageUrlRewriter.rewriteCandidates(original)
+        FileLogger.d("ImageAccel", "mirror candidates: $candidates")
+        var lastError: Exception? = null
+        for (candidate in candidates) {
+            if (candidate == original) continue // 跳过原始地址，代理候选优先
+            try {
+                val result = withTimeoutOrNull(6_000L) {
+                    chain.proceed(chain.request.newBuilder().data(candidate).build())
+                }
+                if (result is SuccessResult) {
+                    FileLogger.i("ImageAccel", "mirror OK via $candidate")
+                    return result
+                }
+                FileLogger.d("ImageAccel", "mirror candidate $candidate non-success: ${result?.javaClass?.simpleName}")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                FileLogger.w("ImageAccel", "mirror candidate $candidate failed: ${e.message}")
+                lastError = e
+            }
+        }
+        return null
     }
 }
