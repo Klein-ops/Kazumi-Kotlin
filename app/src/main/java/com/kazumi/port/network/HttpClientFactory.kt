@@ -79,24 +79,44 @@ object HttpClientFactory {
         }
     }
 
-    private fun buildClient(proxy: Proxy? = null, lenientTls: Boolean = false): OkHttpClient {
+    @Volatile
+    private var fastClient: OkHttpClient? = null
+
+    /**
+     * Bangumi API 快速失败客户端：严格 TLS + 短超时。
+     *
+     * 专门给 Bangumi 列表/详情/评论等 JSON 接口用（2026-11-14 用户实测：
+     * 详情页"等再久也打不开"——旧实现 callTimeout 20s，镜像+直连 race 最坏
+     * 要干等 20s 才返回，体验是"永久转圈"。这些接口都是轻量 JSON，
+     * 6s 连接 / 8s 读超时 / 10s 总超时足够，网络不可用时快速失败，页面立即给反馈。
+     * 注意：不启用 lenientTls——Bangumi 请求会带 Authorization: Bearer token，
+     * 绝不能为速度放弃证书校验（MITM 会窃取凭据）。
+     */
+    fun getFastClient(): OkHttpClient {
+        return fastClient ?: synchronized(this) {
+            fastClient ?: buildClient(currentProxy, lenientTls = false, fast = true).also { fastClient = it }
+        }
+    }
+
+    private fun buildClient(proxy: Proxy? = null, lenientTls: Boolean = false, fast: Boolean = false): OkHttpClient {
         val builder = OkHttpClient.Builder()
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(12, TimeUnit.SECONDS)
-            .writeTimeout(12, TimeUnit.SECONDS)
+            .connectTimeout(if (fast) 6 else 12, TimeUnit.SECONDS)
+            .readTimeout(if (fast) 8 else 12, TimeUnit.SECONDS)
+            .writeTimeout(if (fast) 8 else 12, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .retryOnConnectionFailure(true)
         if (proxy != null) {
             builder.proxy(proxy)
         }
-        if (!lenientTls) {
+        if (!lenientTls || fast) {
             // 总超时（含 DNS 解析/连接/TLS/读取全链路）：connect/read/write 超时管不到
             // DNS 卡死、代理不可达等场景（OkHttp 只有 callTimeout 覆盖整个 call）。
             // 实测 2026-11-06 规则仓库请求卡 Linux.poll 151s 不返回（DNS/网络被墙），
             // 页面排队等锁 → "加载不出来"；加总超时后任何请求最多 20s 必返回。
-            // 播放器拉流 client（lenientTls）不加：长连接流媒体会超时中断。
-            builder.callTimeout(20, TimeUnit.SECONDS)
+            // fast 客户端（Bangumi JSON 接口）用 10s，网络不可用快速失败不干等。
+            // 播放器拉流 client（lenientTls 且非 fast）不加：长连接流媒体会超时中断。
+            builder.callTimeout(if (fast) 10 else 20, TimeUnit.SECONDS)
         }
         builder.addInterceptor { chain ->
             val original = chain.request()

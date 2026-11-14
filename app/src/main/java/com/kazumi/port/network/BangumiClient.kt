@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit
 class BangumiClient(
     private val settings: SettingsManager
 ) {
-    private val client get() = HttpClientFactory.getClient()
+    private val client get() = HttpClientFactory.getFastClient()
 
     /** Bangumi 公共 API 主机（可被镜像加速） */
     private val bangumiPublicHosts = setOf("api.bgm.tv", "next.bgm.tv")

@@ -110,6 +110,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import com.kazumi.port.ui.components.KazumiLoadingIndicator
+import com.kazumi.port.util.FileLogger
+import kotlinx.coroutines.withTimeoutOrNull
 
 private val INFO_TABS = listOf("概览", "吐槽", "角色", "关联", "制作人员")
 
@@ -218,7 +220,16 @@ fun DetailPage(
         // 从播放器返回恢复的状态已含详情/线路，跳过重复加载
         if (bangumiJson.isNotEmpty() && roadsLoaded) return@LaunchedEffect
         withContext(Dispatchers.IO) {
-            val item = bangumiApi.getBangumiInfoByID(bangumiId)
+            val item = try {
+                bangumiApi.getBangumiInfoByID(bangumiId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 关键修复：getBangumiInfoByID 内部任何异常都不能让协程崩掉，
+                // 否则 isLoading 永远不置 false → 详情页永久转圈（"等再久也打不开"）。
+                FileLogger.w("DetailPage", "getBangumiInfoByID($bangumiId) failed: ${e.message}")
+                null
+            }
             withContext(Dispatchers.Main) {
                 if (item != null) {
                     bangumiJson = runCatching { item.toJson().toString() }.getOrDefault(bangumiJson)
@@ -237,29 +248,34 @@ fun DetailPage(
                 // 用户要求"加载出一个就显示一个"；对齐原版全并发，无信号量/硬超时限流
                 // （信号量 3 路 + 6s 超时叠加会让慢插件拖慢整批，原版 2-3s 出结果）
                 val collectedRoads = java.util.concurrent.ConcurrentLinkedQueue<Triple<String, String, List<Road>>>()
-                val jobs = app.pluginRepository.allPlugins().map { plugin ->
-                    async {
-                        try {
-                            val search = app.pluginRepository.searchBangumi(plugin.name, name)
-                            val hit = search.data.firstOrNull() ?: return@async
-                            if (hit.src.isEmpty()) return@async
-                            val roads = app.pluginRepository.queryChapterRoads(plugin.name, hit.src)
-                            if (roads.isNotEmpty()) {
-                                val entry = Triple(plugin.name, hit.src, roads)
-                                collectedRoads.add(entry)
-                                // 立即通知 UI 刷新（主线程）
-                                withContext(Dispatchers.Main) {
-                                    savePluginRoads(collectedRoads.toList())
-                                    roadsLoading = false
-                                    roadsLoaded = true
-                                    if (pluginRoads.isNotEmpty() && selectedPlugin < 0) selectedPlugin = 0
+                // 总超时 20s：若部分插件网络卡死（镜像/源站不可达），不能让 join 无限等
+                // （每个插件 search+queryRoads 最坏 2×10s callTimeout），20s 后放弃剩余、
+                // 把已搜集到的线路先交给 UI，避免"详情页等再久也打不开"。
+                withTimeoutOrNull(20_000L) {
+                    val jobs = app.pluginRepository.allPlugins().map { plugin ->
+                        async {
+                            try {
+                                val search = app.pluginRepository.searchBangumi(plugin.name, name)
+                                val hit = search.data.firstOrNull() ?: return@async
+                                if (hit.src.isEmpty()) return@async
+                                val roads = app.pluginRepository.queryChapterRoads(plugin.name, hit.src)
+                                if (roads.isNotEmpty()) {
+                                    val entry = Triple(plugin.name, hit.src, roads)
+                                    collectedRoads.add(entry)
+                                    // 立即通知 UI 刷新（主线程）
+                                    withContext(Dispatchers.Main) {
+                                        savePluginRoads(collectedRoads.toList())
+                                        roadsLoading = false
+                                        roadsLoaded = true
+                                        if (pluginRoads.isNotEmpty() && selectedPlugin < 0) selectedPlugin = 0
+                                    }
                                 }
+                            } catch (_: Exception) {
                             }
-                        } catch (_: Exception) {
                         }
                     }
+                    jobs.forEach { it.join() }
                 }
-                jobs.forEach { it.join() }
                 withContext(Dispatchers.Main) {
                     savePluginRoads(collectedRoads.toList())
                     roadsLoading = false
