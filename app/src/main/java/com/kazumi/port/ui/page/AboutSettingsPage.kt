@@ -86,6 +86,7 @@ fun AboutSettingsPage(navController: NavHostController) {
                     title = "源代码",
                     subtitle = "GitHub 仓库",
                     leading = Icons.Filled.Code,
+                    topRadius = 24.dp,
                     onClick = { openUrl("https://github.com/Klein-ops/Kazumi-Kotlin") }
                 )
                 SettingClickRow(
@@ -98,6 +99,7 @@ fun AboutSettingsPage(navController: NavHostController) {
                     title = "问题反馈",
                     subtitle = "在 GitHub 提交 Issue",
                     leading = Icons.Filled.BugReport,
+                    bottomRadius = 24.dp,
                     onClick = { openUrl("https://github.com/Klein-ops/Kazumi-Kotlin/issues") }
                 )
             }
@@ -107,6 +109,7 @@ fun AboutSettingsPage(navController: NavHostController) {
                     title = "贡献指南",
                     subtitle = "参与 Kazumi 开发",
                     leading = Icons.Filled.Handshake,
+                    topRadius = 24.dp,
                     onClick = { openUrl("https://github.com/Klein-ops/Kazumi-Kotlin/blob/main/README.md") }
                 )
                 SettingClickRow(
@@ -125,6 +128,7 @@ fun AboutSettingsPage(navController: NavHostController) {
                     title = "更新日志",
                     subtitle = "查看版本发布记录",
                     leading = Icons.Filled.Update,
+                    bottomRadius = 24.dp,
                     onClick = { openUrl("https://github.com/Klein-ops/Kazumi-Kotlin/releases") }
                 )
             }

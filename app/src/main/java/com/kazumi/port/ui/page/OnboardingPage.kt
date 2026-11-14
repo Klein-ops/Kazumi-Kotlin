@@ -426,6 +426,7 @@ private fun MirrorSettingsStepContent(
                 subtitle = "番剧信息与评论",
                 leading = Icons.Filled.Info,
                 trailingValue = bangumiLabels[bangumiAcceleration] ?: "镜像",
+                topRadius = 24.dp,
                 onClick = {
                     val idx = bangumiOrder.indexOf(bangumiAcceleration)
                     onBangumiChanged(bangumiOrder[(idx + 1) % bangumiOrder.size])
@@ -443,6 +444,7 @@ private fun MirrorSettingsStepContent(
                 subtitle = "封面与头像",
                 leading = Icons.Filled.Info,
                 trailingValue = imageLabels[imageAcceleration] ?: "ECH",
+                bottomRadius = 24.dp,
                 onClick = {
                     val idx = imageOrder.indexOf(imageAcceleration)
                     onImageChanged(imageOrder[(idx + 1) % imageOrder.size])

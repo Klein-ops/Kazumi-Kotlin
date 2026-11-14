@@ -76,6 +76,8 @@ fun StorageSettingsPage(navController: NavHostController) {
                     title = "清除图片缓存",
                     subtitle = if (clearing) "正在清除…" else cacheSize,
                     leading = Icons.Filled.Image,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = {
                         clearing = true
                         cacheSize = "正在清除…"
@@ -96,6 +98,8 @@ fun StorageSettingsPage(navController: NavHostController) {
                     title = "错误日志",
                     subtitle = "查看应用错误日志",
                     leading = Icons.AutoMirrored.Filled.ReceiptLong,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = { navController.navigate(com.kazumi.port.ui.navigation.Routes.SETTINGS_LOGS) }
                 )
             }
@@ -105,6 +109,8 @@ fun StorageSettingsPage(navController: NavHostController) {
                     title = "缓存说明",
                     subtitle = "图片会在下次加载时重新下载。视频、记录和设置不会删除。",
                     leading = Icons.Filled.CleaningServices,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = { showCacheInfo = true }
                 )
             }

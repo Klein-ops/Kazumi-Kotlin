@@ -71,6 +71,8 @@ fun InterfaceSettingsPage(navController: NavHostController) {
                     subtitle = "设置应用开启时的默认页面",
                     leading = Icons.Filled.Home,
                     trailingValue = pageLabels[defaultPage] ?: "推荐",
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = {
                         val idx = pageOrder.indexOf(defaultPage)
                         defaultPage = pageOrder[(idx + 1) % pageOrder.size]
@@ -85,6 +87,7 @@ fun InterfaceSettingsPage(navController: NavHostController) {
                     subtitle = "下次打开追番页时使用，页面内切换不会改变此设置",
                     leading = Icons.Filled.ViewAgenda,
                     trailingValue = if (collectLayout == "list") "列表" else "网格",
+                    topRadius = 24.dp,
                     onClick = {
                         collectLayout = if (collectLayout == "list") "grid" else "list"
                         scope.launch { settings.setString(SettingsManager.Interface.DEFAULT_COLLECT_LAYOUT, collectLayout) }
@@ -95,6 +98,7 @@ fun InterfaceSettingsPage(navController: NavHostController) {
                     subtitle = "关闭后隐藏概览和番剧列表中的评分信息",
                     leading = Icons.Filled.Star,
                     checked = showRating,
+                    bottomRadius = 24.dp,
                     onCheckedChange = { value ->
                         showRating = value
                         scope.launch { settings.setBoolean(SettingsManager.Interface.SHOW_RATING, value) }

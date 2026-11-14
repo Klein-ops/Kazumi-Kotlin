@@ -185,13 +185,15 @@ fun HistoryPage(navController: NavHostController) {
                             text = "$label · ${items.size}",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
+                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
                         )
                     }
                     items(items, key = { it.key }) { history ->
                         HistoryRow(
                             history = history,
-                            modifier = Modifier.animateItem(),
+                            modifier = Modifier
+                                .animateItem()
+                                .padding(horizontal = 16.dp),
                             onClick = { openPlayer(history) },
                             onPlay = { openPlayer(history) },
                             onDetail = {
@@ -210,7 +212,7 @@ fun HistoryPage(navController: NavHostController) {
                                 }
                             }
                         )
-                        HorizontalDivider(modifier = Modifier.padding(start = 88.dp))
+                        Spacer(Modifier.height(8.dp))
                     }
                 }
             }
@@ -268,6 +270,8 @@ private fun HistoryRow(
                 scaleX = press.scale
                 scaleY = press.scale
             }
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(
                 interactionSource = press.interactionSource,
                 indication = LocalIndication.current,

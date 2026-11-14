@@ -130,6 +130,7 @@ fun DownloadSettingsPage(navController: NavHostController) {
                     title = "下载位置",
                     subtitle = if (downloadDirectory.isEmpty()) "默认下载位置（未自定义）" else downloadDirectory,
                     leading = Icons.Filled.Folder,
+                    topRadius = 24.dp,
                     onClick = { directoryPicker.launch(null) }
                 )
                 SettingSwitchRow(
@@ -137,6 +138,7 @@ fun DownloadSettingsPage(navController: NavHostController) {
                     subtitle = "下载视频时同时缓存弹幕数据",
                     leading = Icons.Filled.Subtitles,
                     checked = downloadDanmaku,
+                    bottomRadius = 24.dp,
                     onCheckedChange = { value ->
                         downloadDanmaku = value
                         scope.launch { settings.setBoolean(SettingsManager.Download.DANMAKU, value) }
@@ -149,6 +151,8 @@ fun DownloadSettingsPage(navController: NavHostController) {
                     title = "关于并发设置",
                     subtitle = "• 集数并发：同时下载多少集视频\n• 分片并发：每集内同时下载多少个视频片段\n• 较高的并发可提升速度，但可能被服务器限制\n• 修改后对新开始的下载生效",
                     leading = Icons.Filled.Info,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = { showConcurrentInfo = true }
                 )
             }
@@ -158,6 +162,8 @@ fun DownloadSettingsPage(navController: NavHostController) {
                     title = "恢复默认设置",
                     subtitle = "将下载相关设置恢复为默认值",
                     leading = Icons.Filled.Restore,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = {
                         scope.launch {
                             settings.setInt(SettingsManager.Download.PARALLEL_EPISODES, 2)

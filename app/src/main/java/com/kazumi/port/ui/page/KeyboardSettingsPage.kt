@@ -1,5 +1,6 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -28,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.kazumi.port.KazumiApp
@@ -148,10 +150,21 @@ fun KeyboardSettingsPage(navController: NavHostController) {
             )
             shortcutGroups.forEach { group ->
                 SettingGroup(group.title) {
-                    group.functions.forEach { func ->
+                    group.functions.forEachIndexed { index, func ->
+                        val first = index == 0
+                        val last = index == group.functions.size - 1
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(
+                                    RoundedCornerShape(
+                                        topStart = if (first) 24.dp else 4.dp,
+                                        topEnd = if (first) 24.dp else 4.dp,
+                                        bottomStart = if (last) 24.dp else 4.dp,
+                                        bottomEnd = if (last) 24.dp else 4.dp
+                                    )
+                                )
+                                .background(MaterialTheme.colorScheme.surfaceContainerLow)
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {

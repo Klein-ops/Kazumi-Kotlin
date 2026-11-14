@@ -161,6 +161,7 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     subtitle = "免鉴权，按番剧名自动匹配，当前默认弹幕源",
                     leading = Icons.Filled.LiveTv,
                     checked = biliSource,
+                    topRadius = 24.dp,
                     onCheckedChange = { biliSource = it; saveBoolean(SettingsManager.Danmaku.BILI_SOURCE, it) }
                 )
                 SettingSwitchRow(
@@ -175,6 +176,7 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     subtitle = "官方接口已强制 AppId 鉴权，需先填写下方凭据",
                     leading = Icons.Filled.Forum,
                     checked = danDanSource,
+                    bottomRadius = 24.dp,
                     onCheckedChange = { danDanSource = it; saveBoolean(SettingsManager.Danmaku.DAN_DAN_SOURCE, it) }
                 )
             }
@@ -185,6 +187,8 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     subtitle = "弹弹play 开放接口需鉴权，在 dandanplay.com 开发者中心创建应用后填入；仅保存在本机",
                     leading = Icons.Filled.Key,
                     trailingValue = if (danDanAppId.isNotBlank() && danDanAppSecret.isNotBlank()) "已配置" else "未配置",
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = {
                         editAppId = danDanAppId
                         editAppSecret = danDanAppSecret
@@ -198,6 +202,8 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     title = "关键词屏蔽",
                     subtitle = "屏蔽含指定关键词的弹幕",
                     leading = Icons.Filled.Block,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_DANMAKU_SHIELD) }
                 )
             }
@@ -208,6 +214,7 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     subtitle = "开启后弹幕速度会随视频倍速而改变",
                     leading = Icons.Filled.Speed,
                     checked = followSpeed,
+                    topRadius = 24.dp,
                     onCheckedChange = { followSpeed = it; saveBoolean(SettingsManager.Danmaku.FOLLOW_SPEED, it) }
                 )
                 SettingSwitchRow(

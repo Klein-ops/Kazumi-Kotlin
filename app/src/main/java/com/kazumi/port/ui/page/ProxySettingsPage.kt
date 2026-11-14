@@ -81,6 +81,7 @@ fun ProxySettingsPage(navController: NavHostController) {
                     subtitle = "番剧信息与评论",
                     leading = Icons.Filled.TravelExplore,
                     trailingValue = bangumiLabels[bangumiAcceleration] ?: "镜像",
+                    topRadius = 24.dp,
                     onClick = {
                         val idx = bangumiOrder.indexOf(bangumiAcceleration)
                         bangumiAcceleration = bangumiOrder[(idx + 1) % bangumiOrder.size]
@@ -105,6 +106,7 @@ fun ProxySettingsPage(navController: NavHostController) {
                     subtitle = "封面与头像",
                     leading = Icons.Filled.Image,
                     trailingValue = imageLabels[imageAcceleration] ?: "ECH",
+                    bottomRadius = 24.dp,
                     onClick = {
                         val idx = imageOrder.indexOf(imageAcceleration)
                         val next = imageOrder[(idx + 1) % imageOrder.size]
@@ -123,6 +125,7 @@ fun ProxySettingsPage(navController: NavHostController) {
                     subtitle = "启用后网络请求将通过代理服务器",
                     leading = Icons.Filled.VpnKey,
                     checked = proxyEnable,
+                    topRadius = 24.dp,
                     onCheckedChange = { value ->
                         proxyEnable = value
                         scope.launch {
@@ -151,6 +154,7 @@ fun ProxySettingsPage(navController: NavHostController) {
                     title = "代理配置",
                     subtitle = if (proxyUrl.isEmpty()) "配置代理服务器地址和认证信息" else proxyUrl,
                     leading = Icons.Filled.Tune,
+                    bottomRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_PROXY_EDITOR) }
                 )
             }

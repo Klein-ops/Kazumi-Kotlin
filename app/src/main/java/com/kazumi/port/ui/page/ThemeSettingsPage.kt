@@ -95,6 +95,7 @@ fun ThemeSettingsPage(navController: NavHostController) {
                     title = "深色模式",
                     leading = Icons.Filled.DarkMode,
                     trailingValue = themeModeLabels[themeMode] ?: "跟随系统",
+                    topRadius = 24.dp,
                     onClick = {
                         val idx = themeModeOrder.indexOf(themeMode)
                         themeMode = themeModeOrder[(idx + 1) % themeModeOrder.size]
@@ -123,6 +124,7 @@ fun ThemeSettingsPage(navController: NavHostController) {
                     subtitle = "关闭后使用 MI Sans 字体",
                     leading = Icons.Filled.FontDownload,
                     checked = useSystemFont,
+                    bottomRadius = 24.dp,
                     onCheckedChange = { value ->
                         useSystemFont = value
                         scope.launch { settings.setBoolean(SettingsManager.Theme.USE_SYSTEM_FONT, value) }
@@ -136,6 +138,8 @@ fun ThemeSettingsPage(navController: NavHostController) {
                     subtitle = "深色模式下使用纯黑背景",
                     leading = Icons.Filled.Contrast,
                     checked = oledEnhance,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onCheckedChange = { value ->
                         oledEnhance = value
                         scope.launch { settings.setBoolean(SettingsManager.Theme.OLED_ENHANCE, value) }

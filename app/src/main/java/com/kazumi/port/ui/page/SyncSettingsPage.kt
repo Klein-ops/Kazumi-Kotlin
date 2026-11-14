@@ -94,6 +94,8 @@ fun SyncSettingsPage(navController: NavHostController) {
                     else "未连接 · 登录 Bangumi 账号以同步追番状态",
                     leading = Icons.Filled.Bookmarks,
                     trailingValue = if (hasBangumi) (if (bangumiEnabled) "已开启" else "已关闭") else "未连接",
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = {
                         bangumiEnabled = !bangumiEnabled
                         scope.launch { settings.setBoolean(SettingsManager.Bangumi.SYNC_ENABLE, bangumiEnabled) }
@@ -107,6 +109,7 @@ fun SyncSettingsPage(navController: NavHostController) {
                     subtitle = if (hasWebDav) webDavUrl else "需要支持 WebDAV 的云盘或服务器",
                     leading = Icons.Filled.Devices,
                     trailingValue = if (hasWebDav) "已配置" else "未配置",
+                    topRadius = 24.dp,
                     onClick = {
                         draftUrl = webDavUrl
                         draftUsername = webDavUsername
@@ -120,6 +123,7 @@ fun SyncSettingsPage(navController: NavHostController) {
                     leading = Icons.Filled.Devices,
                     checked = webDavEnabled,
                     enabled = hasWebDav,
+                    bottomRadius = 24.dp,
                     onCheckedChange = { value ->
                         webDavEnabled = value
                         scope.launch { settings.setBoolean(SettingsManager.WebDav.ENABLE, value) }
@@ -134,6 +138,7 @@ fun SyncSettingsPage(navController: NavHostController) {
                     leading = Icons.Filled.History,
                     checked = webDavHistory,
                     enabled = webDavEnabled,
+                    topRadius = 24.dp,
                     onCheckedChange = { value ->
                         webDavHistory = value
                         scope.launch { settings.setBoolean(SettingsManager.WebDav.ENABLE_HISTORY, value) }
@@ -156,6 +161,7 @@ fun SyncSettingsPage(navController: NavHostController) {
                     leading = Icons.Filled.FilterAlt,
                     checked = webDavShield,
                     enabled = webDavEnabled,
+                    bottomRadius = 24.dp,
                     onCheckedChange = { value ->
                         webDavShield = value
                         scope.launch { settings.setBoolean(SettingsManager.WebDav.ENABLE_DANMAKU_SHIELD, value) }

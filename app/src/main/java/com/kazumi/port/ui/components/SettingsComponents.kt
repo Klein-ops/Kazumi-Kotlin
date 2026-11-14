@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
@@ -92,7 +93,9 @@ fun SettingSwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     leading: ImageVector? = null,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    topRadius: Dp = 4.dp,
+    bottomRadius: Dp = 4.dp
 ) {
     val press = rememberPressScale()
     val pressed by press.interactionSource.collectIsPressedAsState()
@@ -108,7 +111,14 @@ fun SettingSwitchRow(
                 scaleX = press.scale
                 scaleY = press.scale
             }
-            .clip(RoundedCornerShape(corner))
+            .clip(
+                RoundedCornerShape(
+                    topStart = if (pressed) corner else topRadius,
+                    topEnd = if (pressed) corner else topRadius,
+                    bottomStart = if (pressed) corner else bottomRadius,
+                    bottomEnd = if (pressed) corner else bottomRadius
+                )
+            )
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(
                 enabled = enabled,
@@ -158,7 +168,9 @@ fun SettingClickRow(
     onClick: () -> Unit,
     leading: ImageVector? = null,
     trailingValue: String? = null,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    topRadius: Dp = 4.dp,
+    bottomRadius: Dp = 4.dp
 ) {
     val press = rememberPressScale()
     val pressed by press.interactionSource.collectIsPressedAsState()
@@ -174,7 +186,14 @@ fun SettingClickRow(
                 scaleX = press.scale
                 scaleY = press.scale
             }
-            .clip(RoundedCornerShape(corner))
+            .clip(
+                RoundedCornerShape(
+                    topStart = if (pressed) corner else topRadius,
+                    topEnd = if (pressed) corner else topRadius,
+                    bottomStart = if (pressed) corner else bottomRadius,
+                    bottomEnd = if (pressed) corner else bottomRadius
+                )
+            )
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(
                 enabled = enabled,
@@ -235,12 +254,21 @@ fun SettingSliderRow(
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    topRadius: Dp = 4.dp,
+    bottomRadius: Dp = 4.dp
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(4.dp))
+            .clip(
+                RoundedCornerShape(
+                    topStart = topRadius,
+                    topEnd = topRadius,
+                    bottomStart = bottomRadius,
+                    bottomEnd = bottomRadius
+                )
+            )
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
@@ -261,8 +289,9 @@ fun SettingSliderRow(
 
 /**
  * 分组容器（对应原版 SplitListGroup）：
- * 每个子项是独立的圆角小框，行间 4dp 间隙；首尾行由内容自行不处理，
- * 按压时每行圆角动画到 24dp（对齐原版 split_list_row.dart 的 pressedRadius 动画）。
+ * 每个子项是独立的圆角小框，行间 4dp 间隙；首行 topRadius=24、末行 bottomRadius=24
+ * （对齐原版 tonalCardRadius），按压时每行圆角动画到 24dp（对齐原版 pressedRadius）。
+ * 调用点用法：组内首行设 topRadius = 24.dp、末行设 bottomRadius = 24.dp。
  */
 @Composable
 fun SettingGroup(

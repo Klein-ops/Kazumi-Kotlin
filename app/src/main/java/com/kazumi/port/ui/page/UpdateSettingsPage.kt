@@ -52,6 +52,8 @@ var checkPluginUpdate by remember { mutableStateOf(true) }
                     subtitle = "启动时检查规则仓库新版本",
                     leading = Icons.Filled.Extension,
                     checked = checkPluginUpdate,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onCheckedChange = { value ->
                         checkPluginUpdate = value
                         scope.launch { settings.setBoolean(SettingsManager.Update.CHECK_PLUGIN_UPDATE_ON_STARTUP, value) }

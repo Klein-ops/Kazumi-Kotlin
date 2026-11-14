@@ -127,6 +127,7 @@ fun MyPage(navController: NavHostController) {
                     title = "规则设置",
                     subtitle = "管理番剧来源",
                     leading = Icons.Filled.Extension,
+                    topRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_PLUGIN) }
                 )
                 SettingClickRow(
@@ -145,6 +146,7 @@ fun MyPage(navController: NavHostController) {
                     title = "弹幕设置",
                     subtitle = "弹幕来源与显示效果",
                     leading = Icons.Filled.Subtitles,
+                    bottomRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_DANMAKU) }
                 )
             }
@@ -157,6 +159,7 @@ fun MyPage(navController: NavHostController) {
                     title = "同步备份",
                     subtitle = "跨设备同步数据",
                     leading = Icons.Filled.CloudSync,
+                    topRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_SYNC) }
                 )
                 SettingClickRow(
@@ -169,6 +172,7 @@ fun MyPage(navController: NavHostController) {
                     title = "关于 Kazumi",
                     subtitle = "版本与开源信息",
                     leading = Icons.Filled.Info,
+                    bottomRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_ABOUT) }
                 )
             }

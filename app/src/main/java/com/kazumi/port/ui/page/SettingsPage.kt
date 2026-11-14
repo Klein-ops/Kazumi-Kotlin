@@ -66,6 +66,7 @@ fun SettingsPage(navController: NavHostController) {
                     title = "播放设置",
                     subtitle = "解码、渲染与播放行为",
                     leading = Icons.Filled.DisplaySettings,
+                    topRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_PLAYER) }
                 )
                 SettingClickRow(
@@ -78,6 +79,7 @@ fun SettingsPage(navController: NavHostController) {
                     title = "操作设置",
                     subtitle = "播放器按键映射",
                     leading = Icons.Filled.Keyboard,
+                    bottomRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_KEYBOARD) }
                 )
             }
@@ -87,12 +89,14 @@ fun SettingsPage(navController: NavHostController) {
                     title = "规则管理",
                     subtitle = "番剧资源规则",
                     leading = Icons.Filled.Extension,
+                    topRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_PLUGIN) }
                 )
                 SettingClickRow(
                     title = "下载设置",
                     subtitle = "并发数与弹幕缓存",
                     leading = Icons.Filled.Downloading,
+                    bottomRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_DOWNLOAD) }
                 )
             }
@@ -102,6 +106,7 @@ fun SettingsPage(navController: NavHostController) {
                     title = "外观设置",
                     subtitle = "主题、配色与字体",
                     leading = Icons.Filled.Palette,
+                    topRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_THEME) }
                 )
                 SettingClickRow(
@@ -120,6 +125,7 @@ fun SettingsPage(navController: NavHostController) {
                     title = "网络设置",
                     subtitle = "访问加速与代理",
                     leading = Icons.Filled.Language,
+                    bottomRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_PROXY) }
                 )
             }
@@ -129,6 +135,7 @@ fun SettingsPage(navController: NavHostController) {
                     title = "更新设置",
                     subtitle = "规则更新",
                     leading = Icons.Filled.Update,
+                    topRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_UPDATE) }
                 )
                 SettingClickRow(
@@ -141,6 +148,7 @@ fun SettingsPage(navController: NavHostController) {
                     title = "关于",
                     subtitle = "版本与开源信息",
                     leading = Icons.Filled.Info,
+                    bottomRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_ABOUT) }
                 )
             }

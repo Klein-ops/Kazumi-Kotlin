@@ -127,6 +127,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
                     title = "硬件解码",
                     leading = Icons.Filled.Memory,
                     checked = hAenable,
+                    topRadius = 24.dp,
                     onCheckedChange = { hAenable = it; saveBoolean(SettingsManager.Player.HA_ENABLE, it) }
                 )
                 SettingSwitchRow(
@@ -140,6 +141,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
                     title = "超分辨率",
                     subtitle = "AI 画质增强（开发中）",
                     leading = Icons.Filled.AutoAwesome,
+                    bottomRadius = 24.dp,
                     onClick = { showToast("超分辨率功能开发中，敬请期待") }
                 )
             }
@@ -150,6 +152,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
                     subtitle = "应用退到后台或熄屏时继续播放音频",
                     leading = Icons.Filled.Headphones,
                     checked = backgroundPlayback,
+                    topRadius = 24.dp,
                     onCheckedChange = { backgroundPlayback = it; saveBoolean(SettingsManager.Player.BACKGROUND_PLAYBACK, it) }
                 )
                 SettingSwitchRow(
@@ -199,6 +202,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
                     subtitle = "不保留观看记录",
                     leading = Icons.Filled.VisibilityOff,
                     checked = privateMode,
+                    bottomRadius = 24.dp,
                     onCheckedChange = { privateMode = it; saveBoolean(SettingsManager.Player.PRIVATE_MODE, it) }
                 )
             }
@@ -209,6 +213,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
                     subtitle = "显示播放器内部错误提示",
                     leading = Icons.Filled.ErrorOutline,
                     checked = showPlayerError,
+                    topRadius = 24.dp,
                     onCheckedChange = { showPlayerError = it; saveBoolean(SettingsManager.Player.SHOW_PLAYER_ERROR, it) }
                 )
                 SettingSwitchRow(
@@ -223,6 +228,7 @@ fun PlayerSettingsPage(navController: NavHostController) {
                     subtitle = "播放器内部日志等级",
                     leading = Icons.AutoMirrored.Filled.ReceiptLong,
                     trailingValue = when (playerLogLevel) { 0 -> "无"; 1 -> "错误"; 2 -> "警告"; 3 -> "信息"; else -> "调试" },
+                    bottomRadius = 24.dp,
                     onClick = {
                         playerLogLevel = (playerLogLevel + 1) % 5
                         scope.launch { settings.setInt(SettingsManager.Player.PLAYER_LOG_LEVEL, playerLogLevel) }
@@ -300,6 +306,8 @@ fun PlayerSettingsPage(navController: NavHostController) {
                     title = "恢复默认设置",
                     subtitle = "将播放相关设置恢复为默认值",
                     leading = Icons.Filled.Restore,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = {
                         scope.launch {
                             settings.setBoolean(SettingsManager.Player.HA_ENABLE, false)
