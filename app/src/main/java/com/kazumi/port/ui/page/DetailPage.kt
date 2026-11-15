@@ -55,6 +55,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.rememberSharedContentState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -68,7 +72,13 @@ import androidx.compose.runtime.setValue
 import com.google.gson.JsonParser
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -119,14 +129,17 @@ private val INFO_TABS = listOf("概览", "吐槽", "角色", "关联", "制作�
  * 番剧详情页（对应原版 info_page.dart + info_tabview.dart）
  * 5 个 Tab：概览 / 吐槽（评论区）/ 角色 / 关联 / 制作人员
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun DetailPage(
     navController: NavHostController,
     bangumiId: Int,
     pluginName: String,
-    src: String
+    src: String,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
+    with(sharedTransitionScope) {
     val app = remember { KazumiApp.get() }
     val scope = rememberCoroutineScope()
     val bangumiApi = remember { BangumiApi(BangumiClient(KazumiApp.get().settings)) }
@@ -538,7 +551,10 @@ fun DetailPage(
                     Box(modifier = Modifier.fillMaxSize()) {
                         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                             item {
-                                DetailHeader(item)
+                                DetailHeader(
+                                    item = item,
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                )
                             }
                             item(key = "tab_row") {
                                 TabRow(selectedTabIndex = selectedTab) {
@@ -732,15 +748,26 @@ fun DetailPage(
         )
     }
 }
+    }
 
 /**
  * 详情头部（封面 + 标题 + 评分 + 首播 + 简介摘要）
  */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun DetailHeader(item: BangumiItem) {
+private fun SharedTransitionScope.DetailHeader(
+    item: BangumiItem,
+    animatedVisibilityScope: AnimatedVisibilityScope
+) {
     // 屏宽（dp）：原版评分透视柱状图仅宽屏显示（>= LayoutBreakpoint.compact['width'] = 600dp）
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // 背景毛玻璃层（对齐原版 info_page 的 _InfoHeaderBackground）：
+        // 封面模糊 + 顶部白色渐隐 + 底部羽化到背景色，前景内容叠在上面
+        if (item.coverUrl().isNotBlank()) {
+            DetailHeaderBackground(imageUrl = item.coverUrl())
+        }
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         // 大标题（对齐原版 info 页 headline 标题）
         Text(
             text = item.displayName(),
@@ -755,6 +782,10 @@ private fun DetailHeader(item: BangumiItem) {
                 contentDescription = item.displayName(),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
+                    .sharedElement(
+                        state = rememberSharedContentState(key = "cover_${item.id}"),
+                        animatedVisibilityScope = animatedVisibilityScope
+                    )
                     .width(100.dp)
                     .height(140.dp)
                     .clip(MaterialTheme.shapes.medium)
@@ -885,6 +916,72 @@ private fun DetailHeader(item: BangumiItem) {
                 )
             }
         }
+        }
+    }
+}
+
+/**
+ * 详情头部背景（对齐原版 info_page 的 _InfoHeaderBackground）：
+ * 封面模糊 + 白色半透明罩 + 顶部渐隐 + 底部羽化到页面背景色。
+ * （Modifier.blur 需要 API 31+；低版本自动退化为无模糊的渐隐底图，不崩溃。）
+ */
+@Composable
+private fun DetailHeaderBackground(imageUrl: String) {
+    // Modifier.blur 底层用 RenderEffect，仅 API 31+ 可用；低版本直接 blur 会抛
+    // IllegalStateException 崩溃。这里做 SDK 分级：31+ 真模糊，24-30 退化为
+    // 不模糊的渐隐背景（视觉仍接近毛玻璃的柔和观感，且绝不崩溃）。
+    val canRenderBlur = android.os.Build.VERSION.SDK_INT >= 31
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(320.dp)
+            .clipToBounds()
+    ) {
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = if (canRenderBlur) {
+                Modifier.fillMaxSize().blur(20.dp)
+            } else {
+                Modifier.fillMaxSize()
+            }
+        )
+        // 白色半透明罩（对齐原版 colorBlendMode: modulate, alpha 0.4）
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White.copy(alpha = 0.35f))
+        )
+        // 顶部渐隐：上 80% 不透明 → 下透明（对齐原版 ShaderMask white→transparent stops [0.8,1]）
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.White.copy(alpha = 0.85f), Color.Transparent),
+                        startY = 0f,
+                        endY = 260f
+                    )
+                )
+        )
+        // 底部羽化：透明 → 背景色（对齐原版 _bottomFeather 48dp）
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(56.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                            MaterialTheme.colorScheme.surface
+                        ),
+                        stops = floatArrayOf(0f, 0.72f, 1f)
+                    )
+                )
+        )
     }
 }
 

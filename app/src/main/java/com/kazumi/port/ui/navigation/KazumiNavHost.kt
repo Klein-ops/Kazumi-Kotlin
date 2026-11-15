@@ -3,6 +3,8 @@ package com.kazumi.port.ui.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -115,13 +117,19 @@ object Routes {
     }
 }
 
+/**
+ * 共享元素动画边界：包住整个 NavHost，封面卡片/详情页封面通过
+ * SharedTransitionScope 提供的 sharedElement 跨页面平移动画（对齐原版 Flutter Hero）。
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun KazumiNavHost(
     navController: NavHostController = rememberNavController(),
     modifier: Modifier = Modifier,
     startDestination: String = Routes.POPULAR
 ) {
-    NavHost(
+    SharedTransitionLayout(modifier = modifier) {
+        NavHost(
         navController = navController,
         startDestination = startDestination,
         modifier = modifier,
@@ -174,7 +182,13 @@ fun KazumiNavHost(
     ) {
         composable(Routes.ONBOARDING) { OnboardingPage(navController) }
         composable(Routes.IMAGE_SEARCH) { ImageSearchPage(navController) }
-        composable(Routes.POPULAR) { PopularPage(navController) }
+        composable(Routes.POPULAR) {
+            PopularPage(
+                navController = navController,
+                sharedTransitionScope = this@SharedTransitionLayout,
+                animatedVisibilityScope = this
+            )
+        }
         composable(Routes.SEARCH) { SearchPage(navController) }
         composable(Routes.TIMELINE) { TimelinePage(navController) }
         composable(Routes.COLLECT) { CollectPage(navController) }
@@ -211,7 +225,9 @@ fun KazumiNavHost(
                 navController = navController,
                 bangumiId = entry.arguments?.getString("bangumiId")?.toIntOrNull() ?: 0,
                 pluginName = entry.arguments?.getString("pluginName").orEmpty(),
-                src = entry.arguments?.getString("src").orEmpty()
+                src = entry.arguments?.getString("src").orEmpty(),
+                sharedTransitionScope = this@SharedTransitionLayout,
+                animatedVisibilityScope = this
             )
         }
         composable(Routes.PLAYER) { entry ->
@@ -225,6 +241,7 @@ fun KazumiNavHost(
                 isLocal = entry.arguments?.getString("isLocal")?.toBoolean() ?: false,
                 roadsJson = entry.arguments?.getString("roadsJson").orEmpty()
             )
+        }
         }
     }
 }

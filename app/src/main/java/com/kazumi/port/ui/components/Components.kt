@@ -66,7 +66,10 @@ fun BangumiCard(
     item: BangumiItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    showRating: Boolean = false
+    showRating: Boolean = false,
+    // 封面额外修饰（跨页共享元素动画用：调用方把 sharedElement modifier 传进来，
+    // 覆盖在封面 Box 上；不传则保持原样）
+    coverModifier: Modifier = Modifier
 ) {
     val press = rememberPressScale()
     Column(
@@ -88,7 +91,7 @@ fun BangumiCard(
         // 淡入动画由 KazumiApp 全局 ImageLoader 的 .crossfade(true) 提供（Coil 2.x
         // 的 AsyncImage 没有 crossfade 参数，不能在这里传）
         Box(
-            modifier = Modifier
+            modifier = coverModifier
                 .fillMaxWidth()
                 .aspectRatio(0.65f)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
