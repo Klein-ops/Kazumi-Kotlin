@@ -8,7 +8,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -58,7 +57,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.rememberSharedContentState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -77,7 +75,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -973,12 +970,11 @@ private fun DetailHeaderBackground(imageUrl: String) {
                 .height(56.dp)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                            MaterialTheme.colorScheme.surface
-                        ),
-                        stops = floatArrayOf(0f, 0.72f, 1f)
+                        colorStops = arrayOf(
+                            0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+                            0.72f to MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                            1f to MaterialTheme.colorScheme.surface
+                        )
                     )
                 )
         )

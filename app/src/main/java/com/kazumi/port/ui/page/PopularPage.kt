@@ -71,7 +71,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.rememberSharedContentState
 
 /** 原版 defaultAnimeTags 标签列表（热门番组 + 15 个标签） */
 private val animeTags = listOf(
@@ -255,9 +254,10 @@ fun PopularPage(
             val info = gridState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull() ?: return@snapshotFlow false
             // 距底部剩余高度 = 最后可见项底部到 viewport 底部的距离 + 其后的项数 × 项高（网格近似等高）
+            // last.size 是 IntSize（宽×高），取 height 作为项高近似
             val remaining = info.viewportEndOffset +
-                (info.totalItemsCount - last.index - 1).coerceAtLeast(0) * last.size
-            remaining <= 200f
+                (info.totalItemsCount - last.index - 1).coerceAtLeast(0) * last.size.height
+            remaining <= 200
         }
             .distinctUntilChanged()
             .collect { atBottom -> if (atBottom) loadMore() }
