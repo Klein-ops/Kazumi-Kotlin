@@ -62,6 +62,7 @@ import com.kazumi.port.ui.components.EmptyState
 import com.kazumi.port.ui.components.LoadingState
 import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
+import com.kazumi.port.util.FileLogger
 import kotlinx.coroutines.launch
 import com.kazumi.port.ui.components.KazumiLoadingIndicator
 
@@ -149,7 +150,17 @@ fun PopularPage(navController: NavHostController) {
 
     suspend fun fetchFirstPage(tag: String) {
         isLoading = true
-        val result = fetchPage(offset = 0, tag = tag)
+        val result = try {
+            fetchPage(offset = 0, tag = tag)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // 必须兜底：底层全部通路失败会抛 NetworkException，若不捕获则协程异常逃逸，
+            // isLoading 永远停在 true，整个首页卡死在 Loading 态（用户反馈"切走再切回加载失败、
+            // 刷新无效、只能大退"的根因）。失败落 isTimeout 走"加载超时"空态，可下拉/再进重试。
+            FileLogger.w("PopularPage", "首次加载失败: ${e.message}")
+            emptyList()
+        }
         bangumiListJson = result.toJsonArrayString()
         isLoading = false
         isTimeout = result.isEmpty()
@@ -159,10 +170,18 @@ fun PopularPage(navController: NavHostController) {
     suspend fun refresh() {
         if (isRefreshing) return
         isRefreshing = true
-        val result = fetchPage(offset = 0, tag = currentTag)
-        bangumiListJson = result.toJsonArrayString()
-        isTimeout = result.isEmpty()
-        isRefreshing = false
+        try {
+            val result = fetchPage(offset = 0, tag = currentTag)
+            bangumiListJson = result.toJsonArrayString()
+            isTimeout = result.isEmpty()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            FileLogger.w("PopularPage", "下拉刷新失败: ${e.message}")
+            isTimeout = true
+        } finally {
+            isRefreshing = false
+        }
     }
 
     // 首次加载：仅当恢复状态里没有数据时才 fetch（切 tab 回来记住状态，不再重载）
@@ -179,12 +198,20 @@ fun PopularPage(navController: NavHostController) {
         isLoadingMore = true
         val nextOffset = bangumiList.size
         scope.launch {
-            val result = fetchPage(offset = nextOffset, tag = currentTag)
-            if (result.isNotEmpty()) {
-                val existingIds = bangumiList.map { it.id }.toMutableSet()
-                bangumiListJson = (bangumiList + result.filter { existingIds.add(it.id) }).toJsonArrayString()
+            try {
+                val result = fetchPage(offset = nextOffset, tag = currentTag)
+                if (result.isNotEmpty()) {
+                    val existingIds = bangumiList.map { it.id }.toMutableSet()
+                    bangumiListJson = (bangumiList + result.filter { existingIds.add(it.id) }).toJsonArrayString()
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 加载更多失败不打断已有列表，仅记录（isTimeout 保持原状，避免误伤首屏空态判断）
+                FileLogger.w("PopularPage", "加载更多失败: ${e.message}")
+            } finally {
+                isLoadingMore = false
             }
-            isLoadingMore = false
         }
     }
 
@@ -192,7 +219,16 @@ fun PopularPage(navController: NavHostController) {
         if (tag == currentTag) return
         currentTag = tag
         menuExpanded = false
-        scope.launch { fetchFirstPage(tag) }
+        scope.launch {
+            try {
+                fetchFirstPage(tag)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // fetchFirstPage 内部已兜底，此处再包一层防止 selectTag 协程异常逃逸
+                FileLogger.w("PopularPage", "切换标签失败: ${e.message}")
+            }
+        }
     }
 
     // 滚动到底部自动加载更多
