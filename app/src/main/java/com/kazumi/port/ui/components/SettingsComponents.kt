@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -170,7 +172,10 @@ fun SettingClickRow(
     trailingValue: String? = null,
     enabled: Boolean = true,
     topRadius: Dp = 4.dp,
-    bottomRadius: Dp = 4.dp
+    bottomRadius: Dp = 4.dp,
+    // 原版 SettingsCategoryTile：图标放 36dp secondaryContainer 圆形底里（18dp 图标）。
+    // 设置索引页的分组菜单传 true；子设置页（很小图标）保持原样。
+    iconBackground: Boolean = false
 ) {
     val press = rememberPressScale()
     val pressed by press.interactionSource.collectIsPressedAsState()
@@ -205,12 +210,32 @@ fun SettingClickRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (leading != null) {
-            Icon(
-                imageVector = leading,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(end = 12.dp)
-            )
+            if (iconBackground) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(
+                            MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(50)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = leading,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+            } else {
+                Icon(
+                    imageVector = leading,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 12.dp)
+                )
+            }
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(

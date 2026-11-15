@@ -28,11 +28,40 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
 import com.kazumi.port.ui.navigation.Routes
+
+/**
+ * 设置索引页分组行：默认带圆形图标底（对齐原版 SettingsCategoryTile 的 36dp
+ * secondaryContainer 圆形底 + 18dp 图标），其余参数透传 SettingClickRow。
+ */
+@Composable
+private fun SettingRow(
+    title: String,
+    subtitle: String? = null,
+    onClick: () -> Unit,
+    leading: ImageVector? = null,
+    trailingValue: String? = null,
+    enabled: Boolean = true,
+    topRadius: Dp = 4.dp,
+    bottomRadius: Dp = 4.dp
+) {
+    SettingClickRow(
+        title = title,
+        subtitle = subtitle,
+        onClick = onClick,
+        leading = leading,
+        trailingValue = trailingValue,
+        enabled = enabled,
+        topRadius = topRadius,
+        bottomRadius = bottomRadius,
+        iconBackground = true
+    )
+}
 
 /**
  * 设置索引页（对应原版 settings_page.dart 的四组菜单：播放 / 资源 / 应用 / 其他）
@@ -62,20 +91,20 @@ fun SettingsPage(navController: NavHostController) {
                 .verticalScroll(rememberScrollState())
         ) {
             SettingGroup("播放") {
-                SettingClickRow(
+                SettingRow(
                     title = "播放设置",
                     subtitle = "解码、渲染与播放行为",
                     leading = Icons.Filled.DisplaySettings,
                     topRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_PLAYER) }
                 )
-                SettingClickRow(
+                SettingRow(
                     title = "弹幕设置",
                     subtitle = "弹幕来源与显示效果",
                     leading = Icons.Filled.Subtitles,
                     onClick = { navController.navigate(Routes.SETTINGS_DANMAKU) }
                 )
-                SettingClickRow(
+                SettingRow(
                     title = "操作设置",
                     subtitle = "播放器按键映射",
                     leading = Icons.Filled.Keyboard,
@@ -85,14 +114,14 @@ fun SettingsPage(navController: NavHostController) {
             }
 
             SettingGroup("资源") {
-                SettingClickRow(
+                SettingRow(
                     title = "规则管理",
                     subtitle = "番剧资源规则",
                     leading = Icons.Filled.Extension,
                     topRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_PLUGIN) }
                 )
-                SettingClickRow(
+                SettingRow(
                     title = "下载设置",
                     subtitle = "并发数与弹幕缓存",
                     leading = Icons.Filled.Downloading,
@@ -102,26 +131,26 @@ fun SettingsPage(navController: NavHostController) {
             }
 
             SettingGroup("应用") {
-                SettingClickRow(
+                SettingRow(
                     title = "外观设置",
                     subtitle = "主题、配色与字体",
                     leading = Icons.Filled.Palette,
                     topRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_THEME) }
                 )
-                SettingClickRow(
+                SettingRow(
                     title = "界面设置",
                     subtitle = "启动、窗口行为与展示信息",
                     leading = Icons.Filled.Pages,
                     onClick = { navController.navigate(Routes.SETTINGS_INTERFACE) }
                 )
-                SettingClickRow(
+                SettingRow(
                     title = "同步设置",
                     subtitle = "追番状态与多设备同步",
                     leading = Icons.Filled.CloudSync,
                     onClick = { navController.navigate(Routes.SETTINGS_SYNC) }
                 )
-                SettingClickRow(
+                SettingRow(
                     title = "网络设置",
                     subtitle = "访问加速与代理",
                     leading = Icons.Filled.Language,
@@ -131,20 +160,20 @@ fun SettingsPage(navController: NavHostController) {
             }
 
             SettingGroup("其他") {
-                SettingClickRow(
+                SettingRow(
                     title = "更新设置",
                     subtitle = "规则更新",
                     leading = Icons.Filled.Update,
                     topRadius = 24.dp,
                     onClick = { navController.navigate(Routes.SETTINGS_UPDATE) }
                 )
-                SettingClickRow(
+                SettingRow(
                     title = "存储与日志",
                     subtitle = "图片缓存与错误日志",
                     leading = Icons.Filled.Storage,
                     onClick = { navController.navigate(Routes.SETTINGS_STORAGE) }
                 )
-                SettingClickRow(
+                SettingRow(
                     title = "关于",
                     subtitle = "版本与开源信息",
                     leading = Icons.Filled.Info,
