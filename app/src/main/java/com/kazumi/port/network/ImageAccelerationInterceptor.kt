@@ -183,8 +183,10 @@ class ImageAccelerationInterceptor(
 
     /**
      * ECH 下载与镜像兜底并发竞速：两通道同时发起，谁先成功用谁。
-     * - ECH 通道：8s 短超时（native 无内置超时，熔断黑洞 IP）——比原 15s 更早暴露，
-     *   避免慢通道独占；成功则写内存/磁盘缓存。
+     * - ECH 通道：25s 超时（对齐原版 EchTransport.timeout=30s 意图）。
+     *   首页个别大图封面（如 2.4MB）走 ECH+CF 前端 IP 需要 10~30s，8s 短超时
+     *   会提前放弃导致"个别图永远加载不出"（11-15 实测 513878 封面 2.4MB，
+     *   8s 超时必挂、原版 30s 能出）。成功则写内存/磁盘缓存。
      * - 镜像通道：原 tryMirrorFallback（每候选 6s）。
      * 全部失败时抛异常（由 Coil 显示占位/重试）。
      */
@@ -192,7 +194,7 @@ class ImageAccelerationInterceptor(
         coroutineScope {
             val echDeferred = async(Dispatchers.IO) {
                 try {
-                    val bytes = withTimeoutOrNull(8_000L) {
+                    val bytes = withTimeoutOrNull(25_000L) {
                         val echConfig = EchResolver.fetchEchConfig()
                         if (echConfig != null) {
                             EchHttpNative.loadSuspend(original, echConfig)
