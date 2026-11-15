@@ -12,7 +12,9 @@ import java.io.File
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -151,38 +153,11 @@ class ImageAccelerationInterceptor(
                     return chain.proceed(byteRequest(chain, original, cached))
                 }
 
-                // 3) ECH 下载：全程 15s 总超时兜底（native 无内置超时，熔断黑洞 IP，
-                //    避免单张图卡死拖累整个列表）。fetchEchConfig 在 IO 线程执行
-                //    （内部是同步 OkHttp 阻塞调用），60s 内复用缓存不重复打 DoH。
-                var echBytes: ByteArray? = null
-                try {
-                    echBytes = withTimeoutOrNull(15_000L) {
-                        withContext(Dispatchers.IO) {
-                            val echConfig = EchResolver.fetchEchConfig()
-                            if (echConfig != null) {
-                                EchHttpNative.loadSuspend(original, echConfig)
-                            } else {
-                                null
-                            }
-                        }
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    FileLogger.w("ImageAccel", "ech download error: ${e.message} | $original")
-                }
-                if (echBytes != null && echBytes.isNotEmpty()) {
-                    FileLogger.i("ImageAccel", "ech download OK bytes=${echBytes.size} for $original")
-                    cachePut(original, echBytes)
-                    writeEchFile(context, original, echBytes)
-                    return chain.proceed(byteRequest(chain, original, echBytes))
-                }
-
-                // 4) ECH 失败/超时/配置为空：降级镜像兜底（不裸抛 → 图片不因 ECH 不稳而全挂）
-                FileLogger.w("ImageAccel", "ech unavailable, fallback to mirror | $original")
-                val mirrorResult = tryMirrorFallback(chain, original)
-                if (mirrorResult != null) return mirrorResult
-                throw IllegalStateException("ECH 与镜像均失败: $original")
+                // 3+4) ECH 下载与镜像兜底【并发竞速】：谁先成功用谁（对齐 BangumiClient
+                //    mirror/direct race 思路）。原串行链路 ECH 单图最坏 15s 失败后才轮到
+                //    镜像再 6s×N，冷启动无缓存时首屏十几张图被整体拖死（用户反馈"列表先出、
+                //    图片很久才出、有缓存秒出"）。竞速后单图最坏约 8~12s，且两通道同时进行。
+                return raceEchMirror(chain, original, context)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -205,6 +180,78 @@ class ImageAccelerationInterceptor(
             throw e
         }
     }
+
+    /**
+     * ECH 下载与镜像兜底并发竞速：两通道同时发起，谁先成功用谁。
+     * - ECH 通道：8s 短超时（native 无内置超时，熔断黑洞 IP）——比原 15s 更早暴露，
+     *   避免慢通道独占；成功则写内存/磁盘缓存。
+     * - 镜像通道：原 tryMirrorFallback（每候选 6s）。
+     * 全部失败时抛异常（由 Coil 显示占位/重试）。
+     */
+    private suspend fun raceEchMirror(chain: Chain, original: String, context: Context): ImageResult =
+        coroutineScope {
+            val echDeferred = async(Dispatchers.IO) {
+                try {
+                    val bytes = withTimeoutOrNull(8_000L) {
+                        val echConfig = EchResolver.fetchEchConfig()
+                        if (echConfig != null) {
+                            EchHttpNative.loadSuspend(original, echConfig)
+                        } else {
+                            null
+                        }
+                    }
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        FileLogger.i("ImageAccel", "ech download OK bytes=${bytes.size} for $original")
+                        cachePut(original, bytes)
+                        writeEchFile(context, original, bytes)
+                        chain.proceed(byteRequest(chain, original, bytes))
+                    } else {
+                        null
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    FileLogger.w("ImageAccel", "ech download error: ${e.message} | $original")
+                    null
+                }
+            }
+            val mirrorDeferred = async(Dispatchers.IO) {
+                try {
+                    tryMirrorFallback(chain, original)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    FileLogger.w("ImageAccel", "mirror error: ${e.message} | $original")
+                    null
+                }
+            }
+            // 轮询等待，任一成功即返回；两路都结束时才抛错
+            var lastError: Exception? = null
+            try {
+                while (true) {
+                    val echDone = echDeferred.isCompleted
+                    val mirrorDone = mirrorDeferred.isCompleted
+                    if (echDone) {
+                        val r = echDeferred.await()
+                        if (r != null) return@coroutineScope r
+                    }
+                    if (mirrorDone) {
+                        val r = mirrorDeferred.await()
+                        if (r != null) return@coroutineScope r
+                    }
+                    if (echDone && mirrorDone) break
+                    delay(5)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                lastError = e
+            } finally {
+                echDeferred.cancel()
+                mirrorDeferred.cancel()
+            }
+            throw lastError ?: IllegalStateException("ECH 与镜像均失败: $original")
+        }
 
     /**
      * 按序尝试镜像候选（corsproxy/wsrv/weserv），任一成功即返回；全部失败返回 null。
