@@ -252,7 +252,25 @@ class ImageAccelerationInterceptor(
                 echDeferred.cancel()
                 mirrorDeferred.cancel()
             }
-            throw lastError ?: IllegalStateException("ECH 与镜像均失败: $original")
+
+            // 4) ECH + 镜像全部失败：最后尝试直连原始地址（可能站内可达）。
+            //    修复 11-15 实测：corsproxy 已要求 API key（返回营销页 HTML 非图片）、
+            //    wsrv/weserv 在本网络连接失败 —— 镜像通道近乎全废；此时若 ECH 也失败
+            //    （如 2.4MB 大图 ECH native 下载失败），不直连兜底就会让该图永久加载
+            //    失败（"只有赛博朋克边缘行者 2 这张图死活加载不出"的根因）。
+            //    对齐 mirror 模式已有的直连兜底语义（all mirror candidates failed, try original）。
+            FileLogger.w("ImageAccel", "ECH与镜像均失败，尝试直连 | $original")
+            try {
+                val direct = withTimeoutOrNull(8_000L) { chain.proceed(chain.request) }
+                if (direct is SuccessResult) return@coroutineScope direct
+                FileLogger.w("ImageAccel", "直连 non-success: ${direct?.javaClass?.simpleName} | $original")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                FileLogger.w("ImageAccel", "直连失败: ${e.message} | $original")
+                lastError = e
+            }
+            throw lastError ?: IllegalStateException("ECH、镜像与直连均失败: $original")
         }
 
     /**
@@ -264,8 +282,10 @@ class ImageAccelerationInterceptor(
         val candidates = BangumiImageUrlRewriter.rewriteCandidates(original)
         FileLogger.d("ImageAccel", "mirror candidates: $candidates")
         var lastError: Exception? = null
-        for (candidate in candidates) {
-            if (candidate == original) continue // 跳过原始地址，代理候选优先
+        // 先试代理候选（原始地址放最后，仅当全部镜像失败时兜底直连——因为候选首项
+        // 恒为原始地址，若其直接可达就不会走到这里；走到这里说明镜像更重要）。
+        val ordered = candidates.filter { it != original } + original
+        for (candidate in ordered) {
             try {
                 val result = withTimeoutOrNull(6_000L) {
                     chain.proceed(chain.request.newBuilder().data(candidate).build())
