@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -63,8 +66,12 @@ import com.kazumi.port.ui.components.LoadingState
 import com.kazumi.port.ui.components.rememberPressScale
 import com.kazumi.port.ui.navigation.Routes
 import com.kazumi.port.util.FileLogger
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import com.kazumi.port.ui.components.KazumiLoadingIndicator
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.rememberSharedContentState
 
 /** 原版 defaultAnimeTags 标签列表（热门番组 + 15 个标签） */
 private val animeTags = listOf(
@@ -94,9 +101,18 @@ private fun parseBangumiList(json: String): List<BangumiItem> = try {
  * 顶栏大标题 + 标签下拉菜单 + 搜索/历史按钮
  * 直连超时自动回退 Kazumi 镜像
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class,
+    ExperimentalSharedTransitionApi::class
+)
 @Composable
-fun PopularPage(navController: NavHostController) {
+fun PopularPage(
+    navController: NavHostController,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
+) {
+    with(sharedTransitionScope) {
     val showRating = com.kazumi.port.ui.components.rememberShowRating()
     // 用 rememberSaveable 保存列表数据：主 tab 切走（推荐→设置→推荐）时，
     // NavHost restoreState 恢复页面，数据/标签不丢，不再重新 fetch + 重载图片。
@@ -231,14 +247,20 @@ fun PopularPage(navController: NavHostController) {
         }
     }
 
-    // 滚动到底部自动加载更多
-    LaunchedEffect(gridState) {
-        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
-            .collect { lastVisible ->
-                if (lastVisible != null && lastVisible >= bangumiList.size - 3) {
-                    loadMore()
-                }
-            }
+    // 滚动到底部自动加载更多（对齐原版 scrollListener：pixels >= maxScrollExtent - 200 才触发）。
+    // 之前用「最后可见项 index >= size-3」判定，3 列网格下一屏只差 1 行就会触发，
+    // 表现为"随便往下划两下加载条就亮一次"——现在改成真正触底（距内容底部 ≤200px）才加载。
+    LaunchedEffect(gridState, bangumiList.size) {
+        snapshotFlow {
+            val info = gridState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull() ?: return@snapshotFlow false
+            // 距底部剩余高度 = 最后可见项底部到 viewport 底部的距离 + 其后的项数 × 项高（网格近似等高）
+            val remaining = info.viewportEndOffset +
+                (info.totalItemsCount - last.index - 1).coerceAtLeast(0) * last.size
+            remaining <= 200f
+        }
+            .distinctUntilChanged()
+            .collect { atBottom -> if (atBottom) loadMore() }
     }
 
     // 回顶 FAB（对齐原版 PopularPage floatingActionButton: scroll to top）
@@ -310,12 +332,21 @@ fun PopularPage(navController: NavHostController) {
                 }
             }
 
-            // 加载更多顶部线性条（对齐原版 popular Scaffold LinearProgressIndicator）
-            androidx.compose.animation.AnimatedVisibility(
-                visible = isLoadingMore,
-                modifier = Modifier.fillMaxWidth()
+            // 加载更多顶部线性条（对齐原版 popular Scaffold LinearProgressIndicator：
+            // 固定 4dp 高度 + AnimatedOpacity 淡入淡出，出现/消失不顶动布局。
+            // 之前用 AnimatedVisibility（visible=false 直接移除），每次加载条出现都会把
+            // 下方列表往下挤 4dp、消失又弹回，配合"滑两下就触发"表现为加载条一直跳。）
+            Box(
+                modifier = Modifier.fillMaxWidth().height(4.dp),
+                contentAlignment = Alignment.Center
             ) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(4.dp))
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = isLoadingMore,
+                    enter = fadeIn(tween(300)),
+                    exit = fadeOut(tween(300))
+                ) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(4.dp))
+                }
             }
             // 下拉刷新：对列表整体生效（空态/加载态包可滚动容器，保证手势可用）
             // 显式指定 indicator（containerColor/color 用主题色而非默认透明），
@@ -378,6 +409,12 @@ fun PopularPage(navController: NavHostController) {
                                 showRating = showRating,
                                 item = item,
                                 modifier = Modifier.animateItem(),
+                                // 封面共享元素动画（对齐原版 Hero tag=bangumiItem.id）：
+                                // key = "cover_{id}"，详情页封面用同一 key 即可跨页平移动画
+                                coverModifier = Modifier.sharedElement(
+                                    state = rememberSharedContentState(key = "cover_${item.id}"),
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                ),
                                 onClick = {
                                     navController.navigate(
                                         Routes.detail(bangumiId = item.id)
@@ -385,31 +422,20 @@ fun PopularPage(navController: NavHostController) {
                                 }
                             )
                         }
-                        item {
-                            if (isLoadingMore) {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    KazumiLoadingIndicator()
-                                }
-                            }
-                        }
                     }
                     }
                 }
             }
         }
-            // 回顶 FAB（列表较长时显示）
-            if (bangumiList.size > 6) {
-                FloatingActionButton(
-                    onClick = { scope.launch { gridState.animateScrollToItem(0) } },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
-                ) {
-                    Icon(Icons.Filled.ArrowUpward, contentDescription = "回顶")
-                }
+            // 回顶 FAB（对齐原版 PopularPage 无条件显示 floatingActionButton）
+            FloatingActionButton(
+                onClick = { scope.launch { gridState.animateScrollToItem(0) } },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+            ) {
+                Icon(Icons.Filled.ArrowUpward, contentDescription = "回顶")
             }
         }
         }
+    }
     }
 }
