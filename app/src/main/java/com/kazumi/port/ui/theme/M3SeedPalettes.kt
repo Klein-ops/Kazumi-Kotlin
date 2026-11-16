@@ -585,29 +585,29 @@ object M3SeedPalettes {
     surfaceTint = Color(0xFFFFFFB5A0),
   )
 
-  fun light(seed: Color): ColorScheme = when (seed.value.toLong()) {
-    0xFF4CAF50L -> DEFAULT_LIGHT
-    0xFF009688L -> TEAL_LIGHT
-    0xFF2196F3L -> BLUE_LIGHT
-    0xFF3F51B5L -> INDIGO_LIGHT
-    0xFF6750A4L -> VIOLET_LIGHT
-    0xFFE91E63L -> PINK_LIGHT
-    0xFFFFEB3BL -> YELLOW_LIGHT
-    0xFFFF9800L -> ORANGE_LIGHT
-    0xFFFF5722L -> DEEP_ORANGE_LIGHT
+  fun light(seed: Color): ColorScheme = when {
+    seed == KazumiThemeColors.DEFAULT -> DEFAULT_LIGHT
+    seed == KazumiThemeColors.TEAL -> TEAL_LIGHT
+    seed == KazumiThemeColors.BLUE -> BLUE_LIGHT
+    seed == KazumiThemeColors.INDIGO -> INDIGO_LIGHT
+    seed == KazumiThemeColors.VIOLET -> VIOLET_LIGHT
+    seed == KazumiThemeColors.PINK -> PINK_LIGHT
+    seed == KazumiThemeColors.YELLOW -> YELLOW_LIGHT
+    seed == KazumiThemeColors.ORANGE -> ORANGE_LIGHT
+    seed == KazumiThemeColors.DEEP_ORANGE -> DEEP_ORANGE_LIGHT
     else -> DEFAULT_LIGHT
   }
 
-  fun dark(seed: Color): ColorScheme = when (seed.value.toLong()) {
-    0xFF4CAF50L -> DEFAULT_DARK
-    0xFF009688L -> TEAL_DARK
-    0xFF2196F3L -> BLUE_DARK
-    0xFF3F51B5L -> INDIGO_DARK
-    0xFF6750A4L -> VIOLET_DARK
-    0xFFE91E63L -> PINK_DARK
-    0xFFFFEB3BL -> YELLOW_DARK
-    0xFFFF9800L -> ORANGE_DARK
-    0xFFFF5722L -> DEEP_ORANGE_DARK
+  fun dark(seed: Color): ColorScheme = when {
+    seed == KazumiThemeColors.DEFAULT -> DEFAULT_DARK
+    seed == KazumiThemeColors.TEAL -> TEAL_DARK
+    seed == KazumiThemeColors.BLUE -> BLUE_DARK
+    seed == KazumiThemeColors.INDIGO -> INDIGO_DARK
+    seed == KazumiThemeColors.VIOLET -> VIOLET_DARK
+    seed == KazumiThemeColors.PINK -> PINK_DARK
+    seed == KazumiThemeColors.YELLOW -> YELLOW_DARK
+    seed == KazumiThemeColors.ORANGE -> ORANGE_DARK
+    seed == KazumiThemeColors.DEEP_ORANGE -> DEEP_ORANGE_DARK
     else -> DEFAULT_DARK
   }
 }
