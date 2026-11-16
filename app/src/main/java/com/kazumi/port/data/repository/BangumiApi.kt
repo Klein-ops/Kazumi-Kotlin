@@ -307,13 +307,30 @@ class BangumiApi(
      * 旧实现 next+v0 双请求并发 + "ratingScore>0 或 airDate 非空才认可"的字段完整判断，
      * 在 next 已返回但字段缺评分/放送日时会死等 v0（镜像 v0 404 / 直连 DNS 污染 8s 超时），
      * 1 个请求 4s 的事被拖成 8~12s+ → 页面永久转圈。改为单请求后恒为一次往返。
+     *
+     * 2026-11-16 新增 5 分钟 TTL 内存缓存（对齐 PluginRepository.searchBangumi 的 10 分钟
+     * 缓存思路）：详情信息低频变更（评分/简介/放送日），短窗口内重复进入同一番剧
+     * （列表→详情→返回→再进）时直接命中缓存，省一次网络 round trip → 详情页秒开。
+     * 收藏/评分等用户操作会改变详情部分字段，5 分钟窗口足够短，不影响一致性。
      */
+    private val infoCache = object : LinkedHashMap<Int, Pair<Long, BangumiItem?>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Pair<Long, BangumiItem?>>?): Boolean =
+            size > 64
+    }
+    private val INFO_CACHE_TTL_MS = 5 * 60 * 1000L
+
     suspend fun getBangumiInfoByID(id: Int): BangumiItem? {
+        val now = System.currentTimeMillis()
+        synchronized(infoCache) {
+            infoCache[id]?.let { (at, item) ->
+                if (now - at < INFO_CACHE_TTL_MS) return item
+            }
+        }
         val url = ApiEndpoints.formatUrl(
             ApiEndpoints.BANGUMI_API_NEXT_DOMAIN + ApiEndpoints.BANGUMI_INFO_BY_ID_NEXT,
             listOf(id)
         )
-        return try {
+        val result = try {
             val jsonData = client.get(url)
             if (jsonData.isJsonObject) BangumiItem.fromJson(jsonData.asJsonObject) else null
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -321,6 +338,13 @@ class BangumiApi(
         } catch (e: Exception) {
             null
         }
+        // 只缓存成功结果；失败不缓存（下次重试），避免把临时网络故障"冻"5 分钟
+        if (result != null) {
+            synchronized(infoCache) {
+                infoCache[id] = now to result
+            }
+        }
+        return result
     }
 
     /**

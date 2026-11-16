@@ -86,11 +86,29 @@ class ImageAccelerationInterceptor(
         synchronized(echCacheLock) { echCache[url] = bytes }
     }
 
-    /** 把字节作为 data 交给 Coil 解码链路；钉住 memoryCacheKey/diskCacheKey=原始 URL */
+    /**
+     * 把字节作为 data 交给 Coil 解码链路。
+     *
+     * 缓存 key 设计（2026-11-16 修复封面被模糊图污染的根因）：
+     * - Coil 默认 memoryCacheKey 会纳入 request.transformations 的 cacheKey 与 size，
+     *   但 ECH 拦截器把字节塞进 data 后，Coil 引擎的默认 key 基于 bytes 计算不稳定，
+     *   因此这里显式构造【复合 key】。关键：memoryCacheKey 必须带上变换维度——
+     *   Coil 的 MemoryCacheService.newCacheKey 一旦命中显式 memoryCacheKey 就直接返回、
+     *   跳过 transformations 维度。若钉死为原始 URL，详情页背景（URL+RenderScriptBlur）
+     *   与封面小图（同一 URL 无变换）就会共用同一内存缓存条目，互相污染：
+     *   先进详情页 → 封面拿到模糊位图；先进列表 → 背景拿到清晰位图（模糊依赖叠加层）。
+     *   复合 key 语义与 Coil 默认计算一致：URL + 变换 cacheKey。
+     * - diskCacheKey 保留原始 URL：磁盘缓存存的是解码前的字节，与变换无关，天然可复用。
+     */
     private fun byteRequest(chain: Chain, original: String, bytes: ByteArray) =
         chain.request.newBuilder()
             .data(bytes)
-            .memoryCacheKey(original)
+            .memoryCacheKey(
+                buildString {
+                    append(original)
+                    chain.request.transformations.forEach { t -> append('|').append(t.cacheKey) }
+                }
+            )
             .diskCacheKey(original)
             .build()
 

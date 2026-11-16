@@ -75,7 +75,6 @@ fun MyPage(navController: NavHostController) {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
         ) {
             PageHeader(
                 title = "我的",
@@ -92,16 +91,17 @@ fun MyPage(navController: NavHostController) {
                 }
             )
 
-            // 观看统计
+            // 观看统计（原版 SingleChildScrollView 统一 16dp 边距，这里单独补）
             WatchStatsPanel(
                 bangumiCount = bangumiCount,
-                episodeCount = episodeCount
+                episodeCount = episodeCount,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
 
             Spacer(Modifier.height(12.dp))
 
-            // 历史 / 下载 入口
-            Row(modifier = Modifier.fillMaxWidth()) {
+            // 历史 / 下载 入口（原版统一 16dp 边距，这里单独补）
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 ToolTile(
                     icon = Icons.Filled.History,
                     title = "历史记录",
@@ -184,12 +184,13 @@ fun MyPage(navController: NavHostController) {
 @Composable
 private fun WatchStatsPanel(
     bangumiCount: Int,
-    episodeCount: Int
+    episodeCount: Int,
+    modifier: Modifier = Modifier
 ) {
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer,
         shape = RoundedCornerShape(28.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
