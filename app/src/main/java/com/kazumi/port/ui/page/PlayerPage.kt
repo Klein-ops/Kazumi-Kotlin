@@ -344,7 +344,11 @@ fun PlayerPage(
     // HUD 音量初始值 = 系统媒体音量（STREAM_MUSIC），音量完全由系统控制
     LaunchedEffect(Unit) {
         hudVolume = playerController.systemVolume() * 100f
-        hudBrightness = panelState.brightness.toFloat()
+        // 亮度初始值 = 当前实际生效的屏幕亮度（窗口属性或系统亮度），
+        // 不能取 panelState.brightness：那是"上次手势的记忆值"，默认 0。
+        // 若用户系统亮度 100% 而记忆值是 0，HUD 初始化会显示 0%，且手势基准也会错
+        // → 从底部轻轻上滑一点就掉到最低亮度（用户反馈的"100 亮度轻滑变最低"）。
+        hudBrightness = currentScreenBrightness(context)
     }
 
     // 面板
@@ -1009,11 +1013,12 @@ fun PlayerPage(
                 },
                 onVerticalDragStart = {
                     // 手势起点：锁定基准值并重置累计位移。
-                    // 音量基准 = 系统当前媒体音量（实时）；亮度基准 = panelState.brightness
-                    // （实际亮度状态的唯一来源，不是 hudBrightness 本地记忆值）。
+                    // 音量基准 = 系统当前媒体音量（实时）；亮度基准 = 当前实际生效的屏幕亮度，
+                    // 不能取 panelState.brightness（上次手势记忆值，默认 0）——否则系统 100% 亮度时
+                    // 基准却是 0，轻滑一下 delta>0 → 亮度 0+eps ≈ 最低（用户反馈"100 亮度轻滑变最低"）。
                     if (!locked && brightnessVolumeGesture) {
                         verticalDragBaseVolume = playerController.systemVolume() * 100f
-                        verticalDragBaseBrightness = panelState.brightness.toFloat()
+                        verticalDragBaseBrightness = currentScreenBrightness(context)
                         verticalDragAccum = 0f
                     }
                 },
@@ -1740,6 +1745,28 @@ private fun setScreenBrightness(context: android.content.Context, value: Float) 
     val lp = window.attributes
     lp.screenBrightness = value.coerceIn(0.05f, 1f)
     window.attributes = lp
+}
+
+/**
+ * 读取当前实际生效的屏幕亮度（0..1）：
+ * 1) 若本 Activity 窗口已设置过 screenBrightness（>0 表示窗口级覆盖），取窗口值；
+ * 2) 否则读系统亮度 Settings.System.SCREEN_BRIGHTNESS（0..255）归一化到 0..1。
+ * 用于手势亮度基准与 HUD 初始化——绝不能取面板记忆值（默认 0），否则系统 100% 亮度
+ * 时基准为 0，轻滑即掉到最低（用户反馈的亮度 bug 根因）。
+ */
+private fun currentScreenBrightness(context: android.content.Context): Float {
+    val activity = context.findActivity()
+    val windowValue = activity?.window?.attributes?.screenBrightness
+    if (windowValue != null && windowValue >= 0f) return windowValue.coerceIn(0f, 1f)
+    return try {
+        val sys = android.provider.Settings.System.getInt(
+            context.contentResolver,
+            android.provider.Settings.System.SCREEN_BRIGHTNESS
+        )
+        (sys.coerceIn(0, 255) / 255f).coerceIn(0f, 1f)
+    } catch (e: Exception) {
+        0.5f
+    }
 }
 
 /** 从 PlayerView 截取当前帧（TextureView.bitmap） */
