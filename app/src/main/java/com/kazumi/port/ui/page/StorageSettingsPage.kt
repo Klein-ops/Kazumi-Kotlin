@@ -48,10 +48,14 @@ fun StorageSettingsPage(navController: NavHostController) {
     fun refreshCacheSize() {
         scope.launch {
             val size = withContext(Dispatchers.IO) {
-                val cacheDir = context.cacheDir.resolve("coil_disk")
-                if (cacheDir.exists()) {
-                    cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-                } else 0L
+                fun dirSize(dir: java.io.File): Long =
+                    if (dir.exists()) dir.walkTopDown().filter { it.isFile }.sumOf { it.length() } else 0L
+                // 两个图片缓存目录都要统计：
+                // - coil_disk：Coil 官方磁盘缓存（直连/镜像模式的图片命中这里）
+                // - ech_cache：ECH 图片加速拦截器自管磁盘缓存（默认 ECH 模式的图片真正落盘处）
+                //   此前只统计 coil_disk → ECH 模式下永远显示 0.00 MB（用户反馈"缓存永远统计不出来"）
+                dirSize(context.cacheDir.resolve("coil_disk")) +
+                    dirSize(context.cacheDir.resolve("ech_cache"))
             }
             cacheSize = if (size > 0) {
                 val mb = size / 1024.0 / 1024.0
@@ -85,6 +89,13 @@ fun StorageSettingsPage(navController: NavHostController) {
                             withContext(Dispatchers.IO) {
                                 context.imageLoader.diskCache?.clear()
                                 context.imageLoader.memoryCache?.clear()
+                                // ECH 自管磁盘缓存（默认 ECH 模式的图片落盘处）：
+                                // Coil 官方 diskCache.clear() 清不到这里，必须手动清，
+                                // 否则"清除图片缓存"后 ECH 缓存仍占空间（用户反馈"清除缓存不确定有没有用"）
+                                runCatching {
+                                    val echDir = context.cacheDir.resolve("ech_cache")
+                                    if (echDir.exists()) echDir.listFiles()?.forEach { it.deleteRecursively() }
+                                }
                             }
                             clearing = false
                             refreshCacheSize()
