@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
@@ -38,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -149,6 +151,12 @@ fun PopularPage(
      *   只有直连模式才走官方 trending / 榜单搜索。
      * - 非镜像模式：走官方 trending（无标签）/ 榜单搜索（有标签）。
      */
+    // 下拉刷新失败提示（区别于 isLoading/isTimeout：刷新失败时保留旧列表 + 顶部 Snackbar，
+    // 不整页清空显示"加载超时"——用户反馈"提示连接失败后刷新永远刷不出来，大退重开才好"的根因：
+    // 旧逻辑刷新拿到空列表即置 isTimeout=true 清空 UI，且失败被底层吞成空列表，无法区分"真没数据"和"加载失败"）
+    var refreshFailed by remember { mutableStateOf(false) }
+    var refreshErrorMsg by remember { mutableStateOf("") }
+
     suspend fun fetchPage(offset: Int, tag: String, limit: Int = 24): List<BangumiItem> {
         // 不设外层 withTimeoutOrNull：底层 OkHttp 已配 connect/read 12s + callTimeout 20s +
         // retryOnConnectionFailure，BangumiClient 内部还会镜像/直连并发 race（谁先成功用谁）。
@@ -182,6 +190,8 @@ fun PopularPage(
     }
 
     // 下拉刷新：重新拉第一页，保留旧列表直到新数据就绪（避免整页白屏）
+    // 2026-11-17 修复"刷新永远刷不出来"：底层失败现在会抛异常（不再吞成空列表），
+    // 刷新失败时保留旧列表 + 置 refreshFailed，由 Snackbar 提示用户，而不是清空列表显示空态。
     suspend fun refresh() {
         if (isRefreshing) return
         isRefreshing = true
@@ -189,11 +199,16 @@ fun PopularPage(
             val result = fetchPage(offset = 0, tag = currentTag)
             bangumiListJson = result.toJsonArrayString()
             isTimeout = result.isEmpty()
+            refreshFailed = false
+            refreshErrorMsg = ""
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
             FileLogger.w("PopularPage", "下拉刷新失败: ${e.message}")
-            isTimeout = true
+            // 保留旧列表（不清空 bangumiListJson），提示用户稍后重试
+            refreshFailed = true
+            refreshErrorMsg = e.message ?: "连接失败"
+            isTimeout = false
         } finally {
             isRefreshing = false
         }
@@ -205,6 +220,14 @@ fun PopularPage(
             fetchFirstPage(currentTag)
         } else {
             isLoading = false
+        }
+    }
+    // 刷新失败提示条自动消失：3s 后复位，避免常驻遮挡
+    LaunchedEffect(refreshFailed) {
+        if (refreshFailed) {
+            kotlinx.coroutines.delay(3_000)
+            refreshFailed = false
+            refreshErrorMsg = ""
         }
     }
 
@@ -346,6 +369,41 @@ fun PopularPage(
                     exit = fadeOut(tween(300))
                 ) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(4.dp))
+                }
+            }
+            // 下拉刷新失败提示条：保留旧列表 + 顶部横幅提示（对齐原版"刷新失败仍保留数据"）。
+            // 自动 3s 后消失，不阻塞下拉重试。
+            androidx.compose.animation.AnimatedVisibility(
+                visible = refreshFailed,
+                enter = fadeIn(tween(200)) + androidx.compose.animation.expandVertically(tween(200)),
+                exit = fadeOut(tween(200)) + androidx.compose.animation.shrinkVertically(tween(200))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.errorContainer,
+                            androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)
+                        )
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Error,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "刷新失败：${refreshErrorMsg.ifBlank { "请检查网络" }}（旧数据已保留）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { scope.launch { refresh() } }) {
+                        Text("重试", color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
                 }
             }
             // 下拉刷新：对列表整体生效（空态/加载态包可滚动容器，保证手势可用）

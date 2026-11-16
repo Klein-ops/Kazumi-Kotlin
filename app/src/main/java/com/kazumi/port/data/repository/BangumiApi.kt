@@ -144,8 +144,14 @@ class BangumiApi(
                     }
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            // 忽略
+            // 2026-11-17：不再吞异常。此前网络失败被静默转成"空列表"，首页刷新拿到
+            // 空列表会误判 isTimeout=true → 清空旧列表显示"加载超时"，且刷新永远刷不出来。
+            // 失败必须抛给调用方（PopularPage.refresh 捕获后保留旧列表），
+            // 由 UI 层决定提示与重试，而不是伪装成"当天无数据"。
+            throw e
         }
         return bangumiList
     }
@@ -178,8 +184,11 @@ class BangumiApi(
                     }
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            // 忽略
+            // 2026-11-17：镜像榜单网络失败不再吞成空列表（见 getBangumiList 注释）。
+            throw e
         }
         return bangumiList
     }
@@ -209,8 +218,11 @@ class BangumiApi(
                     }
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            // 忽略
+            // 2026-11-17：官方趋势网络失败不再吞成空列表（见 getBangumiList 注释）。
+            throw e
         }
         return bangumiList
     }
