@@ -278,7 +278,7 @@ fun CollectPage(navController: NavHostController) {
                                 item = collected.bangumiItem,
                                 modifier = Modifier.animateItem(),
                                 onClick = {
-                                    navController.navigate(Routes.detail(collected.bangumiItem.id))
+                                    navController.navigate(Routes.detail(collected.bangumiItem.id, coverUrl = collected.bangumiItem.coverUrl()))
                                 }
                             )
                         }
@@ -306,7 +306,7 @@ fun CollectPage(navController: NavHostController) {
                                         interactionSource = press.interactionSource,
                                         indication = LocalIndication.current,
                                         onClick = {
-                                            navController.navigate(Routes.detail(item.id))
+                                            navController.navigate(Routes.detail(item.id, coverUrl = item.coverUrl()))
                                         }
                                     )
                                     .padding(vertical = 8.dp),

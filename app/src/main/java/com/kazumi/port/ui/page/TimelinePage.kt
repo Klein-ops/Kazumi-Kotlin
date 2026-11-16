@@ -186,7 +186,7 @@ fun TimelinePage(navController: NavHostController) {
                             showRating = showRating,
                             item = item,
                             modifier = Modifier.animateItem(),
-                            onClick = { navController.navigate(Routes.detail(item.id)) }
+                            onClick = { navController.navigate(Routes.detail(item.id, coverUrl = item.coverUrl())) }
                         )
                     }
                 }

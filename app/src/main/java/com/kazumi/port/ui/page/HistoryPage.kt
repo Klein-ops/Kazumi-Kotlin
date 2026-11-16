@@ -215,7 +215,8 @@ fun HistoryPage(navController: NavHostController) {
                                     Routes.detail(
                                         bangumiId = history.bangumiItem.id,
                                         pluginName = history.adapterName,
-                                        src = history.lastSrc
+                                        src = history.lastSrc,
+                                        coverUrl = history.bangumiItem.coverUrl()
                                     )
                                 )
                             },

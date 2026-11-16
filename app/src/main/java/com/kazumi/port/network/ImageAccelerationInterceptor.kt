@@ -10,11 +10,14 @@ import coil.request.SuccessResult
 import com.kazumi.port.util.FileLogger
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -48,6 +51,64 @@ class ImageAccelerationInterceptor(
     /** 自管磁盘缓存目录：全部 ECH 下载结果真正落盘在这里（cacheDir/ech_cache） */
     private fun echDir(context: Context): File =
         File(context.cacheDir, "ech_cache").apply { mkdirs() }
+
+    /**
+     * 进行中 ECH 下载去重（2026-11-16 新增，修复首屏同一张图并发下载 N 次）：
+     * 详情页背景与封面小图会同时请求同一 URL，拦截器里两路都 miss 缓存后各自
+     * 走全套 ECH 下载 + 镜像竞速（日志实测同一 URL 并发 2 路、各等 7s 才出一路）。
+     * 这里把"同 URL 的下载"收敛为一个共享 Deferred：第一个请求发起下载，
+     * 后续请求 await 同一个结果，下载完成后从表移除（结果已进 echCache 内存缓存，
+     * 后续请求直接命中缓存，不再重复下载）。
+     */
+    private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val inflight = ConcurrentHashMap<String, Deferred<ByteArray?>>()
+
+    /** 获取 ECH 字节：有缓存用缓存；无缓存则共享一次下载（并发去重） */
+    private suspend fun obtainEchBytes(context: Context, url: String): ByteArray? {
+        // 1) 自管磁盘缓存（落盘命中，进程冷启也能秒回）
+        readEchFile(context, url)?.let { return it }
+        // 2) 进程内内存缓存
+        cacheGet(url)?.let { return it }
+        // 3) 无缓存：走共享下载（并发同 URL 只下载一次）
+        val existing = inflight[url]
+        if (existing != null) {
+            FileLogger.d("ImageAccel", "inflight dedup HIT url=$url")
+            return existing.await()
+        }
+        val deferred = downloadScope.async(start = CoroutineStart.LAZY) {
+            try {
+                val bytes = withTimeoutOrNull(25_000L) {
+                    val echConfig = EchResolver.fetchEchConfig()
+                    if (echConfig != null) {
+                        EchHttpNative.loadSuspend(url, echConfig)
+                    } else null
+                }
+                if (bytes != null && bytes.isNotEmpty()) {
+                    FileLogger.i("ImageAccel", "ech download OK bytes=${bytes.size} for $url")
+                    cachePut(url, bytes)
+                    writeEchFile(context, url, bytes)
+                } else {
+                    FileLogger.w("ImageAccel", "ech download empty/failed for $url")
+                }
+                bytes
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                FileLogger.w("ImageAccel", "ech download error: ${e.message} | $url")
+                null
+            }
+        }
+        val winner = inflight.putIfAbsent(url, deferred) ?: deferred.also {
+            FileLogger.d("ImageAccel", "dedup: another download already inflight url=$url")
+        }
+        // start() 幂等：重复调用只生效一次；无论 winner 是谁都启动（若是已有任务则无副作用）
+        winner.start()
+        return try {
+            winner.await()
+        } finally {
+            inflight.remove(url, winner)
+        }
+    }
 
     /** 以 URL 的 SHA-1 作为文件名，避免非法字符且天然去重 */
     private fun echKey(url: String): String {
@@ -129,26 +190,13 @@ class ImageAccelerationInterceptor(
             return chain.proceed(chain.request)
         }
 
-        // ECH：先用原生 ECH 栈下载，成功直接解码返回；失败/超时降级镜像兜底。
-        // 对齐原版语义（ImageFileService ECH 失败 rethrow）但增加容错：
-        // 原版 ech_http 库在正常网络下稳定，因此失败即抛；移植版 JNI 桥在部分
-        // 网络下间歇性超时（2026-11-14 实测第1遍通第2遍全超时），若裸抛会导致
-        // 整页图片全挂。因此 ECH 失败后按序尝试镜像（corsproxy 实测可达），
-        // 镜像也全失败才抛错。
+        // ECH：统一走共享下载（自管磁盘缓存 → 内存缓存 → 并发去重下载），
+        // 失败后镜像兜底，最后直连兜底（对齐原版 ImageFileService 语义 + 容错）。
         if (mode == ImageAcceleration.ECH) {
             try {
                 val context = chain.request.context
 
-                // 0) 自管 ECH 磁盘缓存优先（真正落盘，第 2 次冷启动免全量重下）：
-                //    Coil 2.x 公共 DiskCache 无写入 API，ECH 下载结果必须由本拦截器
-                //    自己写 cacheDir/ech_cache/，否则进程一杀全丢 → 第 2 遍全挂。
-                val fileBytes = readEchFile(context, original)
-                if (fileBytes != null) {
-                    Log.i("ImageAccel", "ech file cache HIT url=$original len=${fileBytes.size}")
-                    return chain.proceed(byteRequest(chain, original, fileBytes))
-                }
-
-                // 1) Coil 官方磁盘缓存（历史兼容；自定义拦截器塞字节 Coil 不写盘，
+                // 0) Coil 官方磁盘缓存（历史兼容；自定义拦截器塞字节 Coil 不写盘，
                 //    此分支绝大多数情况 miss，保留只为兼容极少数的直连/镜像写入）
                 val diskCache = chain.request.context.imageLoader.diskCache
                 val diskHit = diskCache?.get(original)
@@ -164,18 +212,27 @@ class ImageAccelerationInterceptor(
                     }
                 }
 
-                // 2) 进程内 ECH 内存缓存命中：同一 URL 直接复用（列表滚动/详情页大图秒出，不碰 native）
-                val cached = cacheGet(original)
-                if (cached != null) {
-                    FileLogger.d("ImageAccel", "ech memory cache HIT url=$original len=${cached.size}")
-                    return chain.proceed(byteRequest(chain, original, cached))
+                // 1) ECH 共享下载（obtainEchBytes 内部：自管磁盘缓存 → 内存缓存 → 并发去重下载）
+                val bytes = obtainEchBytes(context, original)
+                if (bytes != null) {
+                    return chain.proceed(byteRequest(chain, original, bytes))
                 }
 
-                // 3+4) ECH 下载与镜像兜底【并发竞速】：谁先成功用谁（对齐 BangumiClient
-                //    mirror/direct race 思路）。原串行链路 ECH 单图最坏 15s 失败后才轮到
-                //    镜像再 6s×N，冷启动无缓存时首屏十几张图被整体拖死（用户反馈"列表先出、
-                //    图片很久才出、有缓存秒出"）。竞速后单图最坏约 8~12s，且两通道同时进行。
-                return raceEchMirror(chain, original, context)
+                // 2) ECH 失败 → 镜像兜底
+                FileLogger.w("ImageAccel", "ech 下载失败，尝试镜像兜底 | $original")
+                val mirrorResult = tryMirrorFallback(chain, original)
+                if (mirrorResult != null) return mirrorResult
+
+                // 3) 镜像也失败 → 最后直连原始地址（可能站内可达）
+                //    修复 11-15 实测：corsproxy 已要求 API key（返回营销页 HTML 非图片）、
+                //    wsrv/weserv 在本网络连接失败 —— 镜像通道近乎全废；此时若 ECH 也失败
+                //    （如 2.4MB 大图 ECH native 下载失败），不直连兜底就会让该图永久加载
+                //    失败（"只有赛博朋克边缘行者 2 这张图死活加载不出"的根因）。
+                FileLogger.w("ImageAccel", "ECH与镜像均失败，尝试直连 | $original")
+                val direct = withTimeoutOrNull(8_000L) { chain.proceed(chain.request) }
+                if (direct is SuccessResult) return direct
+                FileLogger.w("ImageAccel", "直连 non-success: ${direct?.javaClass?.simpleName} | $original")
+                throw IllegalStateException("ECH、镜像与直连均失败: $original")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -198,98 +255,6 @@ class ImageAccelerationInterceptor(
             throw e
         }
     }
-
-    /**
-     * ECH 下载与镜像兜底并发竞速：两通道同时发起，谁先成功用谁。
-     * - ECH 通道：25s 超时（对齐原版 EchTransport.timeout=30s 意图）。
-     *   首页个别大图封面（如 2.4MB）走 ECH+CF 前端 IP 需要 10~30s，8s 短超时
-     *   会提前放弃导致"个别图永远加载不出"（11-15 实测 513878 封面 2.4MB，
-     *   8s 超时必挂、原版 30s 能出）。成功则写内存/磁盘缓存。
-     * - 镜像通道：原 tryMirrorFallback（每候选 6s）。
-     * 全部失败时抛异常（由 Coil 显示占位/重试）。
-     */
-    private suspend fun raceEchMirror(chain: Chain, original: String, context: Context): ImageResult =
-        coroutineScope {
-            val echDeferred = async(Dispatchers.IO) {
-                try {
-                    val bytes = withTimeoutOrNull(25_000L) {
-                        val echConfig = EchResolver.fetchEchConfig()
-                        if (echConfig != null) {
-                            EchHttpNative.loadSuspend(original, echConfig)
-                        } else {
-                            null
-                        }
-                    }
-                    if (bytes != null && bytes.isNotEmpty()) {
-                        FileLogger.i("ImageAccel", "ech download OK bytes=${bytes.size} for $original")
-                        cachePut(original, bytes)
-                        writeEchFile(context, original, bytes)
-                        chain.proceed(byteRequest(chain, original, bytes))
-                    } else {
-                        null
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    FileLogger.w("ImageAccel", "ech download error: ${e.message} | $original")
-                    null
-                }
-            }
-            val mirrorDeferred = async(Dispatchers.IO) {
-                try {
-                    tryMirrorFallback(chain, original)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    FileLogger.w("ImageAccel", "mirror error: ${e.message} | $original")
-                    null
-                }
-            }
-            // 轮询等待，任一成功即返回；两路都结束时才抛错
-            var lastError: Exception? = null
-            try {
-                while (true) {
-                    val echDone = echDeferred.isCompleted
-                    val mirrorDone = mirrorDeferred.isCompleted
-                    if (echDone) {
-                        val r = echDeferred.await()
-                        if (r != null) return@coroutineScope r
-                    }
-                    if (mirrorDone) {
-                        val r = mirrorDeferred.await()
-                        if (r != null) return@coroutineScope r
-                    }
-                    if (echDone && mirrorDone) break
-                    delay(5)
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                lastError = e
-            } finally {
-                echDeferred.cancel()
-                mirrorDeferred.cancel()
-            }
-
-            // 4) ECH + 镜像全部失败：最后尝试直连原始地址（可能站内可达）。
-            //    修复 11-15 实测：corsproxy 已要求 API key（返回营销页 HTML 非图片）、
-            //    wsrv/weserv 在本网络连接失败 —— 镜像通道近乎全废；此时若 ECH 也失败
-            //    （如 2.4MB 大图 ECH native 下载失败），不直连兜底就会让该图永久加载
-            //    失败（"只有赛博朋克边缘行者 2 这张图死活加载不出"的根因）。
-            //    对齐 mirror 模式已有的直连兜底语义（all mirror candidates failed, try original）。
-            FileLogger.w("ImageAccel", "ECH与镜像均失败，尝试直连 | $original")
-            try {
-                val direct = withTimeoutOrNull(8_000L) { chain.proceed(chain.request) }
-                if (direct is SuccessResult) return@coroutineScope direct
-                FileLogger.w("ImageAccel", "直连 non-success: ${direct?.javaClass?.simpleName} | $original")
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                FileLogger.w("ImageAccel", "直连失败: ${e.message} | $original")
-                lastError = e
-            }
-            throw lastError ?: IllegalStateException("ECH、镜像与直连均失败: $original")
-        }
 
     /**
      * 按序尝试镜像候选（corsproxy/wsrv/weserv），任一成功即返回；全部失败返回 null。

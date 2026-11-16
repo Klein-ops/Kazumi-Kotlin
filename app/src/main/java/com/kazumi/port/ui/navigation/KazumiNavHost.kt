@@ -59,7 +59,7 @@ object Routes {
     const val HISTORY = "history"
     const val ONBOARDING = "onboarding"
     const val IMAGE_SEARCH = "search/image"
-    const val DETAIL = "detail/{bangumiId}?pluginName={pluginName}&src={src}"
+    const val DETAIL = "detail/{bangumiId}?pluginName={pluginName}&src={src}&coverUrl={coverUrl}"
     const val PLAYER = "player/{bangumiId}?pluginName={pluginName}&src={src}&episode={episode}&road={road}&isLocal={isLocal}&roadsJson={roadsJson}"
 
     /** 主界面底部导航的 tab 路由（切换时用轻微缩放+淡入淡出过渡） */
@@ -91,8 +91,8 @@ object Routes {
     const val SETTINGS_ABOUT_CREDITS = "settings/about/credits"
     const val ROUTE_ERROR = "route_error"
 
-    fun detail(bangumiId: Int, pluginName: String = "", src: String = ""): String =
-        "detail/$bangumiId?pluginName=$pluginName&src=$src"
+    fun detail(bangumiId: Int, pluginName: String = "", src: String = "", coverUrl: String = ""): String =
+        "detail/$bangumiId?pluginName=${android.net.Uri.encode(pluginName)}&src=${android.net.Uri.encode(src)}&coverUrl=${android.net.Uri.encode(coverUrl)}"
 
     fun player(
         bangumiId: Int,
@@ -226,6 +226,7 @@ fun KazumiNavHost(
                 bangumiId = entry.arguments?.getString("bangumiId")?.toIntOrNull() ?: 0,
                 pluginName = entry.arguments?.getString("pluginName").orEmpty(),
                 src = entry.arguments?.getString("src").orEmpty(),
+                coverUrl = entry.arguments?.getString("coverUrl").orEmpty(),
                 sharedTransitionScope = this@SharedTransitionLayout,
                 animatedVisibilityScope = this
             )

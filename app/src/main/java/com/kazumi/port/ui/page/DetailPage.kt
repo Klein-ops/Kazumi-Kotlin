@@ -135,6 +135,7 @@ fun DetailPage(
     bangumiId: Int,
     pluginName: String,
     src: String,
+    coverUrl: String = "",
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
@@ -552,6 +553,7 @@ fun DetailPage(
                             item {
                                 DetailHeader(
                                     item = item,
+                                    coverUrl = coverUrl,
                                     animatedVisibilityScope = animatedVisibilityScope
                                 )
                             }
@@ -616,7 +618,7 @@ fun DetailPage(
                                     onRelationClick = { relation ->
                                         if (relation.bangumiItem.id > 0) {
                                             navController.navigate(
-                                                Routes.detail(relation.bangumiItem.id)
+                                                Routes.detail(relation.bangumiItem.id, coverUrl = relation.bangumiItem.coverUrl())
                                             )
                                         }
                                     }
@@ -756,15 +758,19 @@ fun DetailPage(
 @Composable
 private fun SharedTransitionScope.DetailHeader(
     item: BangumiItem,
+    coverUrl: String = "",
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
+    // 封面 URL 优先用列表页导航带过来的（lain.bgm.tv 静态图，Coil 已缓存 → 秒出）；
+    // 从历史/收藏等无列表来源入口进入时为空，回退到详情接口返回的 URL。
+    val headerCoverUrl = coverUrl.ifBlank { item.coverUrl() }
     // 屏宽（dp）：原版评分透视柱状图仅宽屏显示（>= LayoutBreakpoint.compact['width'] = 600dp）
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     Box(modifier = Modifier.fillMaxWidth()) {
         // 背景毛玻璃层（对齐原版 info_page 的 _InfoHeaderBackground）：
         // 封面模糊 + 顶部白色渐隐 + 底部羽化到背景色，前景内容叠在上面
-        if (item.coverUrl().isNotBlank()) {
-            DetailHeaderBackground(imageUrl = item.coverUrl())
+        if (headerCoverUrl.isNotBlank()) {
+            DetailHeaderBackground(imageUrl = headerCoverUrl)
         }
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         // 大标题（对齐原版 info 页 headline 标题）
@@ -777,7 +783,7 @@ private fun SharedTransitionScope.DetailHeader(
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             AsyncImage(
-                model = item.coverUrl(),
+                model = headerCoverUrl,
                 contentDescription = item.displayName(),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

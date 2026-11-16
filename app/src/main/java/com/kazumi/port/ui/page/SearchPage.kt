@@ -325,7 +325,7 @@ fun SearchPage(navController: NavHostController) {
                             modifier = Modifier
                                 .animateItem()
                                 .fadeInOnFirstCompose(),
-                            onClick = { navController.navigate(Routes.detail(item.id)) }
+                            onClick = { navController.navigate(Routes.detail(item.id, coverUrl = item.coverUrl())) }
                         )
                     }
                 }

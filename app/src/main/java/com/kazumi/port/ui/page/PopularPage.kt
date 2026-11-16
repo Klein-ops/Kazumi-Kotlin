@@ -417,7 +417,7 @@ fun PopularPage(
                                 ),
                                 onClick = {
                                     navController.navigate(
-                                        Routes.detail(bangumiId = item.id)
+                                        Routes.detail(bangumiId = item.id, coverUrl = item.coverUrl())
                                     )
                                 }
                             )
