@@ -1,5 +1,5 @@
 package com.kazumi.port.ui.page
-
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -7,10 +7,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -18,6 +22,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
+import coil.compose.AsyncImage
+import androidx.compose.ui.text.style.TextOverflow
+import com.kazumi.port.ui.components.rememberPressScale
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -28,6 +38,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.rememberCoroutineScope
 import com.kazumi.port.data.repository.CollectType
@@ -182,10 +193,9 @@ fun TimelinePage(navController: NavHostController) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(dayItems, key = { it.id }) { item ->
-                        BangumiCard(
-                            showRating = showRating,
+                        TimelineBangumiCard(
                             item = item,
-                            modifier = Modifier.animateItem(),
+                            showRating = showRating,
                             onClick = { navController.navigate(Routes.detail(item.id, coverUrl = item.coverUrl())) }
                         )
                     }
@@ -330,6 +340,101 @@ private fun TimelineWeekSelector(
         }
     }
 }
+/**
+ * 时间表横排紧凑卡片（对齐原版 bangumi_timeline_card.dart）：
+ * 左封面（92x126 竖版）+ 右侧标题/评分/元信息，固定高度约 136dp。
+ * 旧实现复用竖排 BangumiCard（封面 0.65 宽高比 + 标题），在时间表网格里一张卡片
+ * 横向被拉满、纵向至少 200dp+，视觉上"一个番剧占一整个屏幕"（用户反馈），
+ * 且竖排卡封面大图多个并发时只有前两张能加载出来。横排卡体积小、并发少、秒出。
+ */
+@Composable
+private fun TimelineBangumiCard(
+    item: BangumiItem,
+    showRating: Boolean,
+    onClick: () -> Unit
+) {
+    val press = rememberPressScale()
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
+            .clip(RoundedCornerShape(28.dp))
+            .background(colors.surfaceContainerLow)
+            .clickable(
+                interactionSource = press.interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 左封面（固定竖版比例，对齐原版 BangumiTimelineCard 封面 92x126）
+        Box(
+            modifier = Modifier
+                .width(72.dp)
+                .height(100.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.surfaceVariant)
+        ) {
+            if (item.coverUrl().isNotBlank()) {
+                AsyncImage(
+                    model = item.coverUrl(),
+                    contentDescription = item.displayName(),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.displayName(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.W600,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                color = colors.onSurface
+            )
+            if (showRating || item.ratingScore > 0) {
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        text = String.format("%.1f", item.ratingScore),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.onSurfaceVariant
+                    )
+                    if (item.airDate.isNotEmpty()) {
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = item.airDate.take(4),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.onSurfaceVariant
+                        )
+                    }
+                }
+            } else if (item.airDate.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = item.airDate.take(4),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
 /** 季度中文标签 */
 private fun quarterLabel(q: Int): String = when (q) {
     1 -> "1"; 4 -> "4"; 7 -> "7"; 10 -> "10"; else -> "1"
