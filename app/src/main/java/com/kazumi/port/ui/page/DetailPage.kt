@@ -229,6 +229,10 @@ fun DetailPage(
     // 详情加载：整体切到 IO 线程执行网络/DB 密集操作，避免任何主线程阻塞
     // （LaunchedEffect 默认在 Main dispatcher，插件线路查询涉及同步 SQLite/OkHttp，
     //   若在主线程执行会导致整个页面冻结——时间表页无此逻辑所以不卡）
+    // 2026-11-17 优化：isLoading 只代表"详情 JSON 是否就绪"，详情 JSON 一到就置 false
+    // （立即渲染头部/封面/平移动画），线路搜索改为后台继续、每完成一个插件就渲染一个。
+    // 旧实现 isLoading 直到全部插件搜完（20s 兜底）才置 false，期间整页白屏转圈，
+    // 用户反馈"进入详情页一直在转圈"+"加载动画覆盖了封面平移动画"——根因即此。
     LaunchedEffect(bangumiId) {
         // 从播放器返回恢复的状态已含详情/线路，跳过重复加载
         if (bangumiJson.isNotEmpty() && roadsLoaded) return@LaunchedEffect
@@ -247,6 +251,8 @@ fun DetailPage(
                 if (item != null) {
                     bangumiJson = runCatching { item.toJson().toString() }.getOrDefault(bangumiJson)
                 }
+                // 详情 JSON 就绪即结束首屏加载：封面/标题/背景立即渲染，
+                // 线路搜索在下方协程继续，不阻塞页面显示。
                 isLoading = false
             }
             if (item != null) {
@@ -516,7 +522,15 @@ fun DetailPage(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    // 2026-11-17 对齐原版 SliverAppBar：background 透明，让头部背景模糊图
+                    // 贯穿到顶栏后面（原版 flexibleSpace 的 _InfoHeaderBackground 是 Positioned.fill
+                    // 铺满整个 SliverAppBar，AppBar 透明透出）。旧实现 containerColor=surface 不透明，
+                    // 顶栏与封面之间出现生硬分界（用户反馈"顶栏跟底下的封面没有任何过渡"）。
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                    // 标题/图标颜色：滚动后（surface 底色）用 onSurface，未滚动（背景图上）用白色
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
@@ -971,6 +985,23 @@ private fun DetailHeaderBackground(imageUrl: String) {
                 .fillMaxSize()
                 .then(
                     if (useRenderEffectBlur) Modifier.blur(20.dp) else Modifier
+                )
+        )
+        // 顶部渐隐遮罩（2026-11-17 新增，对齐原版 SliverAppBar 背景贯穿顶栏的过渡）：
+        // 顶栏改为透明后，头部背景从顶栏下方开始，顶部加一段 surface→透明的渐变，
+        // 让"顶栏区域（surface 底色）→ 模糊背景"自然过渡，不再有生硬分界线。
+        // （原版 flexibleSpace 背景铺满整个 SliverAppBar + AppBar 透明，效果等同）
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to MaterialTheme.colorScheme.surface,
+                            1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+                        )
+                    )
                 )
         )
         // 底部渐隐：图片底部 20% 渐隐到页面背景色（对齐原版 ShaderMask
