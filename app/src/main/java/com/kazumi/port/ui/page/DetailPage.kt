@@ -83,7 +83,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.kazumi.port.KazumiApp
+import com.kazumi.port.ui.image.RenderScriptBlurTransformation
 import com.kazumi.port.data.model.BangumiItem
 import com.kazumi.port.data.model.BangumiRelation
 import com.kazumi.port.data.model.CharacterItem
@@ -919,46 +921,64 @@ private fun SharedTransitionScope.DetailHeader(
 
 /**
  * 详情头部背景（对齐原版 info_page 的 _InfoHeaderBackground）：
- * 封面模糊 + 白色半透明罩 + 顶部渐隐 + 底部羽化到页面背景色。
- * （Modifier.blur 需要 API 31+；低版本自动退化为无模糊的渐隐底图，不崩溃。）
+ * 封面模糊 + 图片整体 modulate 变淡 + 底部渐隐到页面背景色 + 底部羽化。
+ *
+ * 模糊实现分级：
+ * - API 31+（RenderEffect 可用）：Modifier.blur(20.dp)（Compose ui 1.7.0）
+ * - API 24-30：自定义 Coil Transformation，在图片解码期用 RenderScript
+ *   ScriptIntrinsicBlur 做真正的高斯模糊（Modifier.blur 在低版本会被静默忽略，
+ *   见 ui 1.7.0 Blur.kt 注释；变换结果被 Coil 缓存，同一封面只模糊一次）。
  */
 @Composable
 private fun DetailHeaderBackground(imageUrl: String) {
-    // Modifier.blur 底层用 RenderEffect，仅 API 31+ 可用；低版本直接 blur 会抛
-    // IllegalStateException 崩溃。这里做 SDK 分级：31+ 真模糊，24-30 退化为
-    // 不模糊的渐隐背景（视觉仍接近毛玻璃的柔和观感，且绝不崩溃）。
-    val canRenderBlur = android.os.Build.VERSION.SDK_INT >= 31
+    val context = LocalContext.current
+    val useRenderEffectBlur = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+    // API 24-30：走 Coil 解码期 RenderScript 模糊；API 31+ 直接加载原图交 Modifier.blur
+    val model: Any = if (useRenderEffectBlur) {
+        imageUrl
+    } else {
+        ImageRequest.Builder(context)
+            .data(imageUrl)
+            .transformations(
+                RenderScriptBlurTransformation(context.applicationContext, radiusPx = 20f)
+            )
+            .build()
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(320.dp)
             .clipToBounds()
     ) {
+        // 封面模糊图（对齐原版 ImageFiltered + blur sigma 15，等效全分辨率 ≈ 20px）
+        // ColorFilter tint(White, alpha 0.4, Modulate)：模拟原版 color 0.4 + modulate，
+        // 让图片整体变淡，避免喧宾夺主
         AsyncImage(
-            model = imageUrl,
+            model = model,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = if (canRenderBlur) {
-                Modifier.fillMaxSize().blur(20.dp)
-            } else {
-                Modifier.fillMaxSize()
-            }
-        )
-        // 白色半透明罩（对齐原版 colorBlendMode: modulate, alpha 0.4）
-        Box(
+            colorFilter = ColorFilter.tint(
+                Color.White.copy(alpha = 0.4f),
+                BlendMode.Modulate
+            ),
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.White.copy(alpha = 0.35f))
+                .then(
+                    if (useRenderEffectBlur) Modifier.blur(20.dp) else Modifier
+                )
         )
-        // 顶部渐隐：上 80% 不透明 → 下透明（对齐原版 ShaderMask white→transparent stops [0.8,1]）
+        // 底部渐隐：图片底部 20% 渐隐到页面背景色（对齐原版 ShaderMask
+        // white→transparent stops [0.8,1]：顶部完整、底部融入背景）
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.White.copy(alpha = 0.85f), Color.Transparent),
-                        startY = 0f,
-                        endY = 260f
+                        colorStops = arrayOf(
+                            0f to Color.Transparent,
+                            0.8f to Color.Transparent,
+                            1f to MaterialTheme.colorScheme.surface
+                        )
                     )
                 )
         )
