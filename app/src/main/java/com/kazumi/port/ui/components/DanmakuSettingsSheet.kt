@@ -103,26 +103,26 @@ fun DanmakuSettingsSheet(
 
             // 外观
             Text("显示效果", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            SliderRow("字体大小", "${fontSize.toInt()}", fontSize, 10f..48f) {
+            SliderRow("字体大小", "${fontSize.toInt()}", fontSize, 10f..48f, divisions = 38) {
                 fontSize = it
                 scope.launch { settings.setDouble(SettingsManager.Danmaku.FONT_SIZE, it.toDouble()) }; save()
             }
-            SliderRow("不透明度", "${(opacity * 100).toInt()}%", opacity, 0.1f..1f) {
+            SliderRow("不透明度", "${(opacity * 100).toInt()}%", opacity, 0.1f..1f, divisions = 9) {
                 opacity = it
                 scope.launch { settings.setDouble(SettingsManager.Danmaku.OPACITY, it.toDouble()) }; save()
             }
-            SliderRow("显示区域", "${(area * 100).toInt()}%", area, 0f..1f) {
+            SliderRow("显示区域", "${(area * 100).toInt()}%", area, 0f..1f, divisions = 10) {
                 area = it
                 scope.launch { settings.setDouble(SettingsManager.Danmaku.AREA, it.toDouble()) }; save()
             }
-            SliderRow("行间距", String.format("%.1f", lineHeight), lineHeight, 0f..3f) {
+            SliderRow("行间距", String.format("%.1f", lineHeight), lineHeight, 0f..3f, divisions = 30) {
                 lineHeight = it
                 scope.launch { settings.setDouble(SettingsManager.Danmaku.LINE_HEIGHT, it.toDouble()) }; save()
             }
 
             // 播放
             Text("播放", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            SliderRow("弹幕时长", "${duration.toInt()}s", duration, 3f..15f) {
+            SliderRow("弹幕时长", "${duration.toInt()}s", duration, 3f..15f, divisions = 12) {
                 duration = it
                 scope.launch { settings.setDouble(SettingsManager.Danmaku.DURATION, it.toDouble()) }; save()
             }
@@ -202,6 +202,7 @@ private fun SliderRow(
     valueLabel: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    divisions: Int = 0,
     onChanged: (Float) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
@@ -209,7 +210,13 @@ private fun SliderRow(
             Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             Text(valueLabel, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Slider(value = value, onValueChange = onChanged, valueRange = range, modifier = Modifier.fillMaxWidth())
+        Slider(
+            value = value,
+            onValueChange = onChanged,
+            valueRange = range,
+            steps = (divisions - 1).coerceAtLeast(0),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
