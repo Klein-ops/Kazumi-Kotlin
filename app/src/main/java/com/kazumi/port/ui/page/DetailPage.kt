@@ -530,7 +530,7 @@ fun DetailPage(
                     scrolledContainerColor = MaterialTheme.colorScheme.surface,
                     // 标题/图标颜色：滚动后（surface 底色）用 onSurface，未滚动（背景图上）用白色
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationContentColor = MaterialTheme.colorScheme.onSurface
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         },
