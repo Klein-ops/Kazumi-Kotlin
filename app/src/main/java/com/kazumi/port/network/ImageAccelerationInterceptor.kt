@@ -77,12 +77,7 @@ class ImageAccelerationInterceptor(
         }
         val deferred = downloadScope.async(start = CoroutineStart.LAZY) {
             try {
-                val bytes = withTimeoutOrNull(25_000L) {
-                    val echConfig = EchResolver.fetchEchConfig()
-                    if (echConfig != null) {
-                        EchHttpNative.loadSuspend(url, echConfig)
-                    } else null
-                }
+                val bytes = downloadEchWithRetry(url, context)
                 if (bytes != null && bytes.isNotEmpty()) {
                     FileLogger.i("ImageAccel", "ech download OK bytes=${bytes.size} for $url")
                     cachePut(url, bytes)
@@ -108,6 +103,34 @@ class ImageAccelerationInterceptor(
         } finally {
             inflight.remove(url, winner)
         }
+    }
+
+    /**
+     * ECH 下载（带重试）：单次 10s 超时（旧值 25s，config 过期后每张图白等 25s，
+     * 列表 20+ 张连环拖慢，实测 06:56:06 起 44 张全部 25.0s 超时失败）；
+     * 失败后强制刷新 ECHConfig 重试一次（Cloudflare config TTL 仅 1~5s，旧 config
+     * 复用必失败，刷新后第二次握手往往直接成功——这是"只有前 2-3 张能加载"的根因修复）。
+     * 仍失败返回 null（调用方将走镜像/直连兜底，保证图能出来）。
+     */
+    private suspend fun downloadEchWithRetry(url: String, context: Context): ByteArray? {
+        // 第一次：用当前（可能刚缓存的）config 下载
+        var bytes = withTimeoutOrNull(10_000L) {
+            val echConfig = EchResolver.fetchEchConfig()
+            if (echConfig != null) EchHttpNative.loadSuspend(url, echConfig) else null
+        }
+        if (bytes != null && bytes.isNotEmpty()) return bytes
+        // 失败：config 可能已过期，强制刷新重试一次
+        FileLogger.w("ImageAccel", "ech 首次下载失败（config 可能过期），强制刷新重新握手 | $url")
+        EchResolver.invalidate()
+        bytes = withTimeoutOrNull(10_000L) {
+            val echConfig = EchResolver.fetchEchConfig()
+            if (echConfig != null) EchHttpNative.loadSuspend(url, echConfig) else null
+        }
+        if (bytes != null && bytes.isNotEmpty()) {
+            FileLogger.i("ImageAccel", "ech 刷新 config 后重试成功 | $url")
+            return bytes
+        }
+        return null
     }
 
     /** 以 URL 的 SHA-1 作为文件名，避免非法字符且天然去重 */

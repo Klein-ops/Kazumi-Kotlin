@@ -21,8 +21,11 @@ object EchResolver {
     private const val DOH_ENDPOINT = "https://dns.alidns.com/resolve"
     private const val CONFIG_DOMAIN = "crypto.cloudflare.com"
 
-    /** ECHConfig 缓存有效期（官方 DNS TTL 约 76s，这里取 60s 安全复用） */
-    private const val CACHE_TTL_MS = 60_000L
+    /** ECHConfig 缓存有效期（官方 DNS TTL 实测仅 1~5 秒：2026-11-17 日志 DoH 响应
+     *  TTL=5/TTL=1 各一次。旧值 60s 导致 config 早已被 Cloudflare 轮换失效后仍被复用，
+     *  列表 20+ 张封面全部 ECH 握手超时（25s×N），表现为"只有前 2-3 张能加载"。
+     *  跟随真实 TTL 取 5s，宁可多打几次 DoH（打进 6s 短超时，成本低）也要用新 config。 */
+    private const val CACHE_TTL_MS = 5_000L
 
     /** 短超时 DoH 客户端（复用全局 OkHttp 的代理设置） */
     private val client: OkHttpClient by lazy {
@@ -51,6 +54,14 @@ object EchResolver {
             if (cached != null) return cached
         }
         return fetchFromDoh()
+    }
+
+    /** 强制丢弃缓存的 ECHConfig，下次 fetchEchConfig 必定重新 DoH（失败重试用） */
+    fun invalidate() {
+        synchronized(this) {
+            cachedConfig = null
+            cachedAt = 0L
+        }
     }
 
     private fun fetchFromDoh(): String? = try {
