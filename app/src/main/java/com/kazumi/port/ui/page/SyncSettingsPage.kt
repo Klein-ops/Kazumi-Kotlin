@@ -1,11 +1,15 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -36,7 +41,13 @@ import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
 import com.kazumi.port.ui.components.SettingSwitchRow
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import com.kazumi.port.ui.components.KazumiLoadingIndicator
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.mutableIntStateOf
+import com.kazumi.port.ui.components.rememberToast
 
 /**
  * 同步设置页（对应原版 sync_settings_page.dart + webdav_sync_page.dart）
@@ -62,6 +73,13 @@ fun SyncSettingsPage(navController: NavHostController) {
     var draftUrl by remember { mutableStateOf("") }
     var draftUsername by remember { mutableStateOf("") }
     var draftPassword by remember { mutableStateOf("") }
+    // ---- Bangumi 账号区（2026-11-17 补全：原版 bangumi_sync_page 有 Token 输入/测试连接/立即同步）----
+    var bangumiOutput by remember { mutableStateOf("") }
+    var bangumiConnecting by remember { mutableStateOf(false) }
+    var bangumiSyncing by remember { mutableStateOf(false) }
+    var bangumiSyncProgress by remember { mutableStateOf("") }
+    val bangumiService = remember { app.bangumiSyncService }
+    val showBangumiToast = rememberToast()
     LaunchedEffect(Unit) {
         bangumiToken = settings.getString(SettingsManager.Bangumi.ACCESS_TOKEN, "")
         bangumiEnabled = settings.getBoolean(SettingsManager.Bangumi.SYNC_ENABLE, false)
@@ -72,6 +90,66 @@ fun SyncSettingsPage(navController: NavHostController) {
         webDavHistory = settings.getBoolean(SettingsManager.WebDav.ENABLE_HISTORY, false)
         webDavCollect = settings.getBoolean(SettingsManager.WebDav.ENABLE_COLLECT, false)
         webDavShield = settings.getBoolean(SettingsManager.WebDav.ENABLE_DANMAKU_SHIELD, false)
+        // 已配置且同步开启时尝试连接，显示当前用户名
+        if (bangumiToken.isNotBlank() && bangumiEnabled) {
+            bangumiConnecting = true
+            val ok = bangumiService.connect()
+            bangumiConnecting = false
+            bangumiOutput = if (ok) "已连接 · ${bangumiService.currentUsername}" else "连接失败：${bangumiService.errorMessage ?: "未知错误"}"
+        }
+    }
+
+    fun saveBangumiToken() {
+        val token = bangumiToken.trim()
+        if (token.isEmpty()) {
+            showBangumiToast("请输入 Access Token")
+            return
+        }
+        bangumiConnecting = true
+        bangumiOutput = ""
+        scope.launch {
+            val ok = bangumiService.saveToken(token)
+            bangumiConnecting = false
+            if (ok) {
+                bangumiOutput = "已保存并连接 · ${bangumiService.currentUsername}"
+                showBangumiToast("Bangumi 账号已连接")
+            } else {
+                bangumiOutput = "连接失败：${bangumiService.errorMessage ?: "Token 无效"}"
+            }
+        }
+    }
+
+    fun testBangumi() {
+        val token = bangumiToken.trim()
+        if (token.isEmpty()) {
+            showBangumiToast("请先输入 Access Token")
+            return
+        }
+        bangumiConnecting = true
+        bangumiOutput = ""
+        scope.launch {
+            val ok = bangumiService.saveToken(token)
+            bangumiConnecting = false
+            bangumiOutput = if (ok) "连接成功 · ${bangumiService.currentUsername}" else "连接失败：${bangumiService.errorMessage ?: "未知错误"}"
+        }
+    }
+
+    fun syncBangumiNow() {
+        if (bangumiSyncing) return
+        bangumiSyncing = true
+        bangumiSyncProgress = ""
+        scope.launch {
+            val ok = bangumiService.syncCollectibles { msg, done, total ->
+                bangumiSyncProgress = if (total > 0) "$msg（$done/$total）" else msg
+            }
+            bangumiSyncing = false
+            if (ok) {
+                bangumiSyncProgress = "追番状态已同步"
+                showBangumiToast("追番状态已同步到 Bangumi")
+            } else {
+                bangumiSyncProgress = "同步失败：${bangumiService.errorMessage ?: "请检查网络或配置"}"
+            }
+        }
     }
 
     val hasBangumi = bangumiToken.isNotBlank()
@@ -87,20 +165,93 @@ fun SyncSettingsPage(navController: NavHostController) {
                 .verticalScroll(rememberScrollState())
         ) {
             SettingGroup("追番同步") {
-                SettingClickRow(
-                    title = "Bangumi 追番同步",
-                    subtitle = if (hasBangumi)
-                        (if (bangumiEnabled) "已开启 · 与 Bangumi 保持相同的追番状态" else "已连接 · 未开启同步")
-                    else "未连接 · 登录 Bangumi 账号以同步追番状态",
+                // Access Token 输入（对齐原版 bangumi_sync_page 的 Token 输入框）
+                OutlinedTextField(
+                    value = bangumiToken,
+                    onValueChange = { bangumiToken = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    label = { Text("Bangumi Access Token") },
+                    placeholder = { Text("在 bangumi.tv/settings/access_token 获取") },
+                    singleLine = true,
+                    enabled = !bangumiConnecting
+                )
+                // 连接状态 / 按钮行
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { testBangumi() },
+                        enabled = !bangumiConnecting && bangumiToken.isNotBlank()
+                    ) {
+                        if (bangumiConnecting) {
+                            KazumiLoadingIndicator(modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(if (hasBangumi) "测试连接" else "连接")
+                    }
+                    Button(
+                        onClick = { saveBangumiToken() },
+                        enabled = !bangumiConnecting && bangumiToken.isNotBlank()
+                    ) {
+                        Text("保存并连接")
+                    }
+                }
+                // 连接结果输出
+                if (bangumiOutput.isNotEmpty()) {
+                    Text(
+                        text = bangumiOutput,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
+                // 自动同步追番开关（对齐原版：修改追番状态时同步到 Bangumi）
+                SettingSwitchRow(
+                    title = "自动同步追番",
+                    subtitle = if (hasBangumi) "修改追番状态时同步到 Bangumi" else "请先连接 Bangumi 账号",
                     leading = Icons.Filled.Bookmarks,
-                    trailingValue = if (hasBangumi) (if (bangumiEnabled) "已开启" else "已关闭") else "未连接",
-                    topRadius = 24.dp,
-                    bottomRadius = 24.dp,
-                    onClick = {
-                        bangumiEnabled = !bangumiEnabled
-                        scope.launch { settings.setBoolean(SettingsManager.Bangumi.SYNC_ENABLE, bangumiEnabled) }
+                    checked = bangumiEnabled,
+                    enabled = hasBangumi,
+                    onCheckedChange = { value ->
+                        bangumiEnabled = value
+                        scope.launch { settings.setBoolean(SettingsManager.Bangumi.SYNC_ENABLE, value) }
                     }
                 )
+                // 立即同步按钮（对齐原版 StateActionButton "立即同步追番"）
+                if (hasBangumi) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { syncBangumiNow() },
+                            enabled = !bangumiSyncing && bangumiEnabled
+                        ) {
+                            if (bangumiSyncing) {
+                                KazumiLoadingIndicator(modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text(if (bangumiSyncing) "正在同步…" else "立即同步追番")
+                        }
+                    }
+                    if (bangumiSyncProgress.isNotEmpty()) {
+                        Text(
+                            text = bangumiSyncProgress,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        )
+                    }
+                }
             }
 
             SettingGroup("多设备同步") {
