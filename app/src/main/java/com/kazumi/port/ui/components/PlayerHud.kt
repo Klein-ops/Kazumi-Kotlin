@@ -25,6 +25,8 @@ import androidx.compose.material.icons.rounded.BrightnessMedium
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
@@ -279,4 +281,37 @@ private fun formatMsShort(ms: Long): String {
     val m = totalSec / 60
     val s = totalSec % 60
     return String.format("%02d:%02d", m, s)
+}
+
+/**
+ * 播放/暂停中央反馈 HUD（双击切换播控时短暂显示）。
+ * 对齐原版"双击切换播放状态有明确视觉提示"的体验；
+ * 之前双击 pause/play 静默切换，用户不知道是否已暂停（尤其卡顿时）。
+ */
+@Composable
+fun PlayerPlayPauseHud(
+    visible: Boolean,
+    isPlaying: Boolean
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(160)) + scaleIn(initialScale = 0.5f, animationSpec = tween(160)),
+        exit = fadeOut(tween(240))
+    ) {
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .shadow(24.dp, CircleShape)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.55f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(52.dp)
+            )
+        }
+    }
 }

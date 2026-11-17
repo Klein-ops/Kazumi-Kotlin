@@ -120,6 +120,7 @@ import com.kazumi.port.util.DanmakuFeature
 import com.kazumi.port.ui.components.DanmakuSourceSheet
 import com.kazumi.port.ui.components.PlayerAdjustmentHud
 import com.kazumi.port.ui.components.PlayerAdjustmentHudType
+import com.kazumi.port.ui.components.PlayerPlayPauseHud
 import com.kazumi.port.ui.components.PlayerSeekHud
 import com.kazumi.port.ui.components.PlayerSpeedHud
 import com.kazumi.port.ui.components.SyncPlaySheet
@@ -394,6 +395,10 @@ fun PlayerPage(
     // 面板
     var controlsVisible by remember { mutableStateOf(true) }
     var locked by remember { mutableStateOf(false) }
+    // 双击播放/暂停中央反馈（短暂显示，避免静默切换用户不知道是否已暂停）
+    var showPlayPauseHud by remember { mutableStateOf(false) }
+    // 长按画面临时倍速指示（长按期间显示倍速 HUD，松开立即隐藏）
+    var speedHudVisible by remember { mutableStateOf(false) }
     // 全屏状态（对齐原版 video_page：进入默认竖屏——顶部 16:9 播放器 + 下方选集面板，
     // 点全屏按钮才切横屏；原旧版一进播放页就强制横屏，选集/切线路只能点小按钮，用户反馈不便）
     // rememberSaveable：横屏旋转会触发 Activity 重建，普通 remember 会丢状态退回竖屏
@@ -1005,10 +1010,17 @@ fun PlayerPage(
                 },
                 onDoubleTap = {
                     playerController.playOrPause()
+                    // 双击播放/暂停中央反馈：暂停/播放都有明确的圆形图标提示
+                    showPlayPauseHud = true
+                    scope.launch {
+                        delay(220)
+                        showPlayPauseHud = false
+                    }
                 },
                 // 长按画面临时倍速（原版 onLongPressStart/End）：按住用 defaultShortcutForwardPlaySpeed，松开恢复
                 onLongPressSpeedStart = {
                     speedBeforeLongPress = uiState.playbackSpeed
+                    speedHudVisible = true
                     scope.launch {
                         val speed = app.settings.getDouble(
                             com.kazumi.port.data.repository.SettingsManager.Player.DEFAULT_SHORTCUT_FORWARD_SPEED,
@@ -1020,6 +1032,7 @@ fun PlayerPage(
                 onLongPressSpeedEnd = {
                     val restore = speedBeforeLongPress
                     speedBeforeLongPress = null
+                    speedHudVisible = false
                     if (restore != null) playerController.setPlaybackSpeed(restore)
                 },
                 onHorizontalDragStart = {
@@ -1219,7 +1232,11 @@ fun PlayerPage(
                 )
             }
             Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) {
-                PlayerSpeedHud(visible = false, speed = uiState.playbackSpeed)
+                PlayerSpeedHud(visible = speedHudVisible, speed = uiState.playbackSpeed)
+            }
+            // 双击播放/暂停中央反馈（对齐原版"切换播控有明确提示"的体验）
+            Box(modifier = Modifier.align(Alignment.Center)) {
+                PlayerPlayPauseHud(visible = showPlayPauseHud, isPlaying = uiState.isPlaying)
             }
             Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) {
                 PlayerAdjustmentHud(
