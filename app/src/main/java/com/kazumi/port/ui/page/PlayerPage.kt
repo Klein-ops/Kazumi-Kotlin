@@ -8,22 +8,36 @@ import android.graphics.Bitmap
 import android.view.ViewGroup
 import android.view.TextureView
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,7 +64,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -63,10 +76,12 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -75,6 +90,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
@@ -107,6 +124,7 @@ import com.kazumi.port.ui.components.PlayerSeekHud
 import com.kazumi.port.ui.components.PlayerSpeedHud
 import com.kazumi.port.ui.components.SyncPlaySheet
 import com.kazumi.port.ui.components.rememberToast
+import com.kazumi.port.ui.components.rememberPressScale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.kazumi.port.ui.components.KazumiLoadingIndicator
@@ -302,6 +320,28 @@ fun PlayerPage(
         playNextOrPrev(1, silent = true)
     }
 
+    // 切集/切线路：替换当前 PlayerPage，避免导航栈叠页（横竖屏错乱/无限重组）。
+    // 竖屏下面板与选集弹窗共用（对齐原版 episode_selection_panel onSelect）
+    fun switchEpisode(episodeIndex: Int, roadIndex: Int) {
+        val newUrl = roads.getOrNull(roadIndex)?.data?.getOrNull(episodeIndex)
+        if (newUrl != null && (episodeIndex + 1 != episode || roadIndex != road)) {
+            navController.navigate(
+                com.kazumi.port.ui.navigation.Routes.player(
+                    bangumiId = bangumiId,
+                    pluginName = pluginName,
+                    src = newUrl,
+                    episode = episodeIndex + 1,
+                    road = roadIndex,
+                    isLocal = isLocal,
+                    roadsJson = currentRoadsJson()
+                )
+            ) {
+                popUpTo(com.kazumi.port.ui.navigation.Routes.PLAYER) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
     // 播放中定期把最新观看历史同步到 WebDAV（对齐设置页"自动同步播放进度与历史记录"文案）；
     // 此前历史只有启动时同步一次，播放中产生的进度需要重启才上传
     LaunchedEffect(Unit) {
@@ -354,6 +394,10 @@ fun PlayerPage(
     // 面板
     var controlsVisible by remember { mutableStateOf(true) }
     var locked by remember { mutableStateOf(false) }
+    // 全屏状态（对齐原版 video_page：进入默认竖屏——顶部 16:9 播放器 + 下方选集面板，
+    // 点全屏按钮才切横屏；原旧版一进播放页就强制横屏，选集/切线路只能点小按钮，用户反馈不便）
+    // rememberSaveable：横屏旋转会触发 Activity 重建，普通 remember 会丢状态退回竖屏
+    var isFullscreen by rememberSaveable { mutableStateOf(false) }
     // 长按临时倍速前的原速度（null 表示当前不在长按倍速中）
     var speedBeforeLongPress by remember { mutableStateOf<Float?>(null) }
     // 快进/快退按钮的跳转秒数（原版 buttonSkipTime，默认 80）
@@ -779,12 +823,15 @@ fun PlayerPage(
         }
     }
 
-    // 返回键：锁屏时先解锁，菜单展开时先收起，其余情况退出播放页
+    // 返回键：锁屏时先解锁，全屏时先退全屏，菜单展开时先收起，其余情况退出播放页
     BackHandler {
         if (locked) {
             locked = false
             controlsVisible = true
             playerController.setPanel { it.copy(lockPanel = false) }
+        } else if (isFullscreen) {
+            isFullscreen = false
+            controlsVisible = true
         } else if (moreMenuOpen || speedMenuOpen || aspectMenuOpen) {
             moreMenuOpen = false
             speedMenuOpen = false
@@ -795,9 +842,11 @@ fun PlayerPage(
     }
 
     DisposableEffect(Unit) {
-        // 进入播放页强制横屏。用全局方向引用计数：切集是"替换"当前页（旧实例 dispose +
-        // 新实例组合同时发生），若没有计数，旧实例 dispose 会把方向恢复成竖屏、新实例又设横屏，
-        // 中间状态导致"切集后竖屏/回主页横屏"错乱。计数归零才真正恢复进入前的方向。
+        // 进入播放页默认竖屏（对齐原版 video_page：顶部 16:9 播放器 + 下方选集面板）。
+        // 方向由 isFullscreen 状态驱动（LaunchedEffect(isFullscreen)），这里只记录
+        // 进入前的方向并注册退出恢复。切集是"替换"当前页（旧实例 dispose + 新实例
+        // 组合同时发生），用全局引用计数避免"旧实例退出恢复竖屏、新实例又设横屏"
+        // 中间状态导致的横竖屏错乱；计数归零才真正恢复进入前的方向。
         val activity = context.findActivity()
         if (activity != null) {
             PlayerOrientationManager.enter(activity)
@@ -814,6 +863,12 @@ fun PlayerPage(
         }
     }
 
+    // 方向随全屏状态联动：全屏=横屏，退出全屏=恢复进入前方向（通常竖屏）
+    LaunchedEffect(isFullscreen) {
+        val activity = context.findActivity() ?: return@LaunchedEffect
+        PlayerOrientationManager.setFullscreen(activity, isFullscreen)
+    }
+
     // 兜底绑定：不依赖 AndroidView 的 update 回调是否被再次执行。
     // 只要 PlayerView 与 ExoPlayer 都存在，就保证绑定成立（否则没有 Surface，
     // 表现就是有声音、能拖进度，但永远黑屏）。
@@ -825,11 +880,23 @@ fun PlayerPage(
         }
     }
 
-    Box(
+    // 播放页布局（对齐原版 video_page）：
+    // - 默认竖屏进入：顶部 16:9 播放器 + 下方"选集/线路"面板（可由下面板直接选集/切线路）。
+    //   方向由 isFullscreen 驱动（默认竖屏，点全屏按钮才切横屏）。
+    // - 全屏（isFullscreen=true）：隐藏下面板，播放器占满整屏。
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        // 播放器容器：竖屏=16:9 置顶；全屏=占满剩余（唯一子级即满屏）
+        Box(
+            modifier = if (isFullscreen) {
+                Modifier.fillMaxWidth().weight(1f)
+            } else {
+                Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+            }
+        ) {
         // 视频画面（含比例）
         val aspect = when (panelState.aspectRatioMode) {
             PlayerAspectRatio.Automatic -> null
@@ -1098,7 +1165,7 @@ fun PlayerPage(
             }
         }
 
-        // 顶部控制条（对齐原版：只保留返回 + 标题 + 下一集；选集/弹幕/截图/锁屏进「更多」菜单）
+        // 顶部控制条（对齐原版：返回 + 标题 + 下一集 + 全屏切换；选集/弹幕/截图/锁屏进「更多」菜单）
         if (controlsVisible && !locked) {
             Column(
                 modifier = Modifier
@@ -1121,6 +1188,14 @@ fun PlayerPage(
                         maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
+                    // 全屏/退出全屏（对齐原版 video_page 的全屏按钮）
+                    IconButton(onClick = { isFullscreen = !isFullscreen }) {
+                        Icon(
+                            if (isFullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                            contentDescription = if (isFullscreen) "退出全屏" else "全屏",
+                            tint = Color.White
+                        )
+                    }
                     // 下一集（对齐原版 _forwardButton / nextEpisode）
                     if (roads.isNotEmpty()) {
                         IconButton(onClick = { playNextOrPrev(1) }) {
@@ -1545,6 +1620,20 @@ fun PlayerPage(
                 }
             }
         }
+        }
+
+        // 竖屏下面板（非全屏时显示，占满播放器下方剩余空间）：对齐原版 episode_selection_panel.dart，
+        // 在播放器下方直接展示线路 chips + 选集网格，无需再点小按钮弹窗
+        if (!isFullscreen && roads.isNotEmpty()) {
+            NonFullscreenEpisodePanel(
+                title = bangumiTitle.ifEmpty { uiState.bangumiName },
+                roads = roads,
+                selectedRoad = road,
+                selectedEpisode = episode,
+                onSelect = { epIdx, roadIdx -> switchEpisode(epIdx, roadIdx) },
+                modifier = Modifier.weight(1f)
+            )
+        }
 
         // 弹幕源切换 sheet
         if (showDanmakuSource) {
@@ -1586,7 +1675,7 @@ fun PlayerPage(
                 toast = toast
             )
         }
-        // 选集切换 sheet（线路数据来自详情页）
+        // 选集切换 sheet（线路数据来自详情页；竖屏下面板存在时此弹窗作为"更多"入口的补充）
         if (showEpisodeSheet && roads.isNotEmpty()) {
             EpisodeSelectionSheet(
                 title = bangumiTitle.ifEmpty { uiState.bangumiName },
@@ -1595,24 +1684,7 @@ fun PlayerPage(
                 selectedEpisode = episode,
                 onSelect = { episodeIndex, roadIndex ->
                     showEpisodeSheet = false
-                    val newUrl = roads.getOrNull(roadIndex)?.data?.getOrNull(episodeIndex)
-                    if (newUrl != null && (episodeIndex + 1 != episode || roadIndex != road)) {
-                        // 切集：替换当前 PlayerPage，避免导航栈叠页（横竖屏错乱/无限重组）
-                        navController.navigate(
-                            com.kazumi.port.ui.navigation.Routes.player(
-                                bangumiId = bangumiId,
-                                pluginName = pluginName,
-                                src = newUrl,
-                                episode = episodeIndex + 1,
-                                road = roadIndex,
-                                isLocal = isLocal,
-                                roadsJson = currentRoadsJson()
-                            )
-                        ) {
-                            popUpTo(com.kazumi.port.ui.navigation.Routes.PLAYER) { inclusive = true }
-                            launchSingleTop = true
-                        }
-                    }
+                    switchEpisode(episodeIndex, roadIndex)
                 },
                 onDismiss = { showEpisodeSheet = false }
             )
@@ -1806,9 +1878,11 @@ private fun Context.findActivity(): Activity? {
 /**
  * 播放页方向引用计数管理器。
  *
- * 进入播放页 +1（设横屏），离开 -1（归零才恢复进入前的方向）。
- * 解决"切集 = 替换页面（旧实例 dispose + 新实例组合同时发生）"导致的方向错乱：
- * 旧实例 dispose 不直接恢复，等所有播放页实例都离开后再恢复，保证退出播放页始终回竖屏。
+ * 进入播放页只记录进入前的方向并 +1（不强制横屏）；方向完全由全屏状态
+ * （setFullscreen）驱动——退出全屏时恢复进入前方向（通常竖屏），点全屏才横屏。
+ * 切集 = "替换"当前页（旧实例 dispose + 新实例组合同时发生），若没有计数，
+ * 旧实例 dispose 会把方向恢复成竖屏、新实例又设横屏，中间状态导致横竖屏错乱。
+ * 计数归零才真正恢复进入前的方向（保证退出播放页始终回竖屏）。
  */
 private object PlayerOrientationManager {
     private var refCount = 0
@@ -1818,9 +1892,20 @@ private object PlayerOrientationManager {
     fun enter(activity: Activity) {
         if (refCount == 0) {
             previousOrientation = activity.requestedOrientation
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            // 内置播放页自身的全屏状态由外部 setFullscreen 驱动，这里不强行设横屏
         }
         refCount++
+    }
+
+    /** 全屏联动：true=横屏，false=恢复进入前方向（通常竖屏） */
+    @Synchronized
+    fun setFullscreen(activity: Activity, fullscreen: Boolean) {
+        if (refCount <= 0) return
+        activity.requestedOrientation = if (fullscreen) {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            previousOrientation.let { if (it == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else it }
+        }
     }
 
     @Synchronized
@@ -1830,6 +1915,133 @@ private object PlayerOrientationManager {
         if (refCount == 0) {
             activity.requestedOrientation =
                 previousOrientation.let { if (it == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else it }
+        }
+    }
+}
+
+/**
+ * 竖屏下面板（非全屏播放时显示，对齐原版 episode_selection_panel.dart）：
+ * 在播放器下方直接展示线路横向 chips + 选集网格，用户无需再点小按钮弹窗即可选集/切线路。
+ * 全屏时不渲染（由调用处 if (!isFullscreen) 控制）。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NonFullscreenEpisodePanel(
+    title: String,
+    roads: List<com.kazumi.port.data.model.Road>,
+    selectedRoad: Int,
+    selectedEpisode: Int,
+    onSelect: (episodeIndex: Int, roadIndex: Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var visibleRoad by remember { mutableIntStateOf(selectedRoad.coerceIn(0, (roads.size - 1).coerceAtLeast(0))) }
+    val road = roads.getOrNull(visibleRoad)
+    val count = road?.data?.size ?: 0
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(bottom = 8.dp)
+    ) {
+        // 标题
+        Text(
+            text = title.ifBlank { "剧集列表" },
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+        )
+        // 线路选择（横向滚动 chips）
+        if (roads.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                roads.forEachIndexed { index, r ->
+                    val name = r.name.trim().ifEmpty { "播放线路 ${index + 1}" }
+                    FilterChip(
+                        selected = index == visibleRoad,
+                        onClick = {
+                            visibleRoad = index
+                            // 点线路立即切到该线路的当前集播放（与原版一致）
+                            if (index != selectedRoad) {
+                                val target = roads.getOrNull(index)
+                                val maxIdx = (target?.data?.size ?: 0) - 1
+                                val epIdx = (selectedEpisode - 1).coerceIn(0, maxIdx.coerceAtLeast(0))
+                                onSelect(epIdx, index)
+                            }
+                        },
+                        label = { Text(name) }
+                    )
+                }
+            }
+        }
+        // 计数
+        Text(
+            text = "全部剧集 · $count 集",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+        )
+        if (count == 0) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("这条线路暂无剧集", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            return
+        }
+        // 剧集网格（固定最大高度，内部可滚动）
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(5),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)
+        ) {
+            items(count) { idx ->
+                val ep = idx + 1
+                val name = road?.identifier?.getOrNull(idx)?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: "第${ep}集"
+                val selected = visibleRoad == selectedRoad && ep == selectedEpisode
+                val press = rememberPressScale()
+                Column(
+                    modifier = Modifier
+                        .animateItem()
+                        .graphicsLayer {
+                            scaleX = press.scale
+                            scaleY = press.scale
+                        }
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        )
+                        .clickable(
+                            interactionSource = press.interactionSource,
+                            indication = LocalIndication.current,
+                            onClick = { onSelect(idx, visibleRoad) }
+                        )
+                        .padding(vertical = 10.dp, horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }
