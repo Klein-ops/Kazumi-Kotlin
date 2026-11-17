@@ -8,7 +8,6 @@ import android.graphics.Bitmap
 import android.view.ViewGroup
 import android.view.TextureView
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -29,13 +28,10 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilterChip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.zIndex
@@ -44,11 +40,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -81,7 +75,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -125,7 +118,6 @@ import com.kazumi.port.ui.components.PlayerSeekHud
 import com.kazumi.port.ui.components.PlayerSpeedHud
 import com.kazumi.port.ui.components.SyncPlaySheet
 import com.kazumi.port.ui.components.rememberToast
-import com.kazumi.port.ui.components.rememberPressScale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.kazumi.port.ui.components.KazumiLoadingIndicator
@@ -459,9 +451,81 @@ fun PlayerPage(
             }
         )
     }
+
+    // 倍速选择对话框（竖屏「更多」菜单与横屏宽控件共用）
+    if (showSpeedDialog) {
+        AlertDialog(
+            onDismissRequest = { showSpeedDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text("播放倍速") },
+            text = {
+                Column {
+                    playSpeedList.forEach { s ->
+                        TextButton(
+                            onClick = {
+                                playerController.setPlaybackSpeed(s)
+                                showSpeedDialog = false
+                                toast("倍速 ${formatSpeed(s)}x")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "${formatSpeed(s)}x",
+                                color = if (s == uiState.playbackSpeed) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSpeedDialog = false }) { Text("关闭") }
+            }
+        )
+    }
+
+    // 视频比例选择对话框（竖屏「更多」菜单与横屏宽控件共用）
+    if (showAspectDialog) {
+        AlertDialog(
+            onDismissRequest = { showAspectDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text("视频比例") },
+            text = {
+                Column {
+                    PlayerAspectRatio.entries.forEach { mode ->
+                        TextButton(
+                            onClick = {
+                                playerController.setAspectRatio(mode)
+                                scope.launch {
+                                    app.settings.setInt(SettingsManager.Player.DEFAULT_ASPECT_RATIO_TYPE, mode.storageValue)
+                                }
+                                showAspectDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = mode.label,
+                                color = if (mode == panelState.aspectRatioMode) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAspectDialog = false }) { Text("关闭") }
+            }
+        )
+    }
     var speedMenuOpen by remember { mutableStateOf(false) }
     var moreMenuOpen by remember { mutableStateOf(false) }
     var aspectMenuOpen by remember { mutableStateOf(false) }
+    // 倍速/视频比例选择对话框（竖屏顶部「更多」菜单与横屏宽控件统一入口；
+    // 不用 DropdownMenu——竖屏时底部 anchor 不在组合中，DropdownMenu 会失去锚点）
+    var showSpeedDialog by remember { mutableStateOf(false) }
+    var showAspectDialog by remember { mutableStateOf(false) }
 
     // Sheet
     var showDanmakuSource by remember { mutableStateOf(false) }
@@ -1178,7 +1242,9 @@ fun PlayerPage(
             }
         }
 
-        // 顶部控制条（对齐原版：返回 + 标题 + 下一集 + 全屏切换；选集/弹幕/截图/锁屏进「更多」菜单）
+        // 顶部控制条（对齐原版 player_item_panel._buildTopControls）：
+        // 返回 + 标题 + （竖屏）弹幕开关 + 更多菜单；全屏按钮在底部控制条最右。
+        // 竖屏（非全屏）把弹幕开关放顶部，横屏时它归入底部宽控件行，避免顶底重复。
         if (controlsVisible && !locked) {
             Column(
                 modifier = Modifier
@@ -1201,191 +1267,8 @@ fun PlayerPage(
                         maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
-                    // 全屏/退出全屏（对齐原版 video_page 的全屏按钮）
-                    IconButton(onClick = { isFullscreen = !isFullscreen }) {
-                        Icon(
-                            if (isFullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                            contentDescription = if (isFullscreen) "退出全屏" else "全屏",
-                            tint = Color.White
-                        )
-                    }
-                    // 下一集（对齐原版 _forwardButton / nextEpisode）
-                    if (roads.isNotEmpty()) {
-                        IconButton(onClick = { playNextOrPrev(1) }) {
-                            Icon(Icons.Filled.SkipNext, contentDescription = "下一集", tint = Color.White)
-                        }
-                    }
-                }
-            }
-        }
-
-        // HUD（顶部中央）
-        if (!locked) {
-            Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) {
-                PlayerSeekHud(
-                    visible = showSeekHud,
-                    currentPositionMs = seekHudPosition,
-                    playerPositionMs = uiState.currentPositionMs,
-                    durationMs = uiState.durationMs,
-                    direction = seekHudDirection,
-                    cancelPending = seekCancelPending
-                )
-            }
-            Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) {
-                PlayerSpeedHud(visible = speedHudVisible, speed = uiState.playbackSpeed)
-            }
-            // 双击播放/暂停中央反馈（对齐原版"切换播控有明确提示"的体验）
-            Box(modifier = Modifier.align(Alignment.Center)) {
-                PlayerPlayPauseHud(visible = showPlayPauseHud, isPlaying = uiState.isPlaying)
-            }
-            Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) {
-                PlayerAdjustmentHud(
-                    visible = showVolumeHud || showBrightnessHud,
-                    type = if (showVolumeHud) PlayerAdjustmentHudType.Volume else PlayerAdjustmentHudType.Brightness,
-                    value = if (showVolumeHud) hudVolume else hudBrightness
-                )
-            }
-        }
-
-        // 底部控制条
-        if (controlsVisible && !locked) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                // 进度条：必须可拖动（原实现是 LinearProgressIndicator，只能看不能拖，
-                // 用户拖动时没有任何响应，表现为"拖不到正确点位"）
-                val barProgress = if (uiState.durationMs > 0) {
-                    val raw = if (barDragging) {
-                        barValue
-                    } else {
-                        uiState.currentPositionMs.toFloat() / uiState.durationMs.toFloat()
-                    }
-                    raw.coerceIn(0f, 1f)
-                } else 0f
-                // 拖动预览时间气泡（对齐原版 player_progress_bar._buildPreview：
-                // 拖动时在滑块上方显示黑色圆角时间气泡，不是视频帧图。
-                // 黑色背景画在整块 Box 上（对齐原版 Container 的 decoration.color），
-                // 而不是画在 Text 上——Text 背景只包住文字，会造成黑块/错位。
-                // 气泡悬浮在 Slider 上方（.offset(y = -42.dp)），不盖住轨道。
-                androidx.compose.foundation.layout.BoxWithConstraints(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (barDragging && uiState.durationMs > 0 && maxWidth > 0.dp) {
-                        val frac = barValue.coerceIn(0f, 1f)
-                        val bubbleText = formatMs((barValue * uiState.durationMs).toLong())
-                        val bubbleWidth = 68.dp
-                        val left = (maxWidth - bubbleWidth) * frac
-                        androidx.compose.foundation.layout.Box(
-                            modifier = Modifier
-                                .offset(x = left, y = (-42).dp)
-                                .width(bubbleWidth)
-                                .height(32.dp)
-                                .zIndex(1f)
-                                // 整块圆角黑底（对齐原版 Container(color: black 0.85, radius 8)）
-                                .background(
-                                    Color.Black.copy(alpha = 0.85f),
-                                    androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = bubbleText,
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
-                    }
-                    Slider(
-                        value = barProgress,
-                        onValueChange = { v ->
-                            barDragging = true
-                            barValue = v
-                        },
-                        onValueChangeFinished = {
-                            barDragging = false
-                            if (uiState.durationMs > 0) {
-                                playerController.seekTo(
-                                    (barValue * uiState.durationMs).toLong(),
-                                    enableSync = false
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = formatMs(uiState.currentPositionMs) + " / " + formatMs(uiState.durationMs),
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                    Row {
-                        // 快退 / 快进（原版播放条：点击跳 buttonSkipTime 秒，长按改秒数）
-                        val skipBack = {
-                            val target = (uiState.currentPositionMs - buttonSkipTime * 1000L).coerceAtLeast(0L)
-                            playerController.seekTo(target, enableSync = false)
-                        }
-                        val skipForward = {
-                            val max = uiState.durationMs
-                            var target = uiState.currentPositionMs + buttonSkipTime * 1000L
-                            if (max > 0 && target > max) target = max
-                            playerController.seekTo(target, enableSync = false)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(androidx.compose.foundation.shape.CircleShape)
-                                .combinedClickable(
-                                    onClick = { skipBack() },
-                                    onLongClick = { showSkipTimeDialog = true }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Filled.FastRewind,
-                                contentDescription = "快退 ${buttonSkipTime} 秒",
-                                tint = Color.White
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(androidx.compose.foundation.shape.CircleShape)
-                                .combinedClickable(
-                                    onClick = { skipForward() },
-                                    onLongClick = { showSkipTimeDialog = true }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Filled.FastForward,
-                                contentDescription = "快进 ${buttonSkipTime} 秒",
-                                tint = Color.White
-                            )
-                        }
-                        IconButton(onClick = { playerController.playOrPause() }) {
-                            Icon(
-                                if (uiState.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (uiState.isPlaying) "暂停" else "播放",
-                                tint = Color.White
-                            )
-                        }
-                        IconButton(onClick = { playerController.toggleSystemMute() }) {
-                            Icon(
-                                if (uiState.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                                contentDescription = if (uiState.isMuted) "取消静音" else "静音",
-                                tint = Color.White
-                            )
-                        }
-                        // 弹幕开关（对齐原版 _buildDanmakuToggleButton：独立图标按钮，非文字菜单项）
+                    // 弹幕开关（对齐原版 _buildTopControls：仅 compact（竖屏）时在顶部显示）
+                    if (!isFullscreen) {
                         IconButton(
                             onClick = {
                                 if (danmakuLoading) return@IconButton
@@ -1425,15 +1308,349 @@ fun PlayerPage(
                                 )
                             }
                         }
-                        // 弹幕设置按钮（对齐原版 _danmakuSettingsButton：弹幕开启时显示）
+                    }
+                    // 更多菜单（对齐原版 compact 更多菜单：选集/下一集/倍速/视频比例/弹幕设置/截图/锁定/弹幕源/一起看）
+                    Box {
+                        IconButton(onClick = { moreMenuOpen = !moreMenuOpen }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "更多选项", tint = Color.White)
+                        }
+                        DropdownMenu(
+                            expanded = moreMenuOpen,
+                            onDismissRequest = { moreMenuOpen = false },
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ) {
+                            if (roads.isNotEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("选集") },
+                                    onClick = {
+                                        moreMenuOpen = false
+                                        showEpisodeSheet = true
+                                    }
+                                )
+                            }
+                            if (roads.isNotEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("下一集") },
+                                    onClick = {
+                                        moreMenuOpen = false
+                                        playNextOrPrev(1)
+                                    }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("倍速 ${formatSpeed(uiState.playbackSpeed)}x") },
+                                onClick = {
+                                    moreMenuOpen = false
+                                    showSpeedDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("视频比例") },
+                                onClick = {
+                                    moreMenuOpen = false
+                                    showAspectDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (danmakuOn) "弹幕设置" else "打开弹幕") },
+                                onClick = {
+                                    moreMenuOpen = false
+                                    if (danmakuOn) {
+                                        showDanmakuSettings = true
+                                    } else if (danmakuLoading) {
+                                        return@DropdownMenuItem
+                                    } else if (playerController.danmaku.danDanmakus.isNotEmpty()) {
+                                        playerController.danmaku.setDanmakuEnabled(true)
+                                    } else {
+                                        scope.launch {
+                                            toast("正在匹配弹幕…")
+                                            val result = playerController.fetchDanmaku()
+                                            toast(
+                                                when {
+                                                    result.hasDanmakus -> "弹幕已装载"
+                                                    result.isFailed -> {
+                                                        val msg = result.errorMessage.orEmpty()
+                                                        if (msg.contains("未配置弹弹play凭据"))
+                                                            "弹幕需要弹弹play凭据：设置 → 弹幕 → 弹弹play 凭据"
+                                                        else
+                                                            "弹幕匹配失败（$msg），请稍后再试"
+                                                    }
+                                                    else -> "没找到这一集的弹幕，可在「更多」里手动切换弹幕源"
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("截图") },
+                                onClick = {
+                                    moreMenuOpen = false
+                                    scope.launch {
+                                        screenshotCapturing = true
+                                        val view = playerView
+                                        val ok = playerController.captureScreenshot {
+                                            capturePlayerBitmap(view)
+                                        }
+                                        screenshotCapturing = false
+                                        toast(
+                                            if (ok) "截图已保存到相册"
+                                            else playerController.screenshots.state.value.message ?: "截图失败"
+                                        )
+                                    }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (locked) "解锁" else "锁定") },
+                                onClick = {
+                                    moreMenuOpen = false
+                                    locked = !locked
+                                    controlsVisible = !locked
+                                    playerController.setPanel { it.copy(lockPanel = locked) }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("弹幕源切换") },
+                                onClick = {
+                                    moreMenuOpen = false
+                                    showDanmakuSource = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("一起看") },
+                                onClick = {
+                                    moreMenuOpen = false
+                                    showSyncPlay = true
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // HUD（顶部中央）
+        if (!locked) {
+            Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) {
+                PlayerSeekHud(
+                    visible = showSeekHud,
+                    currentPositionMs = seekHudPosition,
+                    playerPositionMs = uiState.currentPositionMs,
+                    durationMs = uiState.durationMs,
+                    direction = seekHudDirection,
+                    cancelPending = seekCancelPending
+                )
+            }
+            Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) {
+                PlayerSpeedHud(visible = speedHudVisible, speed = uiState.playbackSpeed)
+            }
+            // 双击播放/暂停中央反馈（对齐原版"切换播控有明确提示"的体验）
+            Box(modifier = Modifier.align(Alignment.Center)) {
+                PlayerPlayPauseHud(visible = showPlayPauseHud, isPlaying = uiState.isPlaying)
+            }
+            Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) {
+                PlayerAdjustmentHud(
+                    visible = showVolumeHud || showBrightnessHud,
+                    type = if (showVolumeHud) PlayerAdjustmentHudType.Volume else PlayerAdjustmentHudType.Brightness,
+                    value = if (showVolumeHud) hudVolume else hudBrightness
+                )
+            }
+        }
+
+        // 底部控制条（对齐原版 flutter PlayerTransportBar / player_item_panel._buildBottomControls）
+        // 竖屏（compact，!isFullscreen）：Column [时间] / [进度条] / [播放-暂停 下一集 --- 全屏]——单行不超高
+        // 全屏（isFullscreen）：Row [播放-暂停] [下一集] [快退] [快进] [静音] [弹幕开关] [倍速] [视频比例] [弹幕设置] --- [全屏]
+        // 全屏按钮固定在底部最右（原版 compact 也是底部最右，不放顶部）
+        if (controlsVisible && !locked) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+            ) {
+                // 当前/总时间（竖屏在进度条上方，对齐原版 aboveProgress）
+                Text(
+                    text = formatMs(uiState.currentPositionMs) + " / " + formatMs(uiState.durationMs),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+                // 进度条：可拖动 + 拖动时间气泡（对齐原版 player_progress_bar）
+                val barProgress = if (uiState.durationMs > 0) {
+                    val raw = if (barDragging) barValue
+                    else uiState.currentPositionMs.toFloat() / uiState.durationMs.toFloat()
+                    raw.coerceIn(0f, 1f)
+                } else 0f
+                androidx.compose.foundation.layout.BoxWithConstraints(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (barDragging && uiState.durationMs > 0 && maxWidth > 0.dp) {
+                        val frac = barValue.coerceIn(0f, 1f)
+                        val bubbleText = formatMs((barValue * uiState.durationMs).toLong())
+                        val bubbleWidth = 68.dp
+                        val left = (maxWidth - bubbleWidth) * frac
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier
+                                .offset(x = left, y = (-42).dp)
+                                .width(bubbleWidth)
+                                .height(32.dp)
+                                .zIndex(1f)
+                                .background(
+                                    Color.Black.copy(alpha = 0.85f),
+                                    androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = bubbleText,
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                    Slider(
+                        value = barProgress,
+                        onValueChange = { v ->
+                            barDragging = true
+                            barValue = v
+                        },
+                        onValueChangeFinished = {
+                            barDragging = false
+                            if (uiState.durationMs > 0) {
+                                playerController.seekTo(
+                                    (barValue * uiState.durationMs).toLong(),
+                                    enableSync = false
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                // 按钮行：竖屏只保留 播放/暂停 + 下一集 + 全屏；宽控件仅横屏显示
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 播放/暂停（原版 playPause）
+                    IconButton(onClick = { playerController.playOrPause() }) {
+                        Icon(
+                            if (uiState.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (uiState.isPlaying) "暂停" else "播放",
+                            tint = Color.White
+                        )
+                    }
+                    // 下一集（原版 nextEpisode）
+                    if (roads.isNotEmpty()) {
+                        IconButton(onClick = { playNextOrPrev(1) }) {
+                            Icon(Icons.Filled.SkipNext, contentDescription = "下一集", tint = Color.White)
+                        }
+                    }
+                    // 以下宽控件仅在横屏全屏时显示（对齐原版：竖屏 compact 收起）
+                    if (isFullscreen) {
+                        val skipBack = {
+                            val target = (uiState.currentPositionMs - buttonSkipTime * 1000L).coerceAtLeast(0L)
+                            playerController.seekTo(target, enableSync = false)
+                        }
+                        val skipForward = {
+                            val max = uiState.durationMs
+                            var target = uiState.currentPositionMs + buttonSkipTime * 1000L
+                            if (max > 0 && target > max) target = max
+                            playerController.seekTo(target, enableSync = false)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .combinedClickable(
+                                    onClick = { skipBack() },
+                                    onLongClick = { showSkipTimeDialog = true }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.FastRewind, contentDescription = "快退 ${buttonSkipTime} 秒", tint = Color.White)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .combinedClickable(
+                                    onClick = { skipForward() },
+                                    onLongClick = { showSkipTimeDialog = true }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.FastForward, contentDescription = "快进 ${buttonSkipTime} 秒", tint = Color.White)
+                        }
+                        // 静音
+                        IconButton(onClick = { playerController.toggleSystemMute() }) {
+                            Icon(
+                                if (uiState.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = if (uiState.isMuted) "取消静音" else "静音",
+                                tint = Color.White
+                            )
+                        }
+                        // 弹幕开关（横屏在底部，竖屏在顶部）
+                        IconButton(
+                            onClick = {
+                                if (danmakuLoading) return@IconButton
+                                if (danmakuOn) {
+                                    playerController.danmaku.setDanmakuEnabled(false)
+                                } else if (playerController.danmaku.danDanmakus.isNotEmpty()) {
+                                    playerController.danmaku.setDanmakuEnabled(true)
+                                } else {
+                                    scope.launch {
+                                        toast("正在匹配弹幕…")
+                                        val result = playerController.fetchDanmaku()
+                                        toast(
+                                            when {
+                                                result.hasDanmakus -> "弹幕已装载"
+                                                result.isFailed -> {
+                                                    val msg = result.errorMessage.orEmpty()
+                                                    if (msg.contains("未配置弹弹play凭据"))
+                                                        "弹幕需要弹弹play凭据：设置 → 弹幕 → 弹弹play 凭据"
+                                                    else
+                                                        "弹幕匹配失败（$msg），请稍后再试"
+                                                }
+                                                else -> "没找到这一集的弹幕，可在「更多」里手动切换弹幕源"
+                                            }
+                                        )
+                                    }
+                                }
+                            },
+                            enabled = !danmakuLoading
+                        ) {
+                            if (danmakuLoading) {
+                                KazumiLoadingIndicator(modifier = Modifier.size(18.dp), color = Color.White)
+                            } else {
+                                Icon(
+                                    Icons.Filled.Subtitles,
+                                    contentDescription = if (danmakuOn) "关闭弹幕" else "打开弹幕",
+                                    tint = if (danmakuOn) MaterialTheme.colorScheme.primary else Color.White
+                                )
+                            }
+                        }
+                        // 倍速（点击弹选择对话框）
+                        IconButton(onClick = { showSpeedDialog = true }) {
+                            Text(
+                                text = "${formatSpeed(uiState.playbackSpeed)}x",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                        // 视频比例（点击弹选择对话框）
+                        IconButton(onClick = { showAspectDialog = true }) {
+                            Icon(Icons.Filled.AspectRatio, contentDescription = "视频比例", tint = Color.White)
+                        }
+                        // 弹幕设置（弹幕开启时显示）
                         if (danmakuOn) {
                             IconButton(onClick = { showDanmakuSettings = true }) {
                                 Icon(Icons.Filled.Tune, contentDescription = "弹幕设置", tint = Color.White)
                             }
-                            // 发送弹幕输入框（对齐原版 _danmakuTextField）
+                            // 发送弹幕输入框（对齐原版 _danmakuTextField：仅横屏全屏时显示）
                             androidx.compose.foundation.layout.Box(
                                 modifier = Modifier
-                                    .width(120.dp)
+                                    .width(140.dp)
                                     .height(40.dp)
                                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
                                     .background(Color.White.copy(alpha = 0.15f))
@@ -1468,149 +1685,15 @@ fun PlayerPage(
                                 }
                             }
                         }
-                        // 倍速菜单
-                        Box {
-                            IconButton(onClick = { speedMenuOpen = !speedMenuOpen }) {
-                                Text(
-                                    text = "${formatSpeed(uiState.playbackSpeed)}x",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = speedMenuOpen,
-                                onDismissRequest = { speedMenuOpen = false },
-                                containerColor = MaterialTheme.colorScheme.surface
-                            ) {
-                                playSpeedList.forEach { s ->
-                                    DropdownMenuItem(
-                                        text = { Text("${formatSpeed(s)}x") },
-                                        onClick = {
-                                            playerController.setPlaybackSpeed(s)
-                                            speedMenuOpen = false
-                                            toast("倍速 ${formatSpeed(s)}x")
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                        // 视频比例菜单
-                        Box {
-                            IconButton(onClick = { aspectMenuOpen = !aspectMenuOpen }) {
-                                Icon(Icons.Filled.AspectRatio, contentDescription = "视频比例", tint = Color.White)
-                            }
-                            DropdownMenu(
-                                expanded = aspectMenuOpen,
-                                onDismissRequest = { aspectMenuOpen = false },
-                                containerColor = MaterialTheme.colorScheme.surface
-                            ) {
-                                PlayerAspectRatio.entries.forEach { mode ->
-                                    DropdownMenuItem(
-                                        text = { Text(mode.label) },
-                                        onClick = {
-                                            playerController.setAspectRatio(mode)
-                                            scope.launch {
-                                                app.settings.setInt(SettingsManager.Player.DEFAULT_ASPECT_RATIO_TYPE, mode.storageValue)
-                                            }
-                                            aspectMenuOpen = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                        // 更多（选集/弹幕/截图/锁屏/弹幕源/一起看）
-                        Box {
-                            IconButton(onClick = { moreMenuOpen = !moreMenuOpen }) {
-                                Icon(Icons.Filled.MoreVert, contentDescription = "更多选项", tint = Color.White)
-                            }
-                            DropdownMenu(
-                                expanded = moreMenuOpen,
-                                onDismissRequest = { moreMenuOpen = false },
-                                containerColor = MaterialTheme.colorScheme.surface
-                            ) {
-                                if (roads.isNotEmpty()) {
-                                    DropdownMenuItem(
-                                        text = { Text("选集") },
-                                        onClick = {
-                                            moreMenuOpen = false
-                                            showEpisodeSheet = true
-                                        }
-                                    )
-                                }
-                                                                DropdownMenuItem(
-                                    text = { Text(if (danmakuOn) "弹幕设置" else "打开弹幕") },
-                                    onClick = {
-                                        moreMenuOpen = false
-                                        if (danmakuOn) {
-                                            showDanmakuSettings = true
-                                        } else if (danmakuLoading) {
-                                            return@DropdownMenuItem
-                                        } else if (playerController.danmaku.danDanmakus.isNotEmpty()) {
-                                            playerController.danmaku.setDanmakuEnabled(true)
-                                        } else {
-                                            scope.launch {
-                                                toast("正在匹配弹幕…")
-                                                val result = playerController.fetchDanmaku()
-                                                toast(
-                                                    when {
-                                                        result.hasDanmakus -> "弹幕已装载"
-                                                        result.isFailed -> {
-                                                            val msg = result.errorMessage.orEmpty()
-                                                            if (msg.contains("未配置弹弹play凭据"))
-                                                                "弹幕需要弹弹play凭据：设置 → 弹幕 → 弹弹play 凭据"
-                                                            else
-                                                                "弹幕匹配失败（$msg），请稍后再试"
-                                                        }
-                                                        else -> "没找到这一集的弹幕，可在「更多」里手动切换弹幕源"
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("截图") },
-                                    onClick = {
-                                        moreMenuOpen = false
-                                        scope.launch {
-                                            screenshotCapturing = true
-                                            val view = playerView
-                                            val ok = playerController.captureScreenshot {
-                                                capturePlayerBitmap(view)
-                                            }
-                                            screenshotCapturing = false
-                                            toast(
-                                                if (ok) "截图已保存到相册"
-                                                else playerController.screenshots.state.value.message ?: "截图失败"
-                                            )
-                                        }
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (locked) "解锁" else "锁定") },
-                                    onClick = {
-                                        moreMenuOpen = false
-                                        locked = !locked
-                                        controlsVisible = !locked
-                                        playerController.setPanel { it.copy(lockPanel = locked) }
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("弹幕源切换") },
-                                    onClick = {
-                                        moreMenuOpen = false
-                                        showDanmakuSource = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("一起看") },
-                                    onClick = {
-                                        moreMenuOpen = false
-                                        showSyncPlay = true
-                                    }
-                                )
-                            }
-                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    // 全屏/退出全屏（对齐原版：底部最右）
+                    IconButton(onClick = { isFullscreen = !isFullscreen }) {
+                        Icon(
+                            if (isFullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                            contentDescription = if (isFullscreen) "退出全屏" else "全屏",
+                            tint = Color.White
+                        )
                     }
                 }
             }
@@ -1640,13 +1723,14 @@ fun PlayerPage(
         }
 
         // 竖屏下面板（非全屏时显示，占满播放器下方剩余空间）：对齐原版 episode_selection_panel.dart，
-        // 在播放器下方直接展示线路 chips + 选集网格，无需再点小按钮弹窗
+        // 在播放器下方展示：标题 + 线路下拉选择器 + 工具栏（计数/定位当前集）+ 剧集卡片组列表
         if (!isFullscreen && roads.isNotEmpty()) {
             NonFullscreenEpisodePanel(
                 title = bangumiTitle.ifEmpty { uiState.bangumiName },
                 roads = roads,
                 selectedRoad = road,
                 selectedEpisode = episode,
+                isPlaying = uiState.isPlaying,
                 onSelect = { epIdx, roadIdx -> switchEpisode(epIdx, roadIdx) },
                 modifier = Modifier.weight(1f)
             )
@@ -1938,22 +2022,33 @@ private object PlayerOrientationManager {
 
 /**
  * 竖屏下面板（非全屏播放时显示，对齐原版 episode_selection_panel.dart）：
- * 在播放器下方直接展示线路横向 chips + 选集网格，用户无需再点小按钮弹窗即可选集/切线路。
+ * 在播放器下方直接展示：标题 + 线路下拉选择器 + 工具栏（计数/定位当前集/缓存）
+ * + 剧集卡片组列表（首尾 20dp 大圆角、中间 4dp、行间 2dp、左右 16dp）。
  * 全屏时不渲染（由调用处 if (!isFullscreen) 控制）。
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NonFullscreenEpisodePanel(
     title: String,
     roads: List<com.kazumi.port.data.model.Road>,
     selectedRoad: Int,
     selectedEpisode: Int,
+    isPlaying: Boolean = false,
     onSelect: (episodeIndex: Int, roadIndex: Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var visibleRoad by remember { mutableIntStateOf(selectedRoad.coerceIn(0, (roads.size - 1).coerceAtLeast(0))) }
     val road = roads.getOrNull(visibleRoad)
     val count = road?.data?.size ?: 0
+    val scope = rememberCoroutineScope()
+    // 列表滚动状态（用于「定位当前集」与自动滚到当前集）
+    val listState = rememberLazyListState()
+    // 进入时把当前集滚到可视区（对齐原版 revealCurrentEpisode）
+    LaunchedEffect(visibleRoad, selectedEpisode, count) {
+        if (visibleRoad == selectedRoad && selectedEpisode > 0 && count > 0) {
+            val idx = (selectedEpisode - 1).coerceIn(0, count - 1)
+            listState.animateScrollToItem(idx)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -1961,50 +2056,107 @@ private fun NonFullscreenEpisodePanel(
             .background(MaterialTheme.colorScheme.surface)
             .padding(bottom = 8.dp)
     ) {
-        // 标题
+        // 标题（对齐原版：titleLarge + w700）
         Text(
             text = title.ifBlank { "剧集列表" },
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp)
         )
-        // 线路选择（横向滚动 chips）
+        // 线路选择器（对齐原版 _RoadSelector：下拉式按钮，非横向 chips）
         if (roads.size > 1) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                roads.forEachIndexed { index, r ->
-                    val name = r.name.trim().ifEmpty { "播放线路 ${index + 1}" }
-                    FilterChip(
-                        selected = index == visibleRoad,
-                        onClick = {
-                            visibleRoad = index
-                            // 点线路立即切到该线路的当前集播放（与原版一致）
-                            if (index != selectedRoad) {
-                                val target = roads.getOrNull(index)
-                                val maxIdx = (target?.data?.size ?: 0) - 1
-                                val epIdx = (selectedEpisode - 1).coerceIn(0, maxIdx.coerceAtLeast(0))
-                                onSelect(epIdx, index)
+            var roadMenuOpen by remember { mutableStateOf(false) }
+            Box {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .clickable { roadMenuOpen = true }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "播放线路",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = road?.name?.trim()?.ifEmpty { "播放线路 ${visibleRoad + 1}" } ?: "暂无线路",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Icon(Icons.Filled.ExpandMore, contentDescription = "切换线路", tint = MaterialTheme.colorScheme.onSurface)
+                }
+                DropdownMenu(
+                    expanded = roadMenuOpen,
+                    onDismissRequest = { roadMenuOpen = false },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    roads.forEachIndexed { index, r ->
+                        val name = r.name.trim().ifEmpty { "播放线路 ${index + 1}" }
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        "${r.data.size} 集",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = {
+                                roadMenuOpen = false
+                                if (visibleRoad == index) return@DropdownMenuItem
+                                visibleRoad = index
+                                // 点线路立即切到该线路的当前集播放（与原版一致）
+                                if (index != selectedRoad) {
+                                    val target = roads.getOrNull(index)
+                                    val maxIdx = (target?.data?.size ?: 0) - 1
+                                    val epIdx = (selectedEpisode - 1).coerceIn(0, maxIdx.coerceAtLeast(0))
+                                    onSelect(epIdx, index)
+                                }
                             }
-                        },
-                        label = { Text(name) }
-                    )
+                        )
+                    }
                 }
             }
         }
-        // 计数
-        Text(
-            text = "全部剧集 · $count 集",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-        )
+        // 工具栏（对齐原版 _EpisodeToolbar：计数 - 定位当前集 - 缓存）
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "全部剧集 · $count 集",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
+                onClick = {
+                    if (visibleRoad == selectedRoad && selectedEpisode > 0 && count > 0) {
+                        scope.launch {
+                            listState.animateScrollToItem((selectedEpisode - 1).coerceIn(0, count - 1))
+                        }
+                    }
+                },
+                enabled = visibleRoad == selectedRoad && selectedEpisode > 0 && count > 0
+            ) {
+                Icon(Icons.Filled.MyLocation, contentDescription = "定位当前集", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         if (count == 0) {
             Box(
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -2014,48 +2166,61 @@ private fun NonFullscreenEpisodePanel(
             }
             return
         }
-        // 剧集网格（固定最大高度，内部可滚动）
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(5),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)
+        // 剧集卡片组列表（对齐原版 _EpisodeRow：首尾 20dp、中间 4dp、行间 2dp、左右 16dp）
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.fillMaxWidth().weight(1f)
         ) {
-            items(count) { idx ->
+            items(count, key = { visibleRoad to it }) { idx ->
                 val ep = idx + 1
                 val name = road?.identifier?.getOrNull(idx)?.trim()?.takeIf { it.isNotEmpty() }
                     ?: "第${ep}集"
                 val selected = visibleRoad == selectedRoad && ep == selectedEpisode
-                val press = rememberPressScale()
+                val first = idx == 0
+                val last = idx == count - 1
+                val shape = if (selected) {
+                    RoundedCornerShape(20.dp)
+                } else {
+                    RoundedCornerShape(
+                        topStart = if (first) 20.dp else 4.dp,
+                        topEnd = if (first) 20.dp else 4.dp,
+                        bottomStart = if (last) 20.dp else 4.dp,
+                        bottomEnd = if (last) 20.dp else 4.dp
+                    )
+                }
+                val subtitle = when {
+                    selected && isPlaying -> "正在播放"
+                    selected -> "当前选集"
+                    else -> "播放"
+                }
                 Column(
                     modifier = Modifier
-                        .animateItem()
-                        .graphicsLayer {
-                            scaleX = press.scale
-                            scaleY = press.scale
-                        }
-                        .clip(RoundedCornerShape(8.dp))
+                        .fillMaxWidth()
+                        .clip(shape)
                         .background(
-                            if (selected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceContainerLow
                         )
-                        .clickable(
-                            interactionSource = press.interactionSource,
-                            indication = LocalIndication.current,
-                            onClick = { onSelect(idx, visibleRoad) }
-                        )
-                        .padding(vertical = 10.dp, horizontal = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .clickable { onSelect(idx, visibleRoad) }
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
                     Text(
                         text = name,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary
                         else MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
             }
