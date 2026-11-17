@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,6 +50,7 @@ import com.kazumi.port.data.repository.SettingsManager
 import com.kazumi.port.ui.navigation.Routes
 import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
+import com.kazumi.port.ui.components.SettingSliderRow
 import com.kazumi.port.ui.components.SettingSwitchRow
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
 import com.kazumi.port.ui.components.rememberToast
@@ -247,27 +247,21 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     subtitle = "相同内容弹幕过多时合并为一条弹幕",
                     leading = Icons.Filled.FilterAlt,
                     checked = danmakuDeduplication,
+                    bottomRadius = 24.dp,
                     onCheckedChange = { danmakuDeduplication = it; saveBoolean(SettingsManager.Danmaku.DEDUPLICATION, it) }
                 )
-                Text(
-                    text = "弹幕区域 ${(danmakuArea * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Slider(
+                SettingSliderRow(
+                    label = "弹幕区域 ${(danmakuArea * 100).toInt()}%",
                     value = danmakuArea.toFloat(),
                     onValueChange = { danmakuArea = it.toDouble() },
                     onValueChangeFinished = {
                         scope.launch { settings.setDouble(SettingsManager.Danmaku.AREA, danmakuArea) }
                     },
-                    valueRange = 0f..1f
+                    valueRange = 0f..1f,
+                    topRadius = 24.dp
                 )
-                Text(
-                    text = "弹幕持续时间 ${danmakuDuration.toInt()} 秒",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Slider(
+                SettingSliderRow(
+                    label = "弹幕持续时间 ${danmakuDuration.toInt()} 秒",
                     value = danmakuDuration.toFloat(),
                     onValueChange = { danmakuDuration = it.toDouble() },
                     onValueChangeFinished = {
@@ -275,18 +269,15 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     },
                     valueRange = 2f..16f
                 )
-                Text(
-                    text = "弹幕行高 ${"%.1f".format(danmakuLineHeight)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Slider(
+                SettingSliderRow(
+                    label = "弹幕行高 ${"%.1f".format(danmakuLineHeight)}",
                     value = danmakuLineHeight.toFloat(),
                     onValueChange = { danmakuLineHeight = it.toDouble() },
                     onValueChangeFinished = {
                         scope.launch { settings.setDouble(SettingsManager.Danmaku.LINE_HEIGHT, danmakuLineHeight) }
                     },
-                    valueRange = 0f..3f
+                    valueRange = 0f..3f,
+                    bottomRadius = 24.dp
                 )
             }
 
@@ -295,14 +286,11 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     title = "弹幕描边",
                     leading = Icons.Filled.BorderColor,
                     checked = danmakuBorder,
+                    topRadius = 24.dp,
                     onCheckedChange = { danmakuBorder = it; saveBoolean(SettingsManager.Danmaku.BORDER, it) }
                 )
-                Text(
-                    text = "弹幕描边粗细 ${"%.1f".format(danmakuBorderSize)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Slider(
+                SettingSliderRow(
+                    label = "弹幕描边粗细 ${"%.1f".format(danmakuBorderSize)}",
                     value = danmakuBorderSize.toFloat(),
                     onValueChange = { danmakuBorderSize = it.toDouble() },
                     onValueChangeFinished = {
@@ -316,12 +304,8 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     checked = danmakuColor,
                     onCheckedChange = { danmakuColor = it; saveBoolean(SettingsManager.Danmaku.COLOR, it) }
                 )
-                Text(
-                    text = "字体大小 ${danmakuFontSize.toInt()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Slider(
+                SettingSliderRow(
+                    label = "字体大小 ${danmakuFontSize.toInt()}",
                     value = danmakuFontSize.toFloat(),
                     onValueChange = { danmakuFontSize = it.toDouble() },
                     onValueChangeFinished = {
@@ -329,12 +313,8 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     },
                     valueRange = 10f..48f
                 )
-                Text(
-                    text = "字体字重 $danmakuFontWeight",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Slider(
+                SettingSliderRow(
+                    label = "字体字重 $danmakuFontWeight",
                     value = danmakuFontWeight.toFloat(),
                     onValueChange = { danmakuFontWeight = it.toInt() },
                     onValueChangeFinished = {
@@ -342,18 +322,15 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     },
                     valueRange = 1f..9f
                 )
-                Text(
-                    text = "弹幕不透明度 ${(danmakuOpacity * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Slider(
+                SettingSliderRow(
+                    label = "弹幕不透明度 ${(danmakuOpacity * 100).toInt()}%",
                     value = danmakuOpacity.toFloat(),
                     onValueChange = { danmakuOpacity = it.toDouble() },
                     onValueChangeFinished = {
                         scope.launch { settings.setDouble(SettingsManager.Danmaku.OPACITY, danmakuOpacity) }
                     },
-                    valueRange = 0.1f..1f
+                    valueRange = 0.1f..1f,
+                    bottomRadius = 24.dp
                 )
             }
 
@@ -362,6 +339,8 @@ fun DanmakuSettingsPage(navController: NavHostController) {
                     title = "恢复默认设置",
                     subtitle = "将弹幕相关设置恢复为默认值",
                     leading = Icons.Filled.Restore,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = {
                         scope.launch {
                             // 与原版一致：删键回落到默认值（含 compact 布局下字号 16）

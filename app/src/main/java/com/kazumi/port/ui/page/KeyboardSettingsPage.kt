@@ -210,6 +210,8 @@ fun KeyboardSettingsPage(navController: NavHostController) {
                     title = "恢复默认快捷键",
                     subtitle = "将按键映射恢复为默认值",
                     leading = Icons.Filled.Restore,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = { restoreDefaults() }
                 )
             }
@@ -218,6 +220,8 @@ fun KeyboardSettingsPage(navController: NavHostController) {
                     title = "快捷键说明",
                     subtitle = "播放控制 / 音量 / 画面与弹幕 / 倍速",
                     leading = Icons.Filled.Keyboard,
+                    topRadius = 24.dp,
+                    bottomRadius = 24.dp,
                     onClick = { showHelpDialog = true }
                 )
             }

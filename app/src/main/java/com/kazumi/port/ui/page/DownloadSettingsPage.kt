@@ -14,7 +14,6 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,6 +33,7 @@ import com.kazumi.port.data.repository.SettingsManager
 import com.kazumi.port.service.DownloadDirectoryService
 import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
+import com.kazumi.port.ui.components.SettingSliderRow
 import com.kazumi.port.ui.components.SettingSwitchRow
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
 import com.kazumi.port.ui.components.rememberToast
@@ -95,33 +95,25 @@ fun DownloadSettingsPage(navController: NavHostController) {
                 .verticalScroll(rememberScrollState())
         ) {
             SettingGroup("并发设置") {
-                Text(
-                    text = "同时下载集数：$parallelEpisodes 集",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Slider(
+                SettingSliderRow(
+                    label = "同时下载集数：$parallelEpisodes 集",
                     value = parallelEpisodes.toFloat(),
                     onValueChange = { parallelEpisodes = it.toInt() },
                     onValueChangeFinished = {
                         scope.launch { settings.setInt(SettingsManager.Download.PARALLEL_EPISODES, parallelEpisodes) }
                     },
                     valueRange = 1f..5f,
-                    steps = 3
+                    topRadius = 24.dp
                 )
-                Text(
-                    text = "分片并发数：$parallelSegments 个",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Slider(
+                SettingSliderRow(
+                    label = "分片并发数：$parallelSegments 个",
                     value = parallelSegments.toFloat(),
                     onValueChange = { parallelSegments = it.toInt() },
                     onValueChangeFinished = {
                         scope.launch { settings.setInt(SettingsManager.Download.PARALLEL_SEGMENTS, parallelSegments) }
                     },
                     valueRange = 1f..10f,
-                    steps = 8
+                    bottomRadius = 24.dp
                 )
             }
 

@@ -1,5 +1,7 @@
 package com.kazumi.port.ui.page
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Devices
@@ -18,9 +21,15 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -43,7 +52,6 @@ import com.kazumi.port.ui.components.SettingSwitchRow
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import com.kazumi.port.ui.components.KazumiLoadingIndicator
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableIntStateOf
@@ -74,6 +82,7 @@ fun SyncSettingsPage(navController: NavHostController) {
     var draftUsername by remember { mutableStateOf("") }
     var draftPassword by remember { mutableStateOf("") }
     // ---- Bangumi 账号区（2026-11-17 补全：原版 bangumi_sync_page 有 Token 输入/测试连接/立即同步）----
+    var bangumiExpanded by remember { mutableStateOf(true) }
     var bangumiOutput by remember { mutableStateOf("") }
     var bangumiConnecting by remember { mutableStateOf(false) }
     var bangumiSyncing by remember { mutableStateOf(false) }
@@ -165,91 +174,155 @@ fun SyncSettingsPage(navController: NavHostController) {
                 .verticalScroll(rememberScrollState())
         ) {
             SettingGroup("追番同步") {
-                // Access Token 输入（对齐原版 bangumi_sync_page 的 Token 输入框）
-                OutlinedTextField(
-                    value = bangumiToken,
-                    onValueChange = { bangumiToken = it },
+                // 对齐原版 bangumi_sync_page 的 _accountCard（TonalCard 圆角24 +
+                // ExpansionTile 头部"连接 Bangumi 账号"，点击展开内部 Token 输入）。
+                // 之前把 Token 输入框裸放在外面、且卡片是方角，与设置页大圆角风格不统一。
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    label = { Text("Bangumi Access Token") },
-                    placeholder = { Text("在 bangumi.tv/settings/access_token 获取") },
-                    singleLine = true,
-                    enabled = !bangumiConnecting
-                )
-                // 连接状态 / 按钮行
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
-                    OutlinedButton(
-                        onClick = { testBangumi() },
-                        enabled = !bangumiConnecting && bangumiToken.isNotBlank()
-                    ) {
-                        if (bangumiConnecting) {
-                            KazumiLoadingIndicator(modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                        }
-                        Text(if (hasBangumi) "测试连接" else "连接")
-                    }
-                    Button(
-                        onClick = { saveBangumiToken() },
-                        enabled = !bangumiConnecting && bangumiToken.isNotBlank()
-                    ) {
-                        Text("保存并连接")
-                    }
-                }
-                // 连接结果输出
-                if (bangumiOutput.isNotEmpty()) {
-                    Text(
-                        text = bangumiOutput,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                    )
-                }
-                // 自动同步追番开关（对齐原版：修改追番状态时同步到 Bangumi）
-                SettingSwitchRow(
-                    title = "自动同步追番",
-                    subtitle = if (hasBangumi) "修改追番状态时同步到 Bangumi" else "请先连接 Bangumi 账号",
-                    leading = Icons.Filled.Bookmarks,
-                    checked = bangumiEnabled,
-                    enabled = hasBangumi,
-                    onCheckedChange = { value ->
-                        bangumiEnabled = value
-                        scope.launch { settings.setBoolean(SettingsManager.Bangumi.SYNC_ENABLE, value) }
-                    }
-                )
-                // 立即同步按钮（对齐原版 StateActionButton "立即同步追番"）
-                if (hasBangumi) {
+                    // 头部行：账号图标 + 标题 + 展开箭头（点击展开/收起）
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .clickable { bangumiExpanded = !bangumiExpanded }
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
-                            onClick = { syncBangumiNow() },
-                            enabled = !bangumiSyncing && bangumiEnabled
-                        ) {
-                            if (bangumiSyncing) {
-                                KazumiLoadingIndicator(modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                            }
-                            Text(if (bangumiSyncing) "正在同步…" else "立即同步追番")
-                        }
-                    }
-                    if (bangumiSyncProgress.isNotEmpty()) {
-                        Text(
-                            text = bangumiSyncProgress,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        Icon(
+                            imageVector = Icons.Filled.AccountCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(end = 16.dp)
                         )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (hasBangumi) "Bangumi 账号" else "连接 Bangumi 账号",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (hasBangumi) "已保存授权信息" else "使用 Access Token 授权",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = if (bangumiExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (bangumiExpanded) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            // Access Token 输入（对齐原版 _accountCard 展开后的 TextField）
+                            OutlinedTextField(
+                                value = bangumiToken,
+                                onValueChange = { bangumiToken = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Bangumi Access Token") },
+                                placeholder = { Text("在 bangumi.tv/settings/access_token 获取") },
+                                singleLine = true,
+                                enabled = !bangumiConnecting
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            // 连接状态 / 按钮行
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { testBangumi() },
+                                    enabled = !bangumiConnecting && bangumiToken.isNotBlank()
+                                ) {
+                                    if (bangumiConnecting) {
+                                        KazumiLoadingIndicator(modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                    }
+                                    Text(if (hasBangumi) "测试连接" else "连接")
+                                }
+                                Button(
+                                    onClick = { saveBangumiToken() },
+                                    enabled = !bangumiConnecting && bangumiToken.isNotBlank()
+                                ) {
+                                    Text("保存并连接")
+                                }
+                            }
+                            // 连接结果输出
+                            if (bangumiOutput.isNotEmpty()) {
+                                Text(
+                                    text = bangumiOutput,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            // 自动同步追番开关（对齐原版：修改追番状态时同步到 Bangumi）
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Bookmarks,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(end = 16.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "自动同步追番",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = if (hasBangumi) MaterialTheme.colorScheme.onSurface
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = if (hasBangumi) "修改追番状态时同步到 Bangumi" else "请先连接 Bangumi 账号",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = bangumiEnabled,
+                                    onCheckedChange = { value ->
+                                        bangumiEnabled = value
+                                        scope.launch { settings.setBoolean(SettingsManager.Bangumi.SYNC_ENABLE, value) }
+                                    },
+                                    enabled = hasBangumi
+                                )
+                            }
+                            // 立即同步按钮（对齐原版 StateActionButton "立即同步追番"）
+                            if (hasBangumi) {
+                                Button(
+                                    onClick = { syncBangumiNow() },
+                                    enabled = !bangumiSyncing && bangumiEnabled,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp)
+                                ) {
+                                    if (bangumiSyncing) {
+                                        KazumiLoadingIndicator(modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                    }
+                                    Text(if (bangumiSyncing) "正在同步…" else "立即同步追番")
+                                }
+                                if (bangumiSyncProgress.isNotEmpty()) {
+                                    Text(
+                                        text = bangumiSyncProgress,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

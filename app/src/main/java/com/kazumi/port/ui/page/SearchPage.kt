@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -229,7 +230,7 @@ fun SearchPage(navController: NavHostController) {
                 modifier = Modifier.weight(1f)
             )
         }
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 8.dp)) {
             // 搜索框 + 以图搜番
             // M3 SearchBar（对齐原版 search_page.dart SearchBar：圆角、surfaceContainerHigh、minHeight 64）
             // 注：本环境 material3 仅支持旧式 query 签名（新式 inputField 签名不可用）
@@ -310,9 +311,12 @@ fun SearchPage(navController: NavHostController) {
                 isLoading -> LoadingState(modifier = Modifier.padding(top = 24.dp))
                 // 已搜索且有结果
                 searched && bangumiResults.isNotEmpty() -> LazyVerticalGrid(
-                    // 列数：原版 _SearchResultGrid columns = max(2, width/180)。手机(≈400dp) 2 列，
-                    // 平板/横屏自适应增列。Adaptive(180.dp) 等价，卡片最小宽 180dp。
-                    columns = GridCells.Adaptive(180.dp),
+                    // 列数：对齐原版 _SearchResultGrid columns = max(2, width/180)。
+                    // 原版手机(≈400dp) 2 列。之前用 Adaptive(180.dp) 在窄屏（内容区
+                    // 328dp / 180 ≈ 1.8 → 1 列）会退化成一列，封面占满整屏宽（"雷霆大图"）。
+                    columns = GridCells.Fixed(
+                        maxOf(2, (LocalConfiguration.current.screenWidthDp - 32) / 180)
+                    ),
                     contentPadding = PaddingValues(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),

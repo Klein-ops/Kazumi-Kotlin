@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,6 +50,7 @@ import com.kazumi.port.data.repository.SettingsManager
 import com.kazumi.port.player.PlayerAspectRatio
 import com.kazumi.port.ui.components.SettingClickRow
 import com.kazumi.port.ui.components.SettingGroup
+import com.kazumi.port.ui.components.SettingSliderRow
 import com.kazumi.port.ui.components.SettingSwitchRow
 import com.kazumi.port.ui.components.SettingsSubPageScaffold
 import com.kazumi.port.ui.components.rememberToast
@@ -237,31 +237,24 @@ fun PlayerSettingsPage(navController: NavHostController) {
             }
 
             SettingGroup("播放参数") {
-                Slider(
+                SettingSliderRow(
+                    label = "默认倍速 ${"%.2f".format(defaultPlaySpeed)}x",
                     value = defaultPlaySpeed.toFloat(),
                     onValueChange = { defaultPlaySpeed = it.toDouble() },
                     onValueChangeFinished = {
                         scope.launch { settings.setDouble(SettingsManager.Player.DEFAULT_PLAY_SPEED, defaultPlaySpeed) }
                     },
-                    valueRange = 0.25f..3f
+                    valueRange = 0.25f..3f,
+                    topRadius = 24.dp
                 )
-                Text(
-                    text = "默认倍速 ${"%.2f".format(defaultPlaySpeed)}x",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Slider(
+                SettingSliderRow(
+                    label = "长按倍速 ${"%.2f".format(defaultShortcutForwardPlaySpeed)}x",
                     value = defaultShortcutForwardPlaySpeed.toFloat(),
                     onValueChange = { defaultShortcutForwardPlaySpeed = it.toDouble() },
                     onValueChangeFinished = {
                         scope.launch { settings.setDouble(SettingsManager.Player.DEFAULT_SHORTCUT_FORWARD_SPEED, defaultShortcutForwardPlaySpeed) }
                     },
                     valueRange = 1.25f..3f
-                )
-                Text(
-                    text = "长按倍速 ${"%.2f".format(defaultShortcutForwardPlaySpeed)}x",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
                 SettingClickRow(
                     title = "方向键跳转",
@@ -299,14 +292,10 @@ fun PlayerSettingsPage(navController: NavHostController) {
                     trailingValue = PlayerAspectRatio.fromStorageValue(aspectRatioType).label,
                     onClick = { showAspectDialog = true }
                 )
-            }
-
-            SettingGroup {
                 SettingClickRow(
                     title = "恢复默认设置",
                     subtitle = "将播放相关设置恢复为默认值",
                     leading = Icons.Filled.Restore,
-                    topRadius = 24.dp,
                     bottomRadius = 24.dp,
                     onClick = {
                         scope.launch {
