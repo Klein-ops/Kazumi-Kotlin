@@ -1318,7 +1318,9 @@ fun PlayerPage(
                         DropdownMenu(
                             expanded = moreMenuOpen,
                             onDismissRequest = { moreMenuOpen = false },
-                            containerColor = MaterialTheme.colorScheme.surface
+                            shape = RoundedCornerShape(28.dp),
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.heightIn(max = 400.dp)
                         ) {
                             if (roads.isNotEmpty()) {
                                 DropdownMenuItem(
@@ -2099,35 +2101,75 @@ private fun NonFullscreenEpisodePanel(
                 DropdownMenu(
                     expanded = roadMenuOpen,
                     onDismissRequest = { roadMenuOpen = false },
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.fillMaxWidth(0.9f)
+                    shape = RoundedCornerShape(28.dp),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier
+                        // 对齐原版 _RoadSelector：宽度=按钮宽度（屏宽-32）、高度封顶 400dp
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .heightIn(max = 400.dp)
                 ) {
+                    // 标题（对齐原版「选择播放线路」labelLarge + onSurfaceVariant）
+                    Text(
+                        text = "选择播放线路",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp)
+                    )
                     roads.forEachIndexed { index, r ->
                         val name = r.name.trim().ifEmpty { "播放线路 ${index + 1}" }
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(
-                                        "${r.data.size} 集",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        val selected = index == visibleRoad
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(
+                                    RoundedCornerShape(
+                                        topStart = if (index == 0) 20.dp else 4.dp,
+                                        topEnd = if (index == 0) 20.dp else 4.dp,
+                                        bottomStart = if (index == roads.size - 1) 20.dp else 4.dp,
+                                        bottomEnd = if (index == roads.size - 1) 20.dp else 4.dp
                                     )
+                                )
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.secondaryContainer
+                                    else MaterialTheme.colorScheme.surfaceContainerLow
+                                )
+                                .clickable {
+                                    roadMenuOpen = false
+                                    if (visibleRoad == index) return@clickable
+                                    visibleRoad = index
+                                    // 点线路立即切到该线路的当前集播放（与原版一致）
+                                    if (index != selectedRoad) {
+                                        val target = roads.getOrNull(index)
+                                        val maxIdx = (target?.data?.size ?: 0) - 1
+                                        val epIdx = (selectedEpisode - 1).coerceIn(0, maxIdx.coerceAtLeast(0))
+                                        onSelect(epIdx, index)
+                                    }
                                 }
-                            },
-                            onClick = {
-                                roadMenuOpen = false
-                                if (visibleRoad == index) return@DropdownMenuItem
-                                visibleRoad = index
-                                // 点线路立即切到该线路的当前集播放（与原版一致）
-                                if (index != selectedRoad) {
-                                    val target = roads.getOrNull(index)
-                                    val maxIdx = (target?.data?.size ?: 0) - 1
-                                    val epIdx = (selectedEpisode - 1).coerceIn(0, maxIdx.coerceAtLeast(0))
-                                    onSelect(epIdx, index)
-                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = name,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${r.data.size} 集",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                        )
+                        }
+                        if (index != roads.size - 1) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                        }
                     }
                 }
             }
