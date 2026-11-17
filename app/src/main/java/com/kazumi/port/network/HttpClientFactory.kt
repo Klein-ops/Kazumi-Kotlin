@@ -48,14 +48,38 @@ object HttpClientFactory {
      */
     fun applyProxy(proxyHost: String?, proxyPort: Int?) {
         synchronized(this) {
-            val proxy = if (proxyHost != null && proxyPort != null && proxyPort > 0) {
+            currentProxy = if (proxyHost != null && proxyPort != null && proxyPort > 0) {
                 Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyHost, proxyPort))
             } else {
                 null
             }
-            currentProxy = proxy
-            client = buildClient(proxy)
+            rebuildLocked()
         }
+    }
+
+    /**
+     * 网络变化后重建全部全局 Client（连接池 + DNS 缓存 + 路由全部重置），保留当前代理设置。
+     *
+     * 背景（2026-11-18 用户实测）：番剧列表突然一直加载不出来（[PopularPage] IO错误: timeout），
+     * 杀掉进程重开即好。根因：WiFi 重连/网络切换后 OkHttp 连接池仍持有已失效的旧连接，
+     * 新请求先试死连接直到超时（fast client callTimeout 10s 掐断），镜像接口实际可达
+     * （curl 1.2s 返回正常）却整体表现为超时。
+     *
+     * 本方法等价于"杀进程重开"：新 Client = 新连接池 + 新 DNS 缓存。由 KazumiApp
+     * 注册 ConnectivityManager.registerDefaultNetworkCallback 在网络可用/丢失时调用。
+     */
+    fun rebuild() {
+        synchronized(this) {
+            rebuildLocked()
+        }
+    }
+
+    /** 持锁后重建全部三个 client（client / lenientClient / fastClient） */
+    private fun rebuildLocked() {
+        val proxy = currentProxy
+        client = buildClient(proxy)
+        lenientClient = buildClient(proxy, lenientTls = true)
+        fastClient = buildClient(proxy, lenientTls = false, fast = true)
     }
 
     fun getClient(): OkHttpClient {

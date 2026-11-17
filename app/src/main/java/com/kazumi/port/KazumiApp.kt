@@ -2,6 +2,9 @@ package com.kazumi.port
 
 import android.app.Application
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
@@ -107,6 +110,10 @@ class KazumiApp : Application(), ImageLoaderFactory {
         )
         // 预构建全局 OkHttp 客户端
         HttpClientFactory.init(this)
+        // 网络变化监听：切换/重连时重建全局 OkHttp 连接池（等价"杀进程重开"）。
+        // 背景：WiFi 重连后连接池仍持有死连接，新请求卡到超时才失败（2026-11-18 实测
+        // 列表 loading 不出来，杀掉重开即好）。网络变化立即重建，后续请求自动走新连接。
+        registerNetworkCallback()
         // 应用代理设置（对应原版 NetworkConfig.fromSettings()：proxyEnable/proxyUrl
         // 会作用于规则仓库 / Bangumi / 图片等所有走全局 OkHttp 的请求）
         appScope.launch {
@@ -158,6 +165,43 @@ class KazumiApp : Application(), ImageLoaderFactory {
     /** 更新图片加速模式（设置页切换时调用） */
     fun updateImageAcceleration(mode: ImageAcceleration) {
         currentImageAcceleration = mode
+    }
+
+    /**
+     * 注册默认网络回调：网络可用/能力变化时重建全局 OkHttp 连接池。
+     *
+     * 为什么在这两个时机重建：WiFi 重连会走 onAvailable（新网络出现）→ onCapabilitiesChanged
+     * （验证通过）→ onLost（旧网络消失），任一时刻旧连接池都可能已失效。重建动作幂等
+     * （新 Client = 新连接池 + 新 DNS 缓存），高频触发也无副作用，但用 10s 限流降噪。
+     * 仅日志记录，不弹 UI。
+     */
+    private fun registerNetworkCallback() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        var lastRebuildAt = 0L
+        val rebuild = {
+            val now = System.currentTimeMillis()
+            if (now - lastRebuildAt >= 10_000L) {
+                lastRebuildAt = now
+                runCatching {
+                    HttpClientFactory.rebuild()
+                    com.kazumi.port.util.FileLogger.i("Network", "网络变化，已重建 OkHttp 连接池")
+                }.onFailure { e ->
+                    com.kazumi.port.util.FileLogger.w("Network", "重建连接池失败: ${e.message}")
+                }
+            }
+        }
+        runCatching {
+            cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) = rebuild()
+                override fun onCapabilitiesChanged(
+                    network: Network,
+                    networkCapabilities: NetworkCapabilities
+                ) = rebuild()
+                override fun onLost(network: Network) = rebuild()
+            })
+        }.onFailure { e ->
+            com.kazumi.port.util.FileLogger.w("Network", "注册网络回调失败: ${e.message}")
+        }
     }
 
     /** Coil 全局 ImageLoader：注入图片加速拦截器（direct/ech/mirror）+ 复用全局 OkHttp 客户端 */
