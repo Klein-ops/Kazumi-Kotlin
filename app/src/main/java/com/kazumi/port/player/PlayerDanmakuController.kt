@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * 弹幕加载与调度状态（对应原版 player_danmaku_controller.dart）
@@ -526,37 +527,48 @@ class PlayerDanmakuController(
      * 使用 android.icu.text.Transliterator（API 21+，系统自带，零依赖）。
      */
     suspend fun addDanmakus(danmakus: List<DanmakuEntry>) {
-        val dedup = settings.getBoolean(SettingsManager.Danmaku.DEDUPLICATION, false)
-        val listToAdd = if (dedup) DanmakuUtils.mergeDuplicateDanmakus(danmakus, 5.0) else danmakus
-        // 简繁转换：0=不转换 1=转简体 2=转繁体
-        // Transliterator.getInstance 有实例缓存，但这里仍只取一次复用（避免每批弹幕重复查找）
-        val chConvert = settings.getInt(SettingsManager.Danmaku.CH_CONVERT, 0)
-        val transliterator = when (chConvert) {
-            1 -> runCatching { android.icu.text.Transliterator.getInstance("Traditional-Simplified") }.getOrNull()
-            2 -> runCatching { android.icu.text.Transliterator.getInstance("Simplified-Traditional") }.getOrNull()
-            else -> null
-        }
-        // 关键词/正则屏蔽（对应原版 shieldList 过滤）——转换后再屏蔽，屏蔽词按简体/繁体写都有效
-        val rules = runCatching { shieldRulesProvider() }.getOrDefault(emptyList())
-        val visible = if (rules.isEmpty()) listToAdd else listToAdd.filter { !isShielded(it.message, rules) }
-        var skipped = 0
-        for (element in visible) {
-            val second = element.time.toInt()
-            val converted = if (transliterator == null) element
-            else element.copy(message = transliterator.transliterate(element.message))
-            // 兜底去重：同一秒内「内容 + 类型 + 颜色」完全一致的条目只保留一条。
-            //
-            // 为什么需要这层：正常路径下装载是幂等的（loadDanmakuAndApply 串行 + 复用），
-            // 但仍有旁路可能重复写入（弹幕源切换、下载缓存回写等）。
-            // 一旦同一批数据被 add 两遍，bucket 里就有两份完全相同的条目，
-            // 渲染层会为每条各建一个 ActiveDanmaku —— 屏幕上就是同一条弹幕出现两次。
-            // 这里用源数据自身的字段做判定，不影响「同内容不同时间」的正常弹幕（那是真实的多条）。
-            val key = buildString {
-                append(second).append('\u0001')
-                append(converted.type).append('\u0001')
-                append(converted.color).append('\u0001')
-                append(converted.message)
+        // CPU 密集处理（去重合并 / 简繁转换 / 屏蔽词正则过滤 / 构建指纹 key）放到后台线程
+        // （Dispatchers.Default），避免上千条弹幕在主线程逐个转换+正则打满 CPU——
+        // 用户实测"弹幕加载完毕准备装填时播放器完全卡住、点不出控制栏"正是装填阶段
+        // 主线程被占满所致（网络请求已切 IO，这里卡的是转换/过滤循环）。
+        // 共享状态 danDanmakus / loadedKeys 仍只在主线程（调用方上下文）写入，
+        // 不与其他读取方（渲染层 takeDanmakusBetween）并发读写，杜绝 HashMap 竞争。
+        val prepared = withContext(Dispatchers.Default) {
+            val dedup = settings.getBoolean(SettingsManager.Danmaku.DEDUPLICATION, false)
+            val listToAdd = if (dedup) DanmakuUtils.mergeDuplicateDanmakus(danmakus, 5.0) else danmakus
+            // 简繁转换：0=不转换 1=转简体 2=转繁体
+            // Transliterator.getInstance 有实例缓存，但这里仍只取一次复用（避免每批弹幕重复查找）
+            val chConvert = settings.getInt(SettingsManager.Danmaku.CH_CONVERT, 0)
+            val transliterator = when (chConvert) {
+                1 -> runCatching { android.icu.text.Transliterator.getInstance("Traditional-Simplified") }.getOrNull()
+                2 -> runCatching { android.icu.text.Transliterator.getInstance("Simplified-Traditional") }.getOrNull()
+                else -> null
             }
+            // 关键词/正则屏蔽（对应原版 shieldList 过滤）——转换后再屏蔽，屏蔽词按简体/繁体写都有效
+            val rules = runCatching { shieldRulesProvider() }.getOrDefault(emptyList())
+            val visible = if (rules.isEmpty()) listToAdd else listToAdd.filter { !isShielded(it.message, rules) }
+            // 后台只计算结果：second 索引 + 转换后的条目 + 指纹 key，不碰共享 map
+            val out = ArrayList<Pair<String, Pair<Int, DanmakuEntry>>>(visible.size)
+            for (element in visible) {
+                val second = element.time.toInt()
+                val converted = if (transliterator == null) element
+                else element.copy(message = transliterator.transliterate(element.message))
+                // 兜底去重：同一秒内「内容 + 类型 + 颜色」完全一致的条目只保留一条。
+                // 用源数据自身的字段做判定，不影响「同内容不同时间」的正常弹幕（那是真实的多条）。
+                val key = buildString {
+                    append(second).append('\u0001')
+                    append(converted.type).append('\u0001')
+                    append(converted.color).append('\u0001')
+                    append(converted.message)
+                }
+                out.add(key to (second to converted))
+            }
+            out
+        }
+        // 主线程写入共享状态（danDanmakus / loadedKeys）
+        var skipped = 0
+        for ((key, pair) in prepared) {
+            val (second, converted) = pair
             if (!loadedKeys.add(key)) {
                 skipped++
                 continue
@@ -564,7 +576,7 @@ class PlayerDanmakuController(
             (danDanmakus.getOrPut(second) { mutableListOf() }).add(converted)
         }
         if (skipped > 0) {
-            FileLogger.w("Danmaku", "去重兜底: 跳过 $skipped 条重复条目（本批 ${visible.size} 条）")
+            FileLogger.w("Danmaku", "去重兜底: 跳过 $skipped 条重复条目（本批 ${prepared.size} 条）")
         }
     }
 
