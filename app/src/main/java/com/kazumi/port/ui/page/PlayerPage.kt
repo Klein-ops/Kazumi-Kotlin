@@ -452,6 +452,14 @@ fun PlayerPage(
         )
     }
 
+    // 倍速/视频比例选择对话框（竖屏顶部「更多」菜单与横屏宽控件统一入口；
+    // 不用 DropdownMenu——竖屏时底部 anchor 不在组合中，DropdownMenu 会失去锚点）
+    var showSpeedDialog by remember { mutableStateOf(false) }
+    var showAspectDialog by remember { mutableStateOf(false) }
+    var speedMenuOpen by remember { mutableStateOf(false) }
+    var moreMenuOpen by remember { mutableStateOf(false) }
+    var aspectMenuOpen by remember { mutableStateOf(false) }
+
     // 倍速选择对话框（竖屏「更多」菜单与横屏宽控件共用）
     if (showSpeedDialog) {
         AlertDialog(
@@ -519,13 +527,6 @@ fun PlayerPage(
             }
         )
     }
-    var speedMenuOpen by remember { mutableStateOf(false) }
-    var moreMenuOpen by remember { mutableStateOf(false) }
-    var aspectMenuOpen by remember { mutableStateOf(false) }
-    // 倍速/视频比例选择对话框（竖屏顶部「更多」菜单与横屏宽控件统一入口；
-    // 不用 DropdownMenu——竖屏时底部 anchor 不在组合中，DropdownMenu 会失去锚点）
-    var showSpeedDialog by remember { mutableStateOf(false) }
-    var showAspectDialog by remember { mutableStateOf(false) }
 
     // Sheet
     var showDanmakuSource by remember { mutableStateOf(false) }
