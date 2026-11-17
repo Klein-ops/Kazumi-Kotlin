@@ -58,6 +58,21 @@ object BangumiImageUrlRewriter {
         isHttp && (uri.host == "lain.bgm.tv" || isApiImage(uri))
     }.getOrDefault(false)
 
+    /**
+     * 是否为 api.bgm.tv 动态图片端点（/v0/{subjects|characters|persons}/{id}/image）。
+     * 搜索/收藏等 v0 接口返回的 images.large 常是这个动态端点格式，它需要 302 到
+     * lain.bgm.tv 静态图才能拿到最终图片；而 api.bgm.tv 在当前 ECH 通道下不可达，
+     * 必须先用镜像域名解析出静态 URL 再走 ECH（见 ImageAccelerationInterceptor.resolveApiImageStaticUrl）。
+     */
+    fun isApiImageUrl(url: String): Boolean = runCatching {
+        val uri = URI(url)
+        uri.scheme == "https" && uri.host == "api.bgm.tv" && isApiImage(uri)
+    }.getOrDefault(false)
+
+    /** api.bgm.tv 动态端点 → bgmapi.com 镜像同路径（实测 302 → lain.bgm.tv 静态图） */
+    fun apiImageMirrorUrl(url: String): String =
+        url.replaceFirst("https://api.bgm.tv/", "https://api.bgmapi.com/")
+
     /** 返回该图片的全部候选地址（原始 + 各代理改写），供拦截器依次尝试 */
     fun rewriteCandidates(url: String): List<String> {
         if (!isBangumiImage(url)) return listOf(url)

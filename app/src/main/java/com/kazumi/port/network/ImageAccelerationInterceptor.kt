@@ -18,7 +18,9 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.Request
 
 /**
  * Coil 图片加速拦截器（Coil 2.x）
@@ -63,8 +65,11 @@ class ImageAccelerationInterceptor(
     private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inflight = ConcurrentHashMap<String, Deferred<ByteArray?>>()
 
-    /** 获取 ECH 字节：有缓存用缓存；无缓存则共享一次下载（并发去重） */
-    private suspend fun obtainEchBytes(context: Context, url: String): ByteArray? {
+    /** 获取 ECH 字节：有缓存用缓存；无缓存则共享一次下载（并发去重）。
+     *  @param url 缓存/去重 key（始终用列表页传入的原始 URL，保证详情页/列表共用同一缓存）
+     *  @param downloadUrl 实际下载地址（api.bgm.tv 动态端点时是解析出的 lain.bgm.tv 静态 URL）
+     */
+    private suspend fun obtainEchBytes(context: Context, url: String, downloadUrl: String = url): ByteArray? {
         // 1) 自管磁盘缓存（落盘命中，进程冷启也能秒回）
         readEchFile(context, url)?.let { return it }
         // 2) 进程内内存缓存
@@ -77,7 +82,7 @@ class ImageAccelerationInterceptor(
         }
         val deferred = downloadScope.async(start = CoroutineStart.LAZY) {
             try {
-                val bytes = downloadEchWithRetry(url, context)
+                val bytes = downloadEchWithRetry(downloadUrl, context)
                 if (bytes != null && bytes.isNotEmpty()) {
                     FileLogger.i("ImageAccel", "ech download OK bytes=${bytes.size} for $url")
                     cachePut(url, bytes)
@@ -102,6 +107,41 @@ class ImageAccelerationInterceptor(
             winner.await()
         } finally {
             inflight.remove(url, winner)
+        }
+    }
+
+    /** 关闭重定向的 OkHttp 客户端：用于解析 api.bgmapi.com 镜像的 302 Location */
+    private val noRedirectClient: okhttp3.OkHttpClient by lazy {
+        com.kazumi.port.network.HttpClientFactory.getClient().newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+    }
+
+    /**
+     * 解析 api.bgm.tv 动态图片端点（/v0/subjects/{id}/image）的实际静态图 URL：
+     * 请求 bgmapi.com 镜像同路径（实测 302 → lain.bgm.tv/pic/cover/...），
+     * 拿 Location 后用 ECH 下载静态图——astute：当前网络 api.bgm.tv 整域不可达
+     * （ECH/直连/镜像全失败），但 lain.bgm.tv 静态图 ECH 秒出。这是搜索页封面
+     * 加载慢的根治（日志 09:42~09:44 一批 api.bgm.tv 动态端点 ECH 全挂）。
+     */
+    private suspend fun resolveApiImageStaticUrl(url: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val mirror = BangumiImageUrlRewriter.apiImageMirrorUrl(url)
+            val req = Request.Builder().url(mirror).get().build()
+            noRedirectClient.newCall(req).execute().use { resp ->
+                val loc = resp.header("Location")
+                if (loc != null && BangumiImageUrlRewriter.isBangumiImage(loc)) {
+                    FileLogger.i("ImageAccel", "api 动态端点解析静态: $loc | $url")
+                    loc
+                } else {
+                    FileLogger.d("ImageAccel", "api 动态端点无有效 Location code=${resp.code} | $url")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            FileLogger.w("ImageAccel", "resolve api image static failed: ${e.message} | $url")
+            null
         }
     }
 
@@ -236,7 +276,15 @@ class ImageAccelerationInterceptor(
                 }
 
                 // 1) ECH 共享下载（obtainEchBytes 内部：自管磁盘缓存 → 内存缓存 → 并发去重下载）
-                val bytes = obtainEchBytes(context, original)
+                //    对 api.bgm.tv 动态图片端点（/v0/subjects/{id}/image）先经 bgmapi.com 镜像
+                //    解析出 lain.bgm.tv 静态 URL 再下载——当前网络 api.bgm.tv 整域不可达，
+                //    直接 ECH 必失败（日志里搜索页封面整批 20s 超时的根因），静态图 ECH 秒出。
+                val echDownloadUrl = if (BangumiImageUrlRewriter.isApiImageUrl(original)) {
+                    resolveApiImageStaticUrl(original) ?: original
+                } else {
+                    original
+                }
+                val bytes = obtainEchBytes(context, original, echDownloadUrl)
                 if (bytes != null) {
                     return chain.proceed(byteRequest(chain, original, bytes))
                 }
