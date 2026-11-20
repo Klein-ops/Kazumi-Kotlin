@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
-import android.net.NetworkCapabilities
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
@@ -168,11 +167,13 @@ class KazumiApp : Application(), ImageLoaderFactory {
     }
 
     /**
-     * 注册默认网络回调：网络可用/能力变化时重建全局 OkHttp 连接池。
+     * 注册默认网络回调：仅在网络可用/丢失时重建全局 OkHttp 连接池。
      *
-     * 为什么在这两个时机重建：WiFi 重连会走 onAvailable（新网络出现）→ onCapabilitiesChanged
-     * （验证通过）→ onLost（旧网络消失），任一时刻旧连接池都可能已失效。重建动作幂等
-     * （新 Client = 新连接池 + 新 DNS 缓存），高频触发也无副作用，但用 10s 限流降噪。
+     * 为什么只保留 onAvailable/onLost：onCapabilitiesChanged 在信号/带宽/验证状态抖动时
+     * 会高频触发（2026-11-21 日志实测 5 分钟内"网络变化，已重建 OkHttp 连接池"出现 7 次），
+     * 而每次重建都会丢弃全部热连接 + DNS 缓存，正加载的请求全部重试 → 全 App 变慢。
+     * 真正的"网络换了"只需 onAvailable（新网络出现）与 onLost（旧网络消失）。
+     * 重建动作幂等（新 Client = 新连接池 + 新 DNS 缓存），用 30s 限流进一步降噪。
      * 仅日志记录，不弹 UI。
      */
     private fun registerNetworkCallback() {
@@ -180,7 +181,7 @@ class KazumiApp : Application(), ImageLoaderFactory {
         var lastRebuildAt = 0L
         val rebuild = {
             val now = System.currentTimeMillis()
-            if (now - lastRebuildAt >= 10_000L) {
+            if (now - lastRebuildAt >= 30_000L) {
                 lastRebuildAt = now
                 runCatching {
                     HttpClientFactory.rebuild()
@@ -193,10 +194,6 @@ class KazumiApp : Application(), ImageLoaderFactory {
         runCatching {
             cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) = rebuild()
-                override fun onCapabilitiesChanged(
-                    network: Network,
-                    networkCapabilities: NetworkCapabilities
-                ) = rebuild()
                 override fun onLost(network: Network) = rebuild()
             })
         }.onFailure { e ->

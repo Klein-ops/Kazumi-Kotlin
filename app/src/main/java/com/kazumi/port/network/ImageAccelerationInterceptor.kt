@@ -50,6 +50,54 @@ class ImageAccelerationInterceptor(
     }
     private val echCacheLock = Any()
 
+    /**
+     * ECH 熔断器（2026-11-21 新增，根治"封面全挂+干啥都慢"）：
+     *
+     * 背景（当日日志实测）：网络环境 ECH 全链路不通时（DoH 被 reset / lain.bgm.tv 直连超时 /
+     * 镜像全超时），列表页每张封面走 ECH 10s×2 + 镜像 6s×3 + 直连 8s ≈ 46s 才失败，
+     * 20+ 张图并发排队把 IO/连接池打满 → 表现为"封面全挂 + 连弹幕/视频解析都被拖慢"。
+     *
+     * 熔断逻辑：ECH 连续失败达到阈值即"熔断一段时间"，期间跳过 ECH 直接走镜像→直连兜底，
+     * 每张图秒级失败出占位，页面不再连锁超时。网络恢复后（ECH 成功一次）自动复位。
+     */
+    private object EchCircuitBreaker {
+        @Volatile
+        var failCount = 0
+        @Volatile
+        var openedUntil = 0L
+        const val FAIL_THRESHOLD = 3
+        const val OPEN_MS = 60_000L
+
+        fun isOpen(): Boolean {
+            val now = System.currentTimeMillis()
+            if (openedUntil > now) return true
+            if (openedUntil != 0L && now >= openedUntil) {
+                openedUntil = 0L
+                failCount = 0
+            }
+            return false
+        }
+
+        fun onFailure() {
+            failCount++
+            if (failCount >= FAIL_THRESHOLD) {
+                openedUntil = System.currentTimeMillis() + OPEN_MS
+                FileLogger.w(
+                    "ImageAccel",
+                    "ECH 连续失败 ${failCount} 次，熔断 ${OPEN_MS / 1000}s 内跳过 ECH 直接兜底"
+                )
+            }
+        }
+
+        fun onSuccess() {
+            if (failCount > 0 || openedUntil != 0L) {
+                FileLogger.i("ImageAccel", "ECH 恢复正常，熔断复位")
+            }
+            failCount = 0
+            openedUntil = 0L
+        }
+    }
+
     /** 自管磁盘缓存目录：全部 ECH 下载结果真正落盘在这里（cacheDir/ech_cache） */
     private fun echDir(context: Context): File =
         File(context.cacheDir, "ech_cache").apply { mkdirs() }
@@ -153,12 +201,20 @@ class ImageAccelerationInterceptor(
      * 仍失败返回 null（调用方将走镜像/直连兜底，保证图能出来）。
      */
     private suspend fun downloadEchWithRetry(url: String, context: Context): ByteArray? {
+        // 熔断期内跳过 ECH（见 EchCircuitBreaker 注释：避免列表页 20+ 张图连锁超时把 IO 打满）
+        if (EchCircuitBreaker.isOpen()) {
+            FileLogger.w("ImageAccel", "ECH 熔断中，跳过 ECH 直接兜底 | $url")
+            return null
+        }
         // 第一次：用当前（可能刚缓存的）config 下载
         var bytes = withTimeoutOrNull(10_000L) {
             val echConfig = EchResolver.fetchEchConfig()
             if (echConfig != null) EchHttpNative.loadSuspend(url, echConfig) else null
         }
-        if (bytes != null && bytes.isNotEmpty()) return bytes
+        if (bytes != null && bytes.isNotEmpty()) {
+            EchCircuitBreaker.onSuccess()
+            return bytes
+        }
         // 失败：config 可能已过期，强制刷新重试一次
         FileLogger.w("ImageAccel", "ech 首次下载失败（config 可能过期），强制刷新重新握手 | $url")
         EchResolver.invalidate()
@@ -167,9 +223,11 @@ class ImageAccelerationInterceptor(
             if (echConfig != null) EchHttpNative.loadSuspend(url, echConfig) else null
         }
         if (bytes != null && bytes.isNotEmpty()) {
+            EchCircuitBreaker.onSuccess()
             FileLogger.i("ImageAccel", "ech 刷新 config 后重试成功 | $url")
             return bytes
         }
+        EchCircuitBreaker.onFailure()
         return null
     }
 
