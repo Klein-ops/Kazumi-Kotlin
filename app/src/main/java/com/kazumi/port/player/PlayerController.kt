@@ -529,17 +529,32 @@ class PlayerController(
     fun exoPlayerCompat(): ExoPlayer? = exoPlayer
 
     /**
+     * 播放位置（ms），独立于 uiState 高频更新。
+     *
+     * 拆出来的原因：进度每 200ms 采样一次，若写进 uiState（data class），每次 copy 都会
+     * 产生新实例 → 播放页顶层 collectAsState 每 200ms 整页重组一次。实测日志里
+     * "PlayerPage 组合开始" 在 14 秒内刷了约 30 次，播放开始几秒（解析+弹幕装载叠加）
+     * CPU 明显飙高，明显卡顿。单独用 StateFlow 后只有真正需要进度的小组件重组。
+     */
+    private val _positionMs = MutableStateFlow(0L)
+    val positionMs: StateFlow<Long> = _positionMs.asStateFlow()
+
+    /**
      * 定时刷新进度（供 Compose LaunchedEffect 调用）
+     *
+     * 只写独立 positionMs；uiState.durationMs 仅在真正变化时才更新，
+     * 避免每 200ms 产出一个新 uiState 实例触发整页重组。
      */
     suspend fun tickProgress() {
         val player = exoPlayer ?: return
+        _positionMs.value = player.currentPosition
+        // ExoPlayer 在时长未知/直播流时 duration 返回 C.TIME_UNSET（Long.MIN_VALUE），
+        // 直接写入会让底部进度与 HUD 显示成垃圾值，统一过滤为 0。
+        val duration = player.duration.takeIf { d -> d > 0 } ?: 0L
+        // 用原子 update（而非 读旧值→写 copy）：播放器回调（isPlaying/loading 等）也在
+        // 并发更新 uiState，若先读再写会基于过期快照 copy，丢掉对方的同帧更新。
         _uiState.update {
-            it.copy(
-                currentPositionMs = player.currentPosition,
-                // ExoPlayer 在时长未知/直播流时 duration 返回 C.TIME_UNSET（Long.MIN_VALUE），
-                // 直接写入会让底部进度与 HUD 显示成垃圾值，统一过滤为 0。
-                durationMs = player.duration.takeIf { d -> d > 0 } ?: 0L
-            )
+            if (it.durationMs != duration) it.copy(durationMs = duration) else it
         }
     }
 

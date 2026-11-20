@@ -592,9 +592,10 @@ fun PlayerPage(
     var seekWasPlaying by remember { mutableStateOf(false) }
     var interactiveSeeking by remember { mutableStateOf(false) }
 
-    // 底部进度条拖动状态（拖动时用本地值，松手才真正 seek）
+    // 底部进度条拖动状态：拖动期间不自动隐藏控制条。
+    // barValue 在 PlayerTransportBar 内部自行管理（避免每帧回调到顶层触发整页重组），
+    // 这里只用 barDragging 控制自动隐藏计时。
     var barDragging by remember { mutableStateOf(false) }
-    var barValue by remember { mutableFloatStateOf(0f) }
 
     // 本地播放路径解析
     LaunchedEffect(isLocal, bangumiId, pluginName, episode) {
@@ -1041,10 +1042,10 @@ fun PlayerPage(
                 }
             }
 
-            // 弹幕层
-            DanmakuOverlay(
+            // 弹幕层：进度流订阅下沉到子组件作用域（避免整页 200ms 重组）
+            PlayerDanmakuLayer(
+                playerController = playerController,
                 modifier = Modifier.fillMaxSize(),
-                playbackPositionMs = uiState.currentPositionMs,
                 visible = true,
                 danmakuOn = danmakuOn,
                 currentDanmakus = currentDanmakus,
@@ -1435,10 +1436,11 @@ fun PlayerPage(
         // HUD（顶部中央）
         if (!locked) {
             Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp)) {
-                PlayerSeekHud(
+                // seek HUD 单独成作用域：内部订阅 positionMs，不拖累整页重组
+                PlayerSeekHudScope(
+                    playerController = playerController,
                     visible = showSeekHud,
-                    currentPositionMs = seekHudPosition,
-                    playerPositionMs = uiState.currentPositionMs,
+                    seekPositionMs = seekHudPosition,
                     durationMs = uiState.durationMs,
                     direction = seekHudDirection,
                     cancelPending = seekCancelPending
@@ -1472,64 +1474,13 @@ fun PlayerPage(
                     .background(Color.Black.copy(alpha = 0.6f))
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
-                // 当前/总时间（竖屏在进度条上方，对齐原版 aboveProgress）
-                Text(
-                    text = formatMs(uiState.currentPositionMs) + " / " + formatMs(uiState.durationMs),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 4.dp)
+                // 当前/总时间 + 进度条：独立子作用域订阅 positionMs，避免整页重组
+                PlayerTransportBar(
+                    playerController = playerController,
+                    modifier = Modifier.fillMaxWidth(),
+                    durationMs = uiState.durationMs,
+                    onDraggingChange = { barDragging = it }
                 )
-                // 进度条：可拖动 + 拖动时间气泡（对齐原版 player_progress_bar）
-                val barProgress = if (uiState.durationMs > 0) {
-                    val raw = if (barDragging) barValue
-                    else uiState.currentPositionMs.toFloat() / uiState.durationMs.toFloat()
-                    raw.coerceIn(0f, 1f)
-                } else 0f
-                androidx.compose.foundation.layout.BoxWithConstraints(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (barDragging && uiState.durationMs > 0 && maxWidth > 0.dp) {
-                        val frac = barValue.coerceIn(0f, 1f)
-                        val bubbleText = formatMs((barValue * uiState.durationMs).toLong())
-                        val bubbleWidth = 68.dp
-                        val left = (maxWidth - bubbleWidth) * frac
-                        androidx.compose.foundation.layout.Box(
-                            modifier = Modifier
-                                .offset(x = left, y = (-42).dp)
-                                .width(bubbleWidth)
-                                .height(32.dp)
-                                .zIndex(1f)
-                                .background(
-                                    Color.Black.copy(alpha = 0.85f),
-                                    androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = bubbleText,
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
-                    }
-                    Slider(
-                        value = barProgress,
-                        onValueChange = { v ->
-                            barDragging = true
-                            barValue = v
-                        },
-                        onValueChangeFinished = {
-                            barDragging = false
-                            if (uiState.durationMs > 0) {
-                                playerController.seekTo(
-                                    (barValue * uiState.durationMs).toLong(),
-                                    enableSync = false
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
                 // 按钮行：竖屏只保留 播放/暂停 + 下一集 + 全屏；宽控件仅横屏显示
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1552,12 +1503,12 @@ fun PlayerPage(
                     // 以下宽控件仅在横屏全屏时显示（对齐原版：竖屏 compact 收起）
                     if (isFullscreen) {
                         val skipBack = {
-                            val target = (uiState.currentPositionMs - buttonSkipTime * 1000L).coerceAtLeast(0L)
+                            val target = (playerController.currentPosition() - buttonSkipTime * 1000L).coerceAtLeast(0L)
                             playerController.seekTo(target, enableSync = false)
                         }
                         val skipForward = {
                             val max = uiState.durationMs
-                            var target = uiState.currentPositionMs + buttonSkipTime * 1000L
+                            var target = playerController.currentPosition() + buttonSkipTime * 1000L
                             if (max > 0 && target > max) target = max
                             playerController.seekTo(target, enableSync = false)
                         }
@@ -1793,6 +1744,161 @@ fun PlayerPage(
                 onDismiss = { showEpisodeSheet = false }
             )
         }
+    }
+}
+
+/**
+ * 弹幕层独立作用域：内部订阅 positionMs（200ms 变化），
+ * 避免进度更新导致整个 PlayerPage 每 200ms 重组（播放开始几秒高负载/卡顿的根因之一）。
+ */
+@Composable
+private fun PlayerDanmakuLayer(
+    playerController: PlayerController,
+    modifier: Modifier = Modifier,
+    visible: Boolean,
+    danmakuOn: Boolean,
+    currentDanmakus: List<DanmakuEntry>,
+    batch: Int,
+    playing: Boolean,
+    playbackSpeed: Float,
+    generation: Int,
+    durationSeconds: Double,
+    area: Float,
+    fontSize: Int,
+    fontWeight: Int,
+    border: Boolean,
+    borderSize: Float,
+    opacity: Float,
+    lineHeight: Float,
+    showScroll: Boolean,
+    showTop: Boolean,
+    showBottom: Boolean,
+    massive: Boolean
+) {
+    val positionMs by playerController.positionMs.collectAsState()
+    DanmakuOverlay(
+        modifier = modifier,
+        playbackPositionMs = positionMs,
+        visible = visible,
+        danmakuOn = danmakuOn,
+        currentDanmakus = currentDanmakus,
+        batch = batch,
+        playing = playing,
+        playbackSpeed = playbackSpeed,
+        generation = generation,
+        durationSeconds = durationSeconds,
+        area = area,
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        border = border,
+        borderSize = borderSize,
+        opacity = opacity,
+        lineHeight = lineHeight,
+        showScroll = showScroll,
+        showTop = showTop,
+        showBottom = showBottom,
+        massive = massive
+    )
+}
+
+/**
+ * seek HUD 独立作用域：内部订阅 positionMs 作为"当前播放位置"基准。
+ * 进度更新只重组这个 HUD，不拖累整页。
+ */
+@Composable
+private fun PlayerSeekHudScope(
+    playerController: PlayerController,
+    visible: Boolean,
+    seekPositionMs: Long,
+    durationMs: Long,
+    direction: Int,
+    cancelPending: Boolean
+) {
+    val positionMs by playerController.positionMs.collectAsState()
+    PlayerSeekHud(
+        visible = visible,
+        currentPositionMs = seekPositionMs,
+        playerPositionMs = positionMs,
+        durationMs = durationMs,
+        direction = direction,
+        cancelPending = cancelPending
+    )
+}
+
+/**
+ * 底部时间 + 进度条独立作用域：内部订阅 positionMs（200ms 变化），
+ * 拖动状态本地管理；只有本组件随进度重组，控制条其余按钮不受影响。
+ */
+@Composable
+private fun PlayerTransportBar(
+    playerController: PlayerController,
+    modifier: Modifier = Modifier,
+    durationMs: Long,
+    onDraggingChange: (Boolean) -> Unit
+) {
+    val positionMs by playerController.positionMs.collectAsState()
+    var barDragging by remember { mutableStateOf(false) }
+    var barValue by remember { mutableFloatStateOf(0f) }
+
+    // 当前/总时间（竖屏在进度条上方，对齐原版 aboveProgress）
+    Text(
+        text = formatMs(positionMs) + " / " + formatMs(durationMs),
+        color = Color.White,
+        style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier.padding(horizontal = 4.dp)
+    )
+    // 进度条：可拖动 + 拖动时间气泡（对齐原版 player_progress_bar）
+    val barProgress = if (durationMs > 0) {
+        val raw = if (barDragging) barValue
+        else positionMs.toFloat() / durationMs.toFloat()
+        raw.coerceIn(0f, 1f)
+    } else 0f
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        modifier = modifier
+    ) {
+        if (barDragging && durationMs > 0 && maxWidth > 0.dp) {
+            val frac = barValue.coerceIn(0f, 1f)
+            val bubbleText = formatMs((barValue * durationMs).toLong())
+            val bubbleWidth = 68.dp
+            val left = (maxWidth - bubbleWidth) * frac
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .offset(x = left, y = (-42).dp)
+                    .width(bubbleWidth)
+                    .height(32.dp)
+                    .zIndex(1f)
+                    .background(
+                        Color.Black.copy(alpha = 0.85f),
+                        androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = bubbleText,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
+        Slider(
+            value = barProgress,
+            onValueChange = { v ->
+                barDragging = true
+                barValue = v
+                onDraggingChange(true)
+            },
+            onValueChangeFinished = {
+                barDragging = false
+                onDraggingChange(false)
+                if (durationMs > 0) {
+                    playerController.seekTo(
+                        (barValue * durationMs).toLong(),
+                        enableSync = false
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
