@@ -103,7 +103,10 @@ object Routes {
         isLocal: Boolean = false,
         roadsJson: String = ""
     ): String =
-        "player/$bangumiId?pluginName=$pluginName&src=$src&episode=$episode&road=$road&isLocal=$isLocal&roadsJson=${android.net.Uri.encode(roadsJson)}"
+        // roadsJson 可能携带全部线路×全部集数 URL（几百 KB），塞进路由串会被系统
+        // 写进 Activity saved state → Binder 事务超限 → TransactionTooLargeException。
+        // 超过阈值时由 MemoryRouteArgs 中转成短 token，页面侧 resolve 还原。
+        "player/$bangumiId?pluginName=$pluginName&src=$src&episode=$episode&road=$road&isLocal=$isLocal&roadsJson=${android.net.Uri.encode(MemoryRouteArgs.put(roadsJson))}"
 
     /**
      * 把原版 defaultStartupPage 字符串（如 /tab/popular/）映射为 Kotlin 路由
@@ -240,7 +243,8 @@ fun KazumiNavHost(
                 episode = entry.arguments?.getString("episode")?.toIntOrNull() ?: 1,
                 road = entry.arguments?.getString("road")?.toIntOrNull() ?: 0,
                 isLocal = entry.arguments?.getString("isLocal")?.toBoolean() ?: false,
-                roadsJson = entry.arguments?.getString("roadsJson").orEmpty()
+                // 路由里可能是 MemoryRouteArgs 的短 token，还原成真实线路 JSON
+                roadsJson = MemoryRouteArgs.resolve(entry.arguments?.getString("roadsJson").orEmpty())
             )
         }
         }

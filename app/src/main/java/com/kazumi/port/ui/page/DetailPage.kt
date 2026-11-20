@@ -107,6 +107,7 @@ import com.kazumi.port.ui.components.SourceSheet
 import com.kazumi.port.ui.components.RelatedBangumiCard
 import com.kazumi.port.ui.components.StaffCard
 import com.kazumi.port.ui.components.rememberToast
+import com.kazumi.port.ui.navigation.MemoryRouteArgs
 import com.kazumi.port.ui.navigation.Routes
 import com.kazumi.port.util.CoverSaver
 import kotlinx.coroutines.Dispatchers
@@ -144,9 +145,13 @@ fun DetailPage(
     val scope = rememberCoroutineScope()
     val bangumiApi = remember { BangumiApi(BangumiClient(KazumiApp.get().settings)) }
 
-    // 详情数据：从播放器返回时详情页组合会被销毁重建，
-    // 用 rememberSaveable 序列化核心状态，避免返回后重新拉详情/线路/重置 Tab
-    var bangumiJson by rememberSaveable { mutableStateOf("") }
+    // 详情数据：从播放器返回时详情页组合会被销毁重建，需要保留状态避免重复拉取。
+    // 但**不能**把整部番 JSON 直接塞进 rememberSaveable：它会随 Activity 的
+    // saved state 一起走 Binder（2026-11-19 00:17:22 切后台崩溃
+    // TransactionTooLargeException: data parcel size 613760 bytes 就是它+线路 JSON 造成的）。
+    // 做法：saved state 里只存一个短 token，真实 JSON 放进程内内存表（MemoryRouteArgs）。
+    var bangumiJsonKey by rememberSaveable { mutableStateOf("") }
+    val bangumiJson = MemoryRouteArgs.resolve(bangumiJsonKey)
     val bangumi = remember(bangumiJson) {
         if (bangumiJson.isEmpty()) null
         else runCatching {
@@ -159,8 +164,9 @@ fun DetailPage(
     var isCollected by rememberSaveable { mutableStateOf(false) }
     var collectType by rememberSaveable { mutableIntStateOf(0) }
 
-    // 插件 -> (src, roads)，存 JSON 以便 rememberSaveable 恢复
-    var pluginRoadsJson by rememberSaveable { mutableStateOf("") }
+    // 插件 -> (src, roads)，同样只把 token 放进 saved state（线路 JSON 动辄几百 KB）
+    var pluginRoadsJsonKey by rememberSaveable { mutableStateOf("") }
+    val pluginRoadsJson = MemoryRouteArgs.resolve(pluginRoadsJsonKey)
     val pluginRoads = remember(pluginRoadsJson) {
         if (pluginRoadsJson.isEmpty()) emptyList()
         else runCatching {
@@ -178,7 +184,7 @@ fun DetailPage(
         }.getOrDefault(emptyList())
     }
     fun savePluginRoads(roads: List<Triple<String, String, List<Road>>>) {
-        pluginRoadsJson = runCatching {
+        val json = runCatching {
             val arr = com.google.gson.JsonArray()
             roads.forEach { (name, src, roadList) ->
                 val obj = com.google.gson.JsonObject()
@@ -191,6 +197,8 @@ fun DetailPage(
             }
             arr.toString()
         }.getOrDefault("")
+        // 存进内存表，saved state 里只放短 token（避免 Binder 事务超限崩溃）
+        pluginRoadsJsonKey = MemoryRouteArgs.put(json)
     }
     var selectedPlugin by rememberSaveable { mutableIntStateOf(-1) }
     var selectedRoad by rememberSaveable { mutableIntStateOf(0) }
@@ -249,7 +257,9 @@ fun DetailPage(
             }
             withContext(Dispatchers.Main) {
                 if (item != null) {
-                    bangumiJson = runCatching { item.toJson().toString() }.getOrDefault(bangumiJson)
+                    // 只把短 token 写进 saved state，真实 JSON 留在内存表里
+                    val json = runCatching { item.toJson().toString() }.getOrDefault(bangumiJson)
+                    bangumiJsonKey = MemoryRouteArgs.put(json)
                 }
                 // 详情 JSON 就绪即结束首屏加载：封面/标题/背景立即渲染，
                 // 线路搜索在下方协程继续，不阻塞页面显示。
