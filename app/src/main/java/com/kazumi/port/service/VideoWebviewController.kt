@@ -8,7 +8,6 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import com.kazumi.port.data.model.HttpHeaders
 import com.kazumi.port.util.MediaUtils
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -162,7 +161,14 @@ class VideoWebviewController(
                         // 避免隐藏 WebView 自己出声；嗅探靠网络请求，不依赖自动播放
                         settings.mediaPlaybackRequiresUserGesture = true
                         settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                        settings.userAgentString = HttpHeaders.randomUA()
+                        // UA 固定为桌面 Chrome 141（2026-11-21 实测）：
+                        // 之前用 randomUA() 每次随机，反爬视频站（如 7sefun）对陌生 UA /
+                        // 移动 UA 直接 302 到 app/android.php 诱导下载页，WebView 拿不到
+                        // 真实播放页导致 20s 超时"视频永远打不开"。桌面 Chrome 141 UA
+                        // 实测访问视频页直接 200。（HttpHeaders.randomUA() 仍供插件请求等用途）
+                        settings.userAgentString =
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                                "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
                         addJavascriptInterface(LogBridge(), "KazumiLogBridge")
                         // 第三方 iframe 播放器常需要 cookie（部分站点校验播放鉴权）
                         android.webkit.CookieManager.getInstance()
