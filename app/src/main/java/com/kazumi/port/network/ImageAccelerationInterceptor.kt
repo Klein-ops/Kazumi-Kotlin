@@ -65,8 +65,8 @@ class ImageAccelerationInterceptor(
         var failCount = 0
         @Volatile
         var openedUntil = 0L
-        const val FAIL_THRESHOLD = 3
-        const val OPEN_MS = 60_000L
+        const val FAIL_THRESHOLD = 10
+        const val OPEN_MS = 180_000L
 
         fun isOpen(): Boolean {
             val now = System.currentTimeMillis()
@@ -207,7 +207,11 @@ class ImageAccelerationInterceptor(
             return null
         }
         // 第一次：用当前（可能刚缓存的）config 下载
-        var bytes = withTimeoutOrNull(10_000L) {
+        // 2026-11-21 修复（日志铁证）：旧值 10s 与 JNI do_once 内部 pthread_cond_timedwait 30s
+        // 兜底严重不匹配——协程 10s 放弃但原生线程继续活 20~30s，permit/IO 线程被幽灵占用，
+        // 第二批并发全卡在"排队等 permit"→ 10s 超时循环，列表页雪崩。提到 30s 与 JNI 同步，
+        // 协程与原生线程同时到期，无幽灵占用。
+        var bytes = withTimeoutOrNull(30_000L) {
             val echConfig = EchResolver.fetchEchConfig()
             if (echConfig != null) EchHttpNative.loadSuspend(url, echConfig) else null
         }
@@ -218,7 +222,7 @@ class ImageAccelerationInterceptor(
         // 失败：config 可能已过期，强制刷新重试一次
         FileLogger.w("ImageAccel", "ech 首次下载失败（config 可能过期），强制刷新重新握手 | $url")
         EchResolver.invalidate()
-        bytes = withTimeoutOrNull(10_000L) {
+        bytes = withTimeoutOrNull(30_000L) {
             val echConfig = EchResolver.fetchEchConfig()
             if (echConfig != null) EchHttpNative.loadSuspend(url, echConfig) else null
         }

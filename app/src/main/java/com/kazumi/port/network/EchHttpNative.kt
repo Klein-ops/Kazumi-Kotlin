@@ -37,8 +37,13 @@ object EchHttpNative {
 
     private const val DEFAULT_HEADERS = "user-agent: Kazumi/2.3.9 (Android)\r\n"
 
-    /** 并发限流：JNI v4 per-request 独立状态安全，6 路并行（对齐官方并发数） */
-    private val semaphore = Semaphore(6)
+    /**
+     * 并发限流：4 路并行。
+     * 2026-11-21 实测（日志铁证）：清数据后两次冷启动，首批 6 路并发时前 5 张 ECH 成功、
+     * 第 6 张开始失败；第二批 8 张叠加后全军覆没——全局 client（eh_client_create 单例）
+     * 扛不住 10+ 路并发握手。收紧到 4 路是安全窗口，既避免打爆 client 又保持首屏吞吐。
+     */
+    private val semaphore = Semaphore(4)
 
     /** 返回体只要 200 且 ECH 被接受 */
     fun load(url: String, echConfig: String): ByteArray =
@@ -61,7 +66,7 @@ object EchHttpNative {
      * 并发 race：3 个 CF IP 同时发起，谁先成功用谁。
      * 修复：原串行试错时若第一个 IP 黑洞（不可达但不报错），单张图要卡到外层
      * 15s 熔断，列表 20+ 张封面连环拖慢。JNI 桥 v4 per-request 独立状态并发安全，
-     * Semaphore(6) 只做总限流，这里在 1 个 permit 内再起 3 路并发完全安全。
+     * Semaphore(4) 只做总限流（实测 6 路并发会打爆全局 client，4 路为安全窗口）。
      */
     private suspend fun runBlockingLoadRace(url: String, echConfig: String): ByteArray =
         coroutineScope {
@@ -99,7 +104,7 @@ object EchHttpNative {
 
     /**
      * 并发执行原生下载（供 suspend 调用方使用）。
-     * JNI v4 已并发安全（per-request 状态），Semaphore(6) 仅限流防线程爆炸。
+     * JNI v4 已并发安全（per-request 状态），Semaphore(4) 仅限流防线程爆炸。
      */
     suspend fun loadSuspend(url: String, echConfig: String): ByteArray =
         semaphore.withPermit {
